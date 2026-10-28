@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.10.0 (2026-10-28)
+- Curve training is On by default (older saved options switch to On once).
+- In Practice the pause menu (Esc) shows the Curve training toggle, map, corner list and speed. **Go to spot** puts you on the new spot at once; Resume keeps riding and the change applies from the next restart or R.
+
 ## v1.9.1 (2026-10-28)
 - Recordings are kept in `localStorage` (key `sgp_sessions`): the last 10 sessions, the oldest dropped automatically. A compact encoding makes a 20-lap race about 0.4 MB.
 - Sessions from the old IndexedDB library are moved over once (newest 10).

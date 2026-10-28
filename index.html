@@ -2389,7 +2389,7 @@ function drawPhoneDash(b) {
   ctx.fillStyle = b.slip > 0.05 ? '#e3312a' : Math.abs(b.lean) / DEG > 55 ? '#ffcf1f' : '#e9edf0';
   ctx.fillRect(Math.min(mid, mid + f * lw / 2), ly, Math.abs(f) * lw / 2, 6);
   ctx.fillStyle = '#8d9aa4'; ctx.fillRect(mid - 0.5, ly - 2, 1, 10);
-  txt('LEAN ' + Math.round(Math.abs(b.lean) / DEG) + '\u00B0', lx, dy + 80, 10, '#c9d2d8', 600);
+  txt(Math.round(Math.abs(b.lean) / DEG) + '\u00B0', mid, ly - 6, 11, '#c9d2d8', 700, 'center');
   if (b.slip > 0.08) txt('SLIDE', dx + dw - 10, dy + 80, 10, '#e3312a', 800, 'right');
 }
 // phone HUD (GDD 11g): stopwatch top left, next corner top centre with the gaps under it

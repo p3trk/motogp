@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.11.6 (2026-10-28)
+- Behind camera: the upper part of the picture is no longer suddenly blurrier than the lower part. The sharper near image fades into the far image over a band instead of switching on one row, and the far image has a little more resolution (0.45 instead of 0.4).
+- `tests/tilt_seam.test.js` also checks for a step in sharpness (live and replay, three screen sizes). v1.11.5 fails it with a 25 % step; v1.11.6 passes (5–6 %).
+
 ## v1.11.5 (2026-10-28)
 - Behind camera: the tilted view is drawn one screen row at a time instead of in 3 px strips. Track edges and kerbs no longer show small steps and a kink across the screen (live and replay).
 - New automated test `tests/tilt_seam.test.js`: straight lines through the Behind camera projection must stay straight (live and replay, three screen sizes). v1.11.4 fails it; v1.11.5 passes.

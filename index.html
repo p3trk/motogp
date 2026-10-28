@@ -2457,7 +2457,7 @@ const Sound = {
 const Input = { k: {} };
 const GAME_KEYS = new Set(['KeyR', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyO', 'KeyL', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space']);
 window.addEventListener('keydown', e => {
-  if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') && !(UI.state === 'replay' && (e.target.id === 'rPos' || e.code === 'Escape'))) return;
+  if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') && !(UI.state === 'replay' && (e.target.id === 'rPos' || e.code === 'Escape' || e.code === 'Space'))) return;
   if (GAME_KEYS.has(e.code) && UI.state === 'play') e.preventDefault();
   Input.k[e.code] = true;
   if (e.repeat) return;
@@ -2600,14 +2600,18 @@ const UI = {
     $('rRew').addEventListener('click', () => RP.rew());
     $('rFf').addEventListener('click', () => RP.ff());
     $('rSlow').addEventListener('click', () => RP.slow());
+    const norm = document.createElement('button'); norm.className = 'chip'; norm.id = 'rNorm'; norm.title = 'Normal speed'; norm.textContent = '1\u00D7'; $('rSlow').after(norm);
+    norm.addEventListener('click', () => RP.setSpeed(1));
+    $('rSpeed').title = 'Click for normal speed'; $('rSpeed').style.cursor = 'pointer';
+    $('rSpeed').addEventListener('click', () => RP.setSpeed(1));
     $('rPrev').addEventListener('click', () => RP.lapJump(-1));
     $('rNext').addEventListener('click', () => RP.lapJump(1));
     $('rExit').addEventListener('click', () => RP.close());
     $('rCam').addEventListener('click', () => setCamMode(CAM.mode === 'behind' ? 'chase' : 'behind'));
     $('rFollow').addEventListener('click', () => RP.cycle());
-    $('rAlign').addEventListener('change', e => { RP.setAlign(e.target.value); this.rbarTicks(); });
-    $('rLapN').addEventListener('change', e => { RP.lapN = +e.target.value; RP.setAlign('lap'); this.rbarTicks(); });
-    for (const id of ['rPrev', 'rRew', 'rPlay', 'rFf', 'rNext', 'rSlow', 'rCam', 'rFollow', 'rExit']) $(id).addEventListener('mouseup', e => e.currentTarget.blur());
+    $('rAlign').addEventListener('change', e => { RP.setAlign(e.target.value); this.rbarTicks(); e.target.blur(); });
+    $('rLapN').addEventListener('change', e => { RP.lapN = +e.target.value; RP.setAlign('lap'); this.rbarTicks(); e.target.blur(); });
+    for (const id of ['rPrev', 'rRew', 'rPlay', 'rFf', 'rNext', 'rSlow', 'rNorm', 'rCam', 'rFollow', 'rExit']) $(id).addEventListener('click', e => e.currentTarget.blur());
   },
   rbarOpen(rp) {
     $('rbar').hidden = false; $('rAlign').value = rp.align;
@@ -2623,9 +2627,11 @@ const UI = {
   },
   rbarUpdate() {
     const pos = $('rPos'); if (document.activeElement !== pos || !this.rDrag) pos.value = (RP.t / RP.dur * 1000).toFixed(1);
-    $('rPlay').textContent = RP.playing ? 'Pause' : 'Play';
-    $('rSpeed').textContent = (RP.speed < 0 ? '\u25C0 ' + -RP.speed : RP.speed) + '\u00D7';
-    $('rTime').textContent = fmtTime(RP.t).replace(/\.\d+$/, m => m.slice(0, 2)) + ' / ' + fmtTime(RP.dur).replace(/\.\d+$/, m => m.slice(0, 2));
+    // only touch the DOM when the text changes: rewriting a button's label every frame can swallow clicks (Safari)
+    const set = (id, v) => { const el = $(id); if (el.textContent !== v) el.textContent = v; };
+    set('rPlay', RP.playing ? 'Pause' : 'Play');
+    set('rSpeed', (RP.speed < 0 ? '\u25C0 ' + -RP.speed : RP.speed) + '\u00D7');
+    set('rTime', fmtTime(RP.t).replace(/\.\d+$/, m => m.slice(0, 2)) + ' / ' + fmtTime(RP.dur).replace(/\.\d+$/, m => m.slice(0, 2)));
   },
   renderLib() {
     const el = $('recList'); if (!el) return;

@@ -16,7 +16,31 @@ let DPR_CAP = 1.5;
 // virtual ground canvas RW x RH (css px): the screen in top-down, larger when tilted, split into LAYERS
 let RW = 800, RH = 600, ODPR = 1;
 let LAYERS = [];
-const TILT = { a: 40 * DEG, p: 1.3, wk: 2.3, hk: 2.6, bike: 0.2, q: 1 }; // q: resolution scale, lowered on slow machines
+const TILT = { a: 40 * DEG, p: 1.3, wk: 2.3, hk: 2.6, bike: 0.2, zMax: 20, zBase: 30, zK: 1.0, nearQ: 0.75, farQ: 0.45, fade: 0.3, minLen: 40, q: 1 }; // q: resolution scale, lowered on slow machines
+// Behind camera tuning (GDD 11a): the pause-menu panel edits these in display units (deg, %), saved in localStorage 'sgp_cam'
+const CAM_SET = [ // k: TILT field, f: display unit -> TILT value, rs: needs resize()
+  { k: 'a', lbl: 'Tilt', unit: '°', min: 20, max: 60, step: 1, f: DEG, rs: 1 },
+  { k: 'p', lbl: 'Camera distance', unit: '× screen h', min: 0.8, max: 2.5, step: 0.05, rs: 1 },
+  { k: 'bike', lbl: 'Bike height on screen', unit: '%', min: 10, max: 40, step: 1, f: 0.01 },
+  { k: 'zMax', lbl: 'Zoom maximum', unit: 'px/m', min: 10, max: 30, step: 1 },
+  { k: 'zBase', lbl: 'Zoom base', unit: 'm', min: 15, max: 60, step: 1 },
+  { k: 'zK', lbl: 'Zoom speed factor', unit: '', min: 0.5, max: 2, step: 0.05 },
+  { k: 'wk', lbl: 'Ground width', unit: '× screen', min: 1.5, max: 3.5, step: 0.05, rs: 1 },
+  { k: 'hk', lbl: 'Ground depth', unit: '× screen', min: 1.5, max: 4, step: 0.05, rs: 1 },
+  { k: 'nearQ', lbl: 'Near band quality', unit: '', min: 0.4, max: 1, step: 0.05, rs: 1 },
+  { k: 'farQ', lbl: 'Far band quality', unit: '', min: 0.25, max: 0.8, step: 0.05, rs: 1 },
+  { k: 'fade', lbl: 'Fade zone', unit: '%', min: 0, max: 60, step: 1, f: 0.01, rs: 1 },
+  { k: 'minLen', lbl: 'Minimum bike length', unit: 'px', min: 20, max: 80, step: 1 },
+];
+const TILT_DEF = Object.freeze(Object.fromEntries(CAM_SET.map(d => [d.k, TILT[d.k]])));
+const camGet = d => +(TILT[d.k] / (d.f || 1)).toFixed(4); // display value
+function camSet(d, v, save) { // clamps, applies, saves; returns the display value
+  v = +v; if (!isFinite(v)) v = TILT_DEF[d.k] / (d.f || 1);
+  v = clamp(v, d.min, d.max); TILT[d.k] = v * (d.f || 1);
+  if (save) { try { localStorage.setItem('sgp_cam', JSON.stringify(Object.fromEntries(CAM_SET.map(e => [e.k, camGet(e)])))); } catch (e) { } }
+  return v;
+}
+try { const s = JSON.parse(localStorage.getItem('sgp_cam') || 'null'); if (s && typeof s === 'object') for (const d of CAM_SET) if (d.k in s) camSet(d, s[d.k], false); } catch (e) { }
 function tiltBikeH() { const P = TILT.p * VH, s = TILT.bike * VH; return s * P / (Math.cos(TILT.a) * P - s * Math.sin(TILT.a)); } // canvas px above the bottom edge that project to TILT.bike of the screen
 function resize() {
   DPR = Math.min(DPR_CAP, window.devicePixelRatio || 1); VW = window.innerWidth; VH = window.innerHeight;
@@ -28,8 +52,8 @@ function resize() {
   const layer = (c, x0, y0, w, h, dpr) => { if (c !== cv) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); } return { c, g: c === cv ? mainCtx : c.getContext('2d', { alpha: false }), x0, y0, w, h, dpr }; };
   if (tilt) {
     const P = TILT.p * VH, hN = Math.round(VH), wN = Math.min(RW, Math.ceil(VW * (P + hN * Math.sin(TILT.a)) / P) + 8);
-    const hB = Math.round(hN * 0.3); // far band reaches this far into the near band, where the two cross-fade (GDD 1.11.6)
-    LAYERS = [layer(farCv, 0, 0, RW, RH - hN + hB + 4, 0.45 * TILT.q), layer(nearCv, (RW - wN) / 2, RH - hN, wN, hN, 0.75 * TILT.q)]; LAYERS[0].hB = hB;
+    const hB = Math.round(hN * TILT.fade); // far band reaches this far into the near band, where the two cross-fade (GDD 1.11.6)
+    LAYERS = [layer(farCv, 0, 0, RW, RH - hN + hB + 4, TILT.farQ * TILT.q), layer(nearCv, (RW - wN) / 2, RH - hN, wN, hN, TILT.nearQ * TILT.q)]; LAYERS[0].hB = hB;
   } else LAYERS = [layer(cv, 0, 0, VW, VH, DPR)];
 }
 
@@ -285,7 +309,7 @@ function updateCamera(dt) {
   let tx, ty, targetPpm;
   if (CAM.mode === 'behind') {
     CAM.ay = 1 - tiltBikeH() / RH;
-    targetPpm = Math.min(20, Math.min(VW, VH * 1.25) / (30 + v * 1.0));
+    targetPpm = Math.min(TILT.zMax, Math.min(VW, VH * 1.25) / (TILT.zBase + v * TILT.zK));
     tx = px; ty = py;
   } else {
     CAM.ay = 0.6;
@@ -299,7 +323,7 @@ function updateCamera(dt) {
   else { const k = 1 - Math.exp(-dt * 6); CAM.x += (tx - CAM.x) * k; CAM.y += (ty - CAM.y) * k; }
   CAM.rot += angWrap(tr - CAM.rot) * (1 - Math.exp(-dt * 4.5));
   CAM.ppm += (targetPpm - CAM.ppm) * (1 - Math.exp(-dt * 1.8));
-  CAM.boost = CAM.mode === 'behind' ? Math.max(1, 40 / (2.5 * PHYS.VS * CAM.ppm)) : 1; // keep bikes readable when zoomed out
+  CAM.boost = CAM.mode === 'behind' ? Math.max(1, TILT.minLen / (2.5 * PHYS.VS * CAM.ppm)) : 1; // keep bikes readable when zoomed out
 }
 function worldToCanvas(x, y) {
   const dx = x - CAM.x, dy = y - CAM.y, c = Math.cos(CAM.rot), s = Math.sin(CAM.rot);

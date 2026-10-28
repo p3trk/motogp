@@ -1509,7 +1509,7 @@ const RP = {
   cycle() { const vis = this.items.map((it, k) => k).filter(k => this.items[k].on); const j = vis.indexOf(this.follow); this.follow = vis[(j + 1) % vis.length]; this.place(); CAM.init = false; },
   close() {
     UI.rbarClose(); FX.clear();
-    if (this.back === 'pause' && this.saved) { Object.assign(W, { bikes: this.saved.bikes, ghosts: this.saved.ghosts, player: this.saved.player, guide: this.saved.guide, train: this.saved.train }); this.saved = null; UI.state = 'play'; W.paused = true; $('pause').hidden = false; UI.trainIn(W.mode === 'practice'); CAM.init = false; return; }
+    if (this.back === 'pause' && this.saved) { Object.assign(W, { bikes: this.saved.bikes, ghosts: this.saved.ghosts, player: this.saved.player, guide: this.saved.guide, train: this.saved.train }); this.saved = null; UI.state = 'play'; W.paused = true; $('pause').hidden = false; UI.trainIn(W.mode === 'practice'); UI.camIn(CAM.mode === 'behind'); CAM.init = false; return; }
     if (this.back === 'results') { attractSession(); UI.state = 'results'; $('results').hidden = false; return; }
     attractSession(); UI.toMenu();
   }
@@ -1532,7 +1532,31 @@ let DPR_CAP = 1.5;
 // virtual ground canvas RW x RH (css px): the screen in top-down, larger when tilted, split into LAYERS
 let RW = 800, RH = 600, ODPR = 1;
 let LAYERS = [];
-const TILT = { a: 40 * DEG, p: 1.3, wk: 2.3, hk: 2.6, bike: 0.2, q: 1 }; // q: resolution scale, lowered on slow machines
+const TILT = { a: 40 * DEG, p: 1.3, wk: 2.3, hk: 2.6, bike: 0.2, zMax: 20, zBase: 30, zK: 1.0, nearQ: 0.75, farQ: 0.45, fade: 0.3, minLen: 40, q: 1 }; // q: resolution scale, lowered on slow machines
+// Behind camera tuning (GDD 11a): the pause-menu panel edits these in display units (deg, %), saved in localStorage 'sgp_cam'
+const CAM_SET = [ // k: TILT field, f: display unit -> TILT value, rs: needs resize()
+  { k: 'a', lbl: 'Tilt', unit: '\u00B0', min: 20, max: 60, step: 1, f: DEG, rs: 1 },
+  { k: 'p', lbl: 'Camera distance', unit: '\u00D7 screen h', min: 0.8, max: 2.5, step: 0.05, rs: 1 },
+  { k: 'bike', lbl: 'Bike height on screen', unit: '%', min: 10, max: 40, step: 1, f: 0.01 },
+  { k: 'zMax', lbl: 'Zoom maximum', unit: 'px/m', min: 10, max: 30, step: 1 },
+  { k: 'zBase', lbl: 'Zoom base', unit: 'm', min: 15, max: 60, step: 1 },
+  { k: 'zK', lbl: 'Zoom speed factor', unit: '', min: 0.5, max: 2, step: 0.05 },
+  { k: 'wk', lbl: 'Ground width', unit: '\u00D7 screen', min: 1.5, max: 3.5, step: 0.05, rs: 1 },
+  { k: 'hk', lbl: 'Ground depth', unit: '\u00D7 screen', min: 1.5, max: 4, step: 0.05, rs: 1 },
+  { k: 'nearQ', lbl: 'Near band quality', unit: '', min: 0.4, max: 1, step: 0.05, rs: 1 },
+  { k: 'farQ', lbl: 'Far band quality', unit: '', min: 0.25, max: 0.8, step: 0.05, rs: 1 },
+  { k: 'fade', lbl: 'Fade zone', unit: '%', min: 0, max: 60, step: 1, f: 0.01, rs: 1 },
+  { k: 'minLen', lbl: 'Minimum bike length', unit: 'px', min: 20, max: 80, step: 1 },
+];
+const TILT_DEF = Object.freeze(Object.fromEntries(CAM_SET.map(d => [d.k, TILT[d.k]])));
+const camGet = d => +(TILT[d.k] / (d.f || 1)).toFixed(4); // display value
+function camSet(d, v, save) { // clamps, applies, saves; returns the display value
+  v = +v; if (!isFinite(v)) v = TILT_DEF[d.k] / (d.f || 1);
+  v = clamp(v, d.min, d.max); TILT[d.k] = v * (d.f || 1);
+  if (save) { try { localStorage.setItem('sgp_cam', JSON.stringify(Object.fromEntries(CAM_SET.map(e => [e.k, camGet(e)])))); } catch (e) { } }
+  return v;
+}
+try { const s = JSON.parse(localStorage.getItem('sgp_cam') || 'null'); if (s && typeof s === 'object') for (const d of CAM_SET) if (d.k in s) camSet(d, s[d.k], false); } catch (e) { }
 function tiltBikeH() { const P = TILT.p * VH, s = TILT.bike * VH; return s * P / (Math.cos(TILT.a) * P - s * Math.sin(TILT.a)); } // canvas px above the bottom edge that project to TILT.bike of the screen
 function resize() {
   DPR = Math.min(DPR_CAP, window.devicePixelRatio || 1); VW = window.innerWidth; VH = window.innerHeight;
@@ -1544,8 +1568,8 @@ function resize() {
   const layer = (c, x0, y0, w, h, dpr) => { if (c !== cv) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); } return { c, g: c === cv ? mainCtx : c.getContext('2d', { alpha: false }), x0, y0, w, h, dpr }; };
   if (tilt) {
     const P = TILT.p * VH, hN = Math.round(VH), wN = Math.min(RW, Math.ceil(VW * (P + hN * Math.sin(TILT.a)) / P) + 8);
-    const hB = Math.round(hN * 0.3); // far band reaches this far into the near band, where the two cross-fade (GDD 1.11.6)
-    LAYERS = [layer(farCv, 0, 0, RW, RH - hN + hB + 4, 0.45 * TILT.q), layer(nearCv, (RW - wN) / 2, RH - hN, wN, hN, 0.75 * TILT.q)]; LAYERS[0].hB = hB;
+    const hB = Math.round(hN * TILT.fade); // far band reaches this far into the near band, where the two cross-fade (GDD 1.11.6)
+    LAYERS = [layer(farCv, 0, 0, RW, RH - hN + hB + 4, TILT.farQ * TILT.q), layer(nearCv, (RW - wN) / 2, RH - hN, wN, hN, TILT.nearQ * TILT.q)]; LAYERS[0].hB = hB;
   } else LAYERS = [layer(cv, 0, 0, VW, VH, DPR)];
 }
 
@@ -1801,7 +1825,7 @@ function updateCamera(dt) {
   let tx, ty, targetPpm;
   if (CAM.mode === 'behind') {
     CAM.ay = 1 - tiltBikeH() / RH;
-    targetPpm = Math.min(20, Math.min(VW, VH * 1.25) / (30 + v * 1.0));
+    targetPpm = Math.min(TILT.zMax, Math.min(VW, VH * 1.25) / (TILT.zBase + v * TILT.zK));
     tx = px; ty = py;
   } else {
     CAM.ay = 0.6;
@@ -1815,7 +1839,7 @@ function updateCamera(dt) {
   else { const k = 1 - Math.exp(-dt * 6); CAM.x += (tx - CAM.x) * k; CAM.y += (ty - CAM.y) * k; }
   CAM.rot += angWrap(tr - CAM.rot) * (1 - Math.exp(-dt * 4.5));
   CAM.ppm += (targetPpm - CAM.ppm) * (1 - Math.exp(-dt * 1.8));
-  CAM.boost = CAM.mode === 'behind' ? Math.max(1, 40 / (2.5 * PHYS.VS * CAM.ppm)) : 1; // keep bikes readable when zoomed out
+  CAM.boost = CAM.mode === 'behind' ? Math.max(1, TILT.minLen / (2.5 * PHYS.VS * CAM.ppm)) : 1; // keep bikes readable when zoomed out
 }
 function worldToCanvas(x, y) {
   const dx = x - CAM.x, dy = y - CAM.y, c = Math.cos(CAM.rot), s = Math.sin(CAM.rot);
@@ -2528,7 +2552,7 @@ window.addEventListener('keydown', e => {
     else if (k === 'Tab') RP.cycle(); else if (k === 'KeyC') setCamMode(CAM.mode === 'behind' ? 'chase' : 'behind'); else if (k === 'Escape') RP.close(); else used = false;
     if (used) e.preventDefault(); return;
   }
-  if (e.code === 'KeyC' && UI.state === 'play') { setCamMode(CAM.mode === 'behind' ? 'chase' : 'behind'); UI.opts.cam = CAM.mode; UI.sync(); HUD.msg('CAMERA', CAM.mode === 'behind' ? 'Behind' : 'Top-down', '#4cc3ff', 1.2); }
+  if (e.code === 'KeyC' && UI.state === 'play') { setCamMode(CAM.mode === 'behind' ? 'chase' : 'behind'); UI.opts.cam = CAM.mode; UI.sync(); if (W.paused) UI.camIn(CAM.mode === 'behind'); HUD.msg('CAMERA', CAM.mode === 'behind' ? 'Behind' : 'Top-down', '#4cc3ff', 1.2); }
   if (e.code === 'KeyR' && UI.state === 'play' && W.train && !W.paused) UI.launch('practice', {});
   if (e.code === 'Escape' && (UI.state === 'play')) UI.togglePause();
   if (e.code === 'KeyM') Sound.on = !Sound.on;
@@ -2705,11 +2729,41 @@ const UI = {
       return `<tr><td><button class="chip" data-act="ghost" data-id="${esc(m.id)}" aria-pressed="${on}">${on ? 'Ghost on' : 'Ghost'}</button></td><td><button class="chip" data-act="replay" data-id="${esc(m.id)}">Replay</button> <button class="chip" data-act="cmp" data-id="${esc(m.id)}" aria-pressed="${cmp}">${cmp ? '&#10003; Compare' : 'Compare'}</button></td><td>${sw(clamp(m.rider.team | 0, 0, TEAMS.length - 1))}#${m.rider.num | 0} ${esc(m.rider.name)}</td><td>${lbl[m.kind] || esc(m.mode)}${src[m.src] ? ' <span class="small">\u00B7 ' + src[m.src] + '</span>' : ''}</td><td>${m.bestLap ? fmtTime(m.bestLap) : '\u2013'}</td><td>${m.laps | 0}</td><td>${res}</td><td class="small">${new Date(m.date).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</td><td><button class="chip" data-act="export" data-id="${esc(m.id)}">Export</button> <button class="chip" data-act="del" data-id="${esc(m.id)}">Delete</button></td></tr>`;
     }).join('') + '</tbody></table>';
   },
-  hideAll() { for (const id of ['menu', 'pause', 'results']) $(id).hidden = true; this.trainIn(false); },
+  hideAll() { for (const id of ['menu', 'pause', 'results']) $(id).hidden = true; this.trainIn(false); this.camIn(false); },
   trainIn(pause) { // the curve-training block moves between the main menu and the practice pause menu (GDD 11d)
     const el = $('optTrainWrap'), P = $('pauseTrain');
     if (pause) { P.appendChild(el); P.hidden = false; } else if (el.parentNode === P) { $('optGridWrap').before(el); P.hidden = true; }
     $('btnTrainGo').hidden = !pause;
+  },
+  camIn(show) { // Behind camera tuning panel in the pause menu (GDD 11a); built once, shown only with the Behind camera
+    let P = $('pauseCam');
+    if (!P && show) {
+      P = document.createElement('div'); P.id = 'pauseCam'; P.className = 'opts'; P.style.marginTop = '14px';
+      const head = document.createElement('div'); head.className = 'opt'; head.style.gridColumn = '1/-1';
+      head.innerHTML = '<span class="lbl">Camera tuning (Behind)</span><span class="hint">The view behind this menu updates as you change a value. Saved in this browser.</span>';
+      P.appendChild(head);
+      const rows = CAM_SET.map(d => {
+        const w = document.createElement('div'); w.className = 'opt';
+        const id = 'cam_' + d.k, lb = document.createElement('label'); lb.htmlFor = id; lb.textContent = d.lbl + (d.unit ? ' (' + d.unit + ')' : '');
+        const rg = document.createElement('input'), nb = document.createElement('input');
+        rg.type = 'range'; rg.id = id; nb.type = 'number'; nb.setAttribute('aria-label', d.lbl);
+        for (const el of [rg, nb]) { el.min = d.min; el.max = d.max; el.step = d.step; }
+        const line = document.createElement('div'); line.style.cssText = 'display:flex;gap:10px;align-items:center';
+        nb.style.width = '92px'; nb.style.flex = 'none'; line.append(rg, nb); w.append(lb, line);
+        const put = (v, save) => { v = camSet(d, v, save); rg.value = v; if (document.activeElement !== nb || !save) nb.value = v; if (d.rs && save) resize(); if (save && W.paused) CAM.init = false; }; // paused: the camera barely moves, so snap it to the new zoom/framing
+        rg.addEventListener('input', () => put(rg.value, true));
+        nb.addEventListener('input', () => { if (nb.value !== '' && isFinite(+nb.value)) put(nb.value, true); });
+        nb.addEventListener('change', () => { put(nb.value, true); nb.value = camGet(d); });
+        P.appendChild(w); return () => put(camGet(d), false);
+      });
+      const act = document.createElement('div'); act.style.gridColumn = '1/-1';
+      const rb = document.createElement('button'); rb.className = 'chip'; rb.textContent = 'Reset to defaults';
+      rb.addEventListener('click', () => { for (const d of CAM_SET) camSet(d, TILT_DEF[d.k] / (d.f || 1), true); resize(); if (W.paused) CAM.init = false; this.camSync(); });
+      act.appendChild(rb); P.appendChild(act);
+      this.camSync = () => rows.forEach(r => r());
+      $('pause').querySelector('.wrap').appendChild(P);
+    }
+    if (P) { P.hidden = !show; if (show) this.camSync(); }
   },
   toMenu() { Rec.stop(); this.hideAll(); this.state = 'menu'; W.paused = false; $('menu').hidden = false; this.renderRecords(); },
   start() { Sound.start(); this.launch(this.opts.mode === 'gp' ? 'quali' : this.opts.mode, {}); },
@@ -2730,6 +2784,7 @@ const UI = {
     W.paused = !W.paused; $('pause').hidden = !W.paused;
     $('pauseSub').textContent = W.mode === 'race' ? `Lap ${Math.min(W.totalLaps, W.player.lap + 1)} of ${W.totalLaps}` : W.mode === 'quali' ? 'Qualifying' : W.train ? 'Curve training \u00B7 restart puts you back on the spot' : 'Free practice';
     this.trainIn(W.paused && W.mode === 'practice');
+    this.camIn(W.paused && CAM.mode === 'behind');
     if (W.paused) $('btnResume').focus();
   },
   finishQuali() {
@@ -2812,7 +2867,7 @@ function boot() {
   requestAnimationFrame(t => { last = t; requestAnimationFrame(frame); });
   setInterval(() => { if (UI.state === 'menu') { for (let k = 0; k < 4; k++) simStep(SUB); } }, 1000 / 30);
 }
-window.__sgp = { tiltProjectX: draw => { for (const Ly of LAYERS) { const g = Ly.g; g.setTransform(Ly.dpr, 0, 0, Ly.dpr, 0, 0); g.translate(-Ly.x0, -Ly.y0); draw(g, RW, RH); } projectTilted(); return { VW, VH, RW, RH }; }, worldToScreenX: (x, y) => worldToScreen(x, y), frameX: t => frame(t), setCamModeX: m => setCamMode(m), CAM, RP, Rec, Lib, Ghost, W, T, PHYS, Input, FX, Records, completeLapX: b => completeLap(b), drawWorldX: () => drawWorld(), setupSession, simStep, standings, UI, SUB, setAIReal: v => { AI_REAL = v; } };
+window.__sgp = { tiltProjectX: draw => { for (const Ly of LAYERS) { const g = Ly.g; g.setTransform(Ly.dpr, 0, 0, Ly.dpr, 0, 0); g.translate(-Ly.x0, -Ly.y0); draw(g, RW, RH); } projectTilted(); return { VW, VH, RW, RH }; }, worldToScreenX: (x, y) => worldToScreen(x, y), frameX: t => frame(t), setCamModeX: m => setCamMode(m), CAM, RP, Rec, Lib, Ghost, W, T, PHYS, Input, FX, Records, completeLapX: b => completeLap(b), drawWorldX: () => drawWorld(), setupSession, simStep, standings, UI, SUB, TILT, setAIReal: v => { AI_REAL = v; } };
 if (document.fonts && document.fonts.ready) { Promise.race([document.fonts.ready, new Promise(r => setTimeout(r, 1500))]).then(boot).catch(e => { console.error("boot failed", e && e.stack); }); } else boot();
 
 })();

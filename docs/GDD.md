@@ -1,6 +1,6 @@
 # Silverstone GP — Game Design Document
 
-**Version:** 1.11.6 · **Last updated:** 2026-10-28 · **Owner:** Petr
+**Version:** 1.12.0 · **Last updated:** 2026-10-28 · **Owner:** Petr
 
 This document is the source of truth for how the game should work. Every
 change starts here: update the GDD on a feature branch first, then change the
@@ -165,6 +165,19 @@ Two cameras, switched with **C** or in the menu.
   - A sky gradient fills the space above the far edge, and haze fades the far ground into it.
   - On slow machines the resolution of both bands drops by a further 20 %.
 - **Tuning:** the tilt is **40°** with a camera distance of 1.3 × screen height. The plane is 2.3 × screen width and 2.6 × screen height.
+
+**Behind camera tuning (since 1.12.0)**
+- With the Behind camera on, the pause menu (Esc) shows a **Camera tuning** panel: one slider with a number box per setting. The view behind the menu updates live while dragging.
+- Settings (default, range):
+  - Tilt: 40°, 20–60.
+  - Camera distance: 1.3 × screen height, 0.8–2.5.
+  - Bike height on screen: 20 %, 10–40.
+  - Zoom: maximum 20 px/m (10–30), base 30 m (15–60), speed factor 1.0 (0.5–2.0) in `ppm = min(max, min(VW, 1.25·VH) / (base + factor·v))`.
+  - Ground area: width 2.3 × screen (1.5–3.5), depth 2.6 × screen (1.5–4).
+  - Image quality: near band 0.75 (0.4–1.0), far band 0.45 (0.25–0.8), fade zone 30 % (0–60).
+  - Minimum bike length: 40 px, 20–80.
+- **Reset to defaults** button. Settings are saved in the browser (localStorage key `sgp_cam`) and kept after a reload.
+- Not shown with the Top-down camera.
 
 **Top-down (Rotating)**
 - The pre-1.7 camera. Top-down, rotates with the bike's heading, zooms out with speed and looks ahead along the heading.
@@ -368,4 +381,4 @@ After tagging, push `main`, the tag and the feature branch to GitHub (`p3trk/mot
 
 ## 16. Version history
 
-See `CHANGELOG.md`. Current: **1.11.6**.
+See `CHANGELOG.md`. Current: **1.12.0**.

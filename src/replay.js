@@ -374,7 +374,7 @@ const RP = {
   cycle() { const vis = this.items.map((it, k) => k).filter(k => this.items[k].on); const j = vis.indexOf(this.follow); this.follow = vis[(j + 1) % vis.length]; this.place(); CAM.init = false; },
   close() {
     UI.rbarClose(); FX.clear();
-    if (this.back === 'pause' && this.saved) { Object.assign(W, { bikes: this.saved.bikes, ghosts: this.saved.ghosts, player: this.saved.player, guide: this.saved.guide, train: this.saved.train }); this.saved = null; UI.state = 'play'; W.paused = true; $('pause').hidden = false; UI.trainIn(W.mode === 'practice'); CAM.init = false; return; }
+    if (this.back === 'pause' && this.saved) { Object.assign(W, { bikes: this.saved.bikes, ghosts: this.saved.ghosts, player: this.saved.player, guide: this.saved.guide, train: this.saved.train }); this.saved = null; UI.state = 'play'; W.paused = true; $('pause').hidden = false; UI.trainIn(W.mode === 'practice'); UI.camIn(CAM.mode === 'behind'); CAM.init = false; return; }
     if (this.back === 'results') { attractSession(); UI.state = 'results'; $('results').hidden = false; return; }
     attractSession(); UI.toMenu();
   }

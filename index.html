@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>Silverstone GP</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -19,7 +19,9 @@
 }
 [hidden]{display:none!important}
 html,body{height:100%;background:var(--ink);color:var(--fg);overflow:hidden}
-body{font-family:var(--body);font-size:15px}
+body{font-family:var(--body);font-size:15px;touch-action:manipulation}
+#game{touch-action:none}
+.overlay{touch-action:pan-y}
 #game{position:fixed;inset:0;width:100%;height:100%;display:block;background:#2f5a27}
 #hud{position:fixed;inset:0;width:100%;height:100%;display:block;pointer-events:none}
 .overlay{position:fixed;inset:0;overflow-y:auto;background:radial-gradient(1200px 700px at 70% 10%,rgba(255,207,31,.08),transparent 60%),rgba(8,11,14,.86);
@@ -2812,6 +2814,8 @@ function camCycle() {
   HUD.msg('CAMERA', CAM_NAME[CAM.mode], '#4cc3ff', 1.2);
 }
 window.addEventListener('keyup', e => { Input.k[e.code] = false; });
+// iPhone pinch gestures zoom the page; the game never needs them (GDD 3a)
+for (const t of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(t, e => e.preventDefault());
 window.addEventListener('blur', () => { Input.k = {}; Touch.reset(); if (UI.state === 'play' && !W.paused) UI.togglePause(); });
 
 // ---------------------------------------------------------------------------

@@ -488,6 +488,8 @@ function camCycle() {
   HUD.msg('CAMERA', CAM_NAME[CAM.mode], '#4cc3ff', 1.2);
 }
 window.addEventListener('keyup', e => { Input.k[e.code] = false; });
+// iPhone pinch gestures zoom the page; the game never needs them (GDD 3a)
+for (const t of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(t, e => e.preventDefault());
 window.addEventListener('blur', () => { Input.k = {}; Touch.reset(); if (UI.state === 'play' && !W.paused) UI.togglePause(); });
 
 // ---------------------------------------------------------------------------

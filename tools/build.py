@@ -45,7 +45,7 @@ def main():
             f.write(head + '\n<script>\n(()=>{\n' + js + '\n})();\n</script>\n')
     body = ent(head) + '\n<script>' + jsesc('\n(()=>{\n' + js + '\n})();\n') + '</script>' + ent('\n')
     out = ('<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n'
-           '<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">\n'
+           '<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">\n'
            + body.replace('<canvas id="game"', '</head>\n<body style="margin:0">\n<canvas id="game"', 1)
            + '</body>\n</html>\n')
     assert all(ord(c) < 128 for c in out)

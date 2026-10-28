@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.19.3 (2026-10-29)
+- Phones: the browser no longer zooms the page when you press the throttle or brake halves. Pinch zoom and double-tap zoom are off (viewport setting in the build, touch rules on the game and the menus, and a block on the iPhone pinch gesture). Menus still scroll with a finger.
+- Tests: tests/mobile_controls.test.js checks the viewport setting and the touch rule on the game.
+
 ## v1.19.2 (2026-10-28)
 - Tilt lean on phones (GDD 3a): the dead zone is 12 degrees (was 8).
 - Tilt sensitivity: Very low (full lean at 75 degrees), Low (60 degrees, default), High (35 degrees). The Normal option is removed.

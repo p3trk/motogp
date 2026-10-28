@@ -32,6 +32,9 @@ const FILE = 'file://' + path.resolve(process.argv[2] || path.join(__dirname, '.
   check('phone: manual gearbox row hidden', menu.transHidden);
   check('phone: side and tilt rows shown', menu.sideShown && menu.tiltShown);
 
+  const zoom = await page.evaluate(() => ({ meta: document.querySelector('meta[name=viewport]').content, game: getComputedStyle(document.getElementById('game')).touchAction }));
+  check('phone: pinch and double-tap zoom off', /user-scalable=no/.test(zoom.meta) && zoom.game === 'none', zoom);
+
   // practice, no curve training: the bike waits on the grid until the first input
   await page.evaluate(() => {
     document.querySelector('.mode[data-mode="practice"]').click();

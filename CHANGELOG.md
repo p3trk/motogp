@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.19.0 (2026-10-28)
+- Phone HUD (GDD 11g): on phones (touch controls on) the HUD is compacted. The fuel, engine, aero and chassis panel at the bottom right is removed; the status tags (pit limiter, slipstream, cold tyres, no fuel, over-rev) move to the right above it.
+- Speedometer at the bottom left is smaller: speed, gear, rpm bar, and a lean bar with the angle. The brake and gas bars are removed.
+- Lap stopwatch moved to the top left and made compact: position and lap, the lap time with the delta to the best lap, last and best lap. Sectors are not shown on phones.
+- Next corner countdown moved to the top centre, with the corner name and the race gaps under it.
+- Speed guide panel removed on phones. The coloured line on the track stays.
+- The "Your laps" list is removed from the HUD in practice on phones. Qualifying keeps its timing list.
+- Race timing tower sits under the stopwatch with shorter rows; the minimap is about 140 px on phones.
+- Fuel warning on phones: centre message "3 LAPS LEFT" and "1 LAP LEFT".
+- Desktop HUD is unchanged.
+- Tests: `npm test` passes. The phone layout was checked on screenshots, not on a real phone.
+
 ## v1.18.0 (2026-10-28)
 - Mobile controls (GDD 3a): on a phone or tablet with a touch screen, the left half of the screen brakes and the right half throttles. If both are pressed, brake wins. Lean follows the phone's roll angle in landscape: turning the phone like a steering wheel leans the bike the same way. A 3 degree dead zone, and the zero point is set at each start.
 - Phones always use the automatic gearbox; the Transmission option is hidden there.

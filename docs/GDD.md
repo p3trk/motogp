@@ -462,7 +462,7 @@ On phones (touch controls on, §3a) the HUD is made smaller and simpler. Desktop
 
 | Element | Desktop (§11) | Phone |
 |---|---|---|
-| Speedometer, bottom left | Speed, gear, rpm bar, lean and brake/gas bars | **Compact:** speed, gear and rpm bar. Lean as a small bar. The brake and gas bars are removed, because the touch halves already show them |
+| Speedometer, bottom left | Speed, gear, rpm bar, lean and brake/gas bars | **Compact:** speed, gear and rpm bar. Lean as a small bar, with the angle in degrees centred right above it and no "LEAN" label. The brake and gas bars are removed, because the touch halves already show them |
 | Fuel, engine, aero and chassis panel, bottom right | Shown | **Removed completely** |
 | Lap stopwatch | Top centre, with last/best, sectors and the position | **Top left**, compact: current lap time, last and best lap. Sectors and position move into the timing tower |
 | Next corner countdown (§11b) | Under the stopwatch, top centre | **Top centre**, compact: corner name, distance to it and the pictogram. The 300/200/100/50 marks stay |
@@ -480,7 +480,7 @@ On phones (touch controls on, §3a) the HUD is made smaller and simpler. Desktop
 1. The coloured racing line on the track (§9) on phones: keep or remove? **Keep**, because it is on the track, not in the HUD. Remove the panel only.
 2. Fuel is removed from the HUD. How is a low tank warned? **Centre message "FUEL 3 LAPS" once when fewer than 3 laps are left**, and again at 1 lap.
 3. Minimap on phones: keep its size or make it smaller? **About 140 px**, so the timing tower and the minimap do not crowd the top corners.
-4. Lean as a number in the speedometer, or a bar? **A bar** (Petr, 2026-10-28), with the lean angle in degrees next to it.
+4. Lean as a number in the speedometer, or a bar? **A bar** (Petr, 2026-10-28), with the angle in degrees centred right above it and no "LEAN" label (Petr, 2026-10-28).
 
 ## 12. Track and graphics
 

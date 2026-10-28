@@ -83,7 +83,8 @@ function setupSession(kind, opts) {
     });
   }
   // ghost opponents (GDD 11c): in a race each one takes the place of one of the slowest AI riders
-  Ghost.setup(opts.ghosts || []);
+  W.train = W.mode === 'practice' && opts.train ? opts.train : null;
+  Ghost.setup(W.train ? [] : opts.ghosts || []);
   if (W.mode === 'race') for (const b of W.bikes.filter(b => !b.isPlayer).sort((a, b) => a.ai.pace - b.ai.pace).slice(0, W.ghosts.length)) W.bikes.splice(W.bikes.indexOf(b), 1);
   // box assignment: teammates share neighbouring boxes in team order
   const order = W.bikes.slice().sort((a, b) => a.team - b.team || a.id - b.id); order.forEach((b, k) => b.box = k);
@@ -112,6 +113,7 @@ function setupSession(kind, opts) {
     const [x, y] = T.pt(i, T.PIT.boxD - 0.5);
     Object.assign(b, { x, y, h: T.H[i], i, s: T.wrapS(sr), d: T.PIT.boxD - 0.5, prevS: T.wrapS(sr), outLap: true, lap: 0 });
     b.fuel = W.mode === 'quali' ? 12 : PHYS.tank; b.fuelLapStart = b.fuel;
+    if (W.train) placeTraining(b, W.train);
     W.phase = 'run';
     if (W.mode === 'quali') W.qualiAI = simulateQualiAI(opts);
   }
@@ -121,8 +123,16 @@ function setupSession(kind, opts) {
   W.bestTrace = Records.d.trace && Records.d.trace.length === W.curTrace.length ? Float32Array.from(Records.d.trace) : null; W.bestTraceT = Records.d.traceT || 0;
   W.guide = W.mode === 'practice' && opts.guide; W.recordMsg = '';
   HUD.reset();
-  if (W.mode === 'practice') HUD.msg('FREE PRACTICE', 'Leave the box with W. Pit lane limiter is automatic.', '#ffcf1f', 4);
+  if (W.train) HUD.msg('CURVE TRAINING', T.cornerAt(W.train.s) + ' · ' + Math.round(W.train.v * 3.6) + ' km/h', '#ffcf1f', 2.5);
+  else if (W.mode === 'practice') HUD.msg('FREE PRACTICE', 'Leave the box with W. Pit lane limiter is automatic.', '#ffcf1f', 4);
   if (W.mode === 'quali') HUD.msg('QUALIFYING', 'Out lap, then 3 flying laps. Best lap sets your grid slot.', '#ffcf1f', 4);
+}
+// curve training (GDD 11d): centre of the road at the chosen spot, frozen until the first input
+function placeTraining(b, tr) {
+  const s = T.wrapS(tr.s), i = T.idx(s), [x, y] = T.pt(i, 0);
+  let gear = 6; for (let g = 1; g <= 6; g++) if (rpmFor(tr.v, g) <= 15000) { gear = g; break; }
+  Object.assign(b, { x, y, h: T.H[i], i, s, d: 0, prevS: s, v: tr.v, vs: 0, lean: 0, gear, outLap: true, lap: 0, dist: 3000, trainHold: true });
+  b.rpm = b.rpmVis = Math.max(PHYS.idle, rpmFor(tr.v, gear));
 }
 function aiStartFuel(b) {
   // AI strategies: most start full and stop once / twice; some start light
@@ -170,6 +180,7 @@ function simStep(dt) {
   for (const b of bikes) { if (b.isPlayer && !b.autopilot) playerControl(b, dt); else aiControl(b, dt, W); }
   for (const b of bikes) {
     const pd = b.d;
+    if (b.trainHold) { const K = Input.k; if (K.KeyW || K.KeyS || K.KeyA || K.KeyD || K.ArrowUp || K.ArrowDown || K.ArrowLeft || K.ArrowRight) b.trainHold = false; else continue; }
     stepBike(b, dt, W);
     if (b.crashed || b.dnf) continue;
     T.project(b.x, b.y, b.i, b);

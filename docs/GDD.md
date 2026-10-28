@@ -1,6 +1,6 @@
 # Silverstone GP — Game Design Document
 
-**Version:** 1.9.0 · **Last updated:** 2026-10-28 · **Owner:** Petr
+**Version:** 1.9.1 · **Last updated:** 2026-10-28 · **Owner:** Petr
 
 This document is the source of truth for how the game should work. Every
 change starts here: update the GDD on a feature branch first, then change the
@@ -217,10 +217,16 @@ where the ideal speed drops by more than 80 km/h.
 - File name: `silverstone_<mode>_<rider>_<best lap>_<yyyy-mm-dd_hhmm>.json`.
 
 **Library (menu panel "Recordings")**
-- **Storage:** sessions are kept in the browser (IndexedDB). The newest 30 auto-recorded sessions are kept, and imported files are kept until deleted.
+- **Storage (since 1.9.1): `localStorage`.**
+  - The last **10** recorded sessions (practice, qualifying and races) are kept, in key `sgp_sessions`. When an 11th is saved, the oldest is dropped automatically.
+  - To fit, sessions are stored in a compact form: each sample channel is delta-encoded as 16-bit integers in base64. A 20-lap race takes about 0.4 MB and 10 such races fit in the usual 5 MB browser limit.
+  - If the browser still reports the storage as full, the oldest sessions are dropped until the new one fits, so fewer than 10 may be kept. A short note in the panel says so.
+  - Imported files and files read from `saved_tracks/` are held only for the current visit; they are not written to `localStorage`. The linked folder re-loads them with one click.
+  - On the first start of 1.9.1, the newest 10 sessions from the old IndexedDB library are moved to `localStorage` once.
+  - Exported JSON files keep the readable format below (unchanged), so older exports still import.
 - **Each row shows:** rider, session type, best lap, laps and date, plus three actions:
   - **Ghost** toggle: race against this recording.
-  - **Export:** save the JSON file.
+  - **Export:** save that session as a JSON file (into the linked `saved_tracks/` folder, otherwise to Downloads). Every row in the list has its own Export button.
   - **Delete.**
 - **Import file…** imports one or more `.json` files.
 - **Open saved_tracks folder…** reads every `.json` in the `saved_tracks/` folder next to `index.html`.
@@ -309,4 +315,4 @@ After tagging, push `main`, the tag and the feature branch to GitHub (`p3trk/mot
 
 ## 16. Version history
 
-See `CHANGELOG.md`. Current: **1.9.0**.
+See `CHANGELOG.md`. Current: **1.9.1**.

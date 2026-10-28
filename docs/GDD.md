@@ -1,6 +1,6 @@
 # Silverstone GP — Game Design Document
 
-**Version:** 1.11.4 · **Last updated:** 2026-10-28 · **Owner:** Petr
+**Version:** 1.11.5 · **Last updated:** 2026-10-28 · **Owner:** Petr
 
 This document is the source of truth for how the game should work. Every
 change starts here: update the GDD on a feature branch first, then change the
@@ -161,7 +161,7 @@ Two cameras, switched with **C** or in the menu.
 - **Implementation:** the ground plane is rendered top-down into two offscreen canvases.
   - Near band: the first screen-height of plane at 0.75 × resolution.
   - Far band: the rest, up to ~2.6 screen heights, at 0.4 × resolution.
-  - Both are projected onto the screen in 3 px horizontal strips, each scaled by the perspective factor.
+  - Both are projected onto the screen one screen row at a time, each row scaled by the perspective factor (since 1.11.5). Before, 3 px strips with one scale each drew straight lines (track edges, kerbs) as ~1 px steps every 3 rows, which showed as a kink across the screen, also where the near and far bands join.
   - A sky gradient fills the space above the far edge, and haze fades the far ground into it.
   - On slow machines the resolution of both bands drops by a further 20 %.
 - **Tuning:** the tilt is **40°** with a camera distance of 1.3 × screen height. The plane is 2.3 × screen width and 2.6 × screen height.
@@ -342,6 +342,7 @@ Watch one recording, or several together for comparison. Any recording in the li
   - Cases: live riding and replay at 0.25×, 1× and 4×, each with the Behind and Top-down cameras.
   - Measured against a 0.4 s moving average (in game time): camera speed, camera turn rate, direction of camera travel, and the bike's position on screen.
   - Limits: speed 2 %, turn rate 0.08 rad/s, direction 0.08 rad/s, screen position 2 px (RMS). The test exits with an error if any case is over.
+- Tests: `node tests/tilt_seam.test.js [index.html]` draws a pattern of straight lines through the real Behind camera projection, in live riding and in replay, at 1280×800, 1470×830 (2× pixels) and 1024×700, and fails if a line bends by more than 0.5 px from one screen row to the next. v1.11.4 fails it (about 1 px); v1.11.5 passes (at most 0.34 px).
 - Tests: `node tests/track_edges.test.js [index.html]` checks that no outline beside the track ends square or jumps sideways between two neighbouring track points (~2 m apart). Limits: kerb width 0.45 m, run-off outer edge 2 m, wall 1.5 m, pit lane edges 1.5 m. Live riding and replay draw the same geometry, so this covers both; the test also draws the pit exit in both modes. v1.11.2 fails the kerb check (68 square ends); v1.11.3 fails run-off, wall and pit lane.
 
 ## 14. Change process
@@ -367,4 +368,4 @@ After tagging, push `main`, the tag and the feature branch to GitHub (`p3trk/mot
 
 ## 16. Version history
 
-See `CHANGELOG.md`. Current: **1.11.4**.
+See `CHANGELOG.md`. Current: **1.11.5**.

@@ -294,7 +294,7 @@ window.addEventListener('keydown', e => {
   }
   if (e.code === 'Escape' && (UI.state === 'play')) UI.togglePause();
   if (e.code === 'KeyM') Sound.on = !Sound.on;
-  if (e.code === 'KeyC' && UI.state === 'play') CAM.mode = CAM.mode === 'chase' ? 'north' : 'chase';
+  if (e.code === 'KeyC' && UI.state === 'play') { CAM.mode = CAM_MODES[(CAM_MODES.indexOf(CAM.mode) + 1) % CAM_MODES.length]; HUD.msg('CAMERA', { look: 'Look-ahead', chase: 'Rotating', north: 'North up' }[CAM.mode], '#4cc3ff', 1.2); }
 });
 window.addEventListener('keyup', e => { Input.k[e.code] = false; });
 window.addEventListener('blur', () => { Input.k = {}; if (UI.state === 'play' && !W.paused) UI.togglePause(); });
@@ -304,9 +304,9 @@ window.addEventListener('blur', () => { Input.k = {}; if (UI.state === 'play' &&
 // ---------------------------------------------------------------------------
 const $ = id => document.getElementById(id);
 const UI = {
-  state: 'menu', opts: { mode: 'sprint', trans: 'manual', aids: 'on', ai: 'pro', cam: 'chase', guide: 'on', fuel: 100, grid: 'mid', name: 'Petr', num: 25, team: 2 },
+  state: 'menu', opts: { mode: 'sprint', trans: 'manual', aids: 'on', ai: 'pro', cam: 'look', guide: 'on', fuel: 100, grid: 'mid', name: 'Petr', num: 25, team: 2 },
   init() {
-    try { const s = JSON.parse(localStorage.getItem('sgp_opts') || 'null'); if (s) Object.assign(this.opts, s); } catch (e) { }
+    try { const s = JSON.parse(localStorage.getItem('sgp_opts') || 'null'); if (s) { if (!s.v || s.v < 2) delete s.cam; Object.assign(this.opts, s); } this.opts.v = 2; } catch (e) { }
     const sel = $('optTeam'); TEAMS.forEach((t, k) => { const o = document.createElement('option'); o.value = k; o.textContent = t.name; sel.appendChild(o); });
     document.querySelectorAll('.mode').forEach(m => m.addEventListener('click', () => { this.opts.mode = m.dataset.mode; this.sync(); }));
     for (const [id, key] of [['optTrans', 'trans'], ['optAids', 'aids'], ['optAI', 'ai'], ['optCam', 'cam'], ['optGuide', 'guide']]) $(id).querySelectorAll('button').forEach(bt => bt.addEventListener('click', () => { this.opts[key] = bt.dataset.v; this.sync(); }));
@@ -429,5 +429,5 @@ function boot() {
   requestAnimationFrame(t => { last = t; requestAnimationFrame(frame); });
   setInterval(() => { if (UI.state === 'menu') { for (let k = 0; k < 4; k++) simStep(SUB); } }, 1000 / 30);
 }
-window.__sgp = { W, T, PHYS, Input, FX, Records, completeLapX: b => completeLap(b), drawWorldX: () => drawWorld(), setupSession, simStep, standings, UI, SUB, setAIReal: v => { AI_REAL = v; } };
+window.__sgp = { TLV, renderTile, W, T, PHYS, Input, FX, Records, completeLapX: b => completeLap(b), drawWorldX: () => drawWorld(), setupSession, simStep, standings, UI, SUB, setAIReal: v => { AI_REAL = v; } };
 if (document.fonts && document.fonts.ready) { Promise.race([document.fonts.ready, new Promise(r => setTimeout(r, 1500))]).then(boot).catch(e => { console.error("boot failed", e && e.stack); }); } else boot();

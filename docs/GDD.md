@@ -1,6 +1,6 @@
 # Silverstone GP — Game Design Document
 
-**Version:** 1.16.0 · **Last updated:** 2026-10-28 · **Owner:** Petr
+**Version:** 1.17.0 · **Last updated:** 2026-10-28 · **Owner:** Petr
 
 This document is the source of truth for how the game should work. Every
 change starts here: update the GDD on a feature branch first, then change the
@@ -77,6 +77,7 @@ Stored in `localStorage` key `sgp_opts`. The camera choice is remembered for all
 | Curve training (practice only) | Off / On toggle, plus spot on track and start speed 0–300 km/h | **On** (since 1.10.0), spot 350 m before Abbey, guide speed |
 | Starting fuel (races) | 25–100 % of tank, step 5 | 100 % |
 | Starting position (10 lap race and, since 1.16.0, Practice with Curve training Off) | Pole / Front row / Mid-pack / Back. One setting shared by both modes | Mid-pack |
+| Speed blur (since 1.17.0) | On / Off. Blurs the surroundings at top speed in the Behind and CLOSE cameras (§11f) | On |
 | Sync ghosts to (since 1.16.0) | One of the selected ghosts (§11c) | The first selected ghost |
 | Rider name, number, team | up to 14 chars / 1–99 / 11 teams | Petr, 25, Arancia Tech |
 
@@ -199,6 +200,7 @@ Three cameras (since 1.14.0): **Behind**, **CLOSE** and **Top-down**. Chosen on 
   - Ground area: width 2.3 / 3.5 × screen (1.5–3.5), depth 2.6 / 6 × screen (1.5–6).
   - Image quality: near band 0.75 / 1.5 (0.4–2.0), far band 0.45 / 0.7 (0.25–0.8), fade zone 30 / 30 % (0–60).
   - Minimum bike length: 40 / 40 px, 20–80.
+  - Speed blur (since 1.17.0, §11f): start speed 260 / 260 km/h (150–340, step 5), full speed 330 / 330 km/h (160–345, step 5, always at least 10 above the start speed), strength 20 / 24 px (0–40; 0 turns it off for that camera).
 - **Reset to defaults** button: returns the current camera (only) to its own defaults above.
 - Saved in the browser and kept after a reload: Behind in `localStorage` key `sgp_cam` (as before), CLOSE in `sgp_cam_close`.
 - The **Profile** list of 1.13.0 (Standard / Close / Custom) is removed: Close is now its own camera, and Standard is what Reset to defaults gives on Behind, so the list had nothing left to choose.
@@ -389,6 +391,37 @@ Watch one recording, or several together for comparison. Any recording in the li
 - Keys: **Space** play/pause, **←/→** jump 5 s, **↓/↑** slower/faster (through the list above, through 0 into rewind), **[ / ]** previous/next lap (Session start alignment), **Tab** followed bike, **C** camera, **Esc** exit to the menu (or back to the results screen).
 - At the end of the recording playback pauses; rewinding to the start pauses there too.
 
+## 11f. Speed blur (since 1.17.0)
+
+Asked by Petr (2026-10-28): "Create blur effect in high speeds. High speed - blur just perspective view in Top speed only road with borders should be sharp."
+
+**What the player sees**
+- Only on the long straights, close to top speed: the grass, gravel, tarmac run-off, pit lane, walls, boards, trees, grandstands and buildings beside the track smear into streaks that run outward from the point straight ahead on the horizon, like a camera zooming forward. The faster, the stronger.
+- The road stays sharp, with its borders: the asphalt, the white edge lines, the red and white kerbs, the grid boxes, painted corner names and tyre marks. The sharp area reaches 0.3 m beyond the outer edge of each kerb (or of the white line where there is no kerb), so the border itself is never touched.
+- The bike, the ghosts and the other riders stay sharp, also when one of them is off the road. So do the name tags, the HUD, the minimap and every panel (they are on the flat HUD layer anyway).
+- The streaks are short near the horizon and longest at the screen edges, so the far road and the corner coming up stay readable. Smoke and dust off the road are blurred with the ground.
+- Only in the tilted cameras, **Behind** and **CLOSE**. **Top-down** is never blurred.
+
+**Strength vs speed**
+- The bike tops out at 345 km/h (6th gear at redline); on Silverstone's long straights (Hangar, Wellington, Hamilton) it reaches about 320–340 km/h.
+- Strength `s = smoothstep((v − start) / (full − start))`, with **start 260 km/h** and **full 330 km/h** by default. Below 260 km/h there is no blur at all, so braking zones and corners are always sharp. In 6th gear on a straight it fades in; at 330 km/h and above it is full.
+- `v` is the speed the camera follows: the player's bike, or in replay the followed bike's recorded speed (also in slow motion, fast forward, rewind and when paused, so a paused frame looks the same as when it played). While crashed the blur fades out with the sliding speed like any other speed.
+- **Maximum strength** is the length of a streak at the screen edge, at full strength: **20 px** (Behind) and **24 px** (CLOSE, which is closer to the ground and feels faster), in CSS pixels at the screen corner farthest from the horizon point. Halfway to the horizon a streak is half as long; at the horizon it is 0.
+
+**How it is built (cheap zoom blur, road masked out)**
+- After `projectTilted()` has drawn the ground (with the bikes in it) onto the screen, and only when `s > 0.01`:
+  1. Copy the projected screen into a small offscreen canvas at **¼ of the CSS resolution** (one `drawImage`). The down- and upscale alone already softens the picture by about 4 px.
+  2. Into a second small canvas, draw that copy **3 times**, scaled about the horizon point straight ahead (screen centre column, horizon row) by 1, 1 + k/2 and 1 + k, each with alpha 1/3, where `k = strength · s / (distance from the horizon point to the farthest screen corner)`. Scaling about one point moves every pixel by an amount proportional to its distance from it, so the streaks radiate from the vanishing point and grow towards the edges with no per-pixel work.
+  3. Cut the sharp area out of it with `destination-out`: the **road polygon** (both track edges plus kerb width plus 0.3 m, projected to the screen with `worldToScreen` for every track point inside the ground area, in contiguous runs so a second part of the track in view is cut out too, e.g. parallel straights) and an **ellipse around each bike and ghost** on screen (1.3 × its drawn length, so it covers the boosted sprite). The pit lane is not part of the road polygon. The mask is drawn at the same ¼ resolution, so its edge is soft over about 4 px, all of it on the outside of the 0.3 m margin.
+  4. Draw the masked blur back over the screen, upscaled with smoothing, with `globalAlpha = s`. The road and the bikes stay as `projectTilted()` drew them; the surroundings cross-fade from sharp to blurred as `s` rises.
+- No `ctx.filter` (slow or missing in some browsers) and no extra pass over the ground layers or the tile cache: the cost is two small canvases (about 370 × 210 px on a 1470 × 830 screen), four small `drawImage` calls, one path of a few hundred points and one full-screen `drawImage`.
+- **Performance limit:** at full strength the blur may add at most **15 % to the frame time** of the same view without it (target: about 1 ms on the 1470 × 830 Retina reference screen). When the slow-machine quality drop lowers the tilted image quality (`TILT.q` below 1, §11a), speed blur is switched off for the rest of the session, before that it counts in the frame time like everything else.
+- Name tags and the HUD are drawn after it on the HUD layer, as now.
+
+**Settings**
+- **Speed blur** On / Off on the start screen (§4), default **On**, saved in `sgp_opts` (`blur`). Off skips all of the above (no extra cost).
+- The Camera tuning panel in the pause menu (§11a) gets three more sliders for the current tilted camera, saved with its other values (`sgp_cam`, `sgp_cam_close`) and returned to defaults by Reset to defaults: **Blur start speed**, **Blur full speed**, **Blur strength** (values and ranges in §11a). Older saved values without these fields get the defaults. The view behind the pause menu shows the blur at the current speed, so changes can be seen live while moving the sliders (when paused at top speed).
+
 ## 12. Track and graphics
 
 - Centreline from the TUMFTM racetrack-database (LGPL-3.0), resampled every ~2 m (5 888 m, 2 944 points); start line at the real finish line.
@@ -398,7 +431,7 @@ Watch one recording, or several together for comparison. Any recording in the li
 - No square ends beside the track (since 1.11.4): run-off areas narrow at their ends, and where gravel meets tarmac run-off, by at most 1.5 m per track point (~2 m). Walls change their distance from the track by at most 1.2 m per track point (before, the walls stepped by up to 4 m at the pit zone). The pit lane entry and exit merge into the track edge over 20 m instead of ending square, and the pit lane never covers the track's white edge line. These square ends caused the same horizontal cut through the screen at the pit exit before Abbey, in live riding and in replay.
 - Scenery: grandstands, Wing pit building, garages, trees.
 - Bikes: detailed top-down sprites in team livery with rider and number, lean and shadow.
-- Effects: tyre marks, smoke, sparks, debris, dust on grass and gravel.
+- Effects: tyre marks, smoke, sparks, debris, dust on grass and gravel; speed blur of the surroundings at top speed in the tilted cameras (§11f, since 1.17.0).
 - Sound: synthesised engine (rpm and gear), shifts, impacts, pit.
 
 ## 13. Technical design
@@ -409,6 +442,7 @@ Watch one recording, or several together for comparison. Any recording in the li
   - static world baked into 512 px tiles of 40 m (LRU cache of 160);
   - device pixel ratio capped at 1.5, dropping to 1 when frames are slow;
   - only dynamic things are drawn each frame;
+  - speed blur (§11f) works on a ¼-resolution copy of the screen, costs at most 15 % of the frame time and is switched off by the slow-machine quality drop;
   - target 60 fps.
 - Smooth motion (since 1.11.2): physics runs at 120 Hz, the screen at its own rate. Riders are drawn between the last two physics steps, so the camera does not stutter when the frame clock and the physics drift apart.
 - Tests: `node tests/camera_shake.test.js [index.html]` (needs Playwright with Chromium) drives the real game loop with a fake frame clock (about 60 fps with ±1.5 ms jitter) and records the camera every frame.
@@ -427,6 +461,17 @@ Watch one recording, or several together for comparison. Any recording in the li
   - **Re-sync:** after riding 5 s, R and Go to spot put the ghosts back on their sync positions, standing.
   - **Old files:** a practice recording without `start` still loads and rides from the first line crossing.
   - v1.15.0 fails it (practice starts in the pit box, no ghost on the spot).
+- Tests (since 1.17.0): `node tests/speed_blur.test.js [index.html]` puts the player on the Hangar Straight at a set speed (bike held at that speed, no input), at 1470×830 (2× pixels) and 1280×800, with Behind and with CLOSE, and compares frames drawn with Speed blur On and Off. The road mask for measuring is computed in the test from the track edges and kerbs projected with `worldToScreen` (not taken from the game's own mask): **road pixels** are those at least 3 px inside it, **off-road pixels** at least 10 px outside it, below the horizon and away from bikes.
+  - **Standstill and slow:** at 0 and at 250 km/h the frames with blur On and Off are identical (no pixel differs by more than 1 level).
+  - **Top speed, surroundings blurred:** at 340 km/h the sharpness of the off-road pixels (mean absolute difference between neighbouring pixels) is at least 30 % lower with blur On than Off, and it is lower in the outer quarter of the screen width than near the centre column (streaks grow towards the edges).
+  - **Top speed, road sharp:** at 340 km/h 99 % of the road pixels (asphalt, white lines, kerbs) differ by at most 2 levels between On and Off, and the bike's pixels likewise.
+  - **Fades in with speed:** the off-road sharpness at 290 km/h lies between the values at 250 and 340 km/h.
+  - **Top-down unaffected:** with the Top-down camera, frames at 340 km/h are identical with blur On and Off.
+  - **Option Off:** with Speed blur Off on the start screen there is no blur at 340 km/h, and the choice is kept after a reload; the strength slider at 0 does the same for that camera only.
+  - **Replay:** a recording passing 340 km/h, replayed and paused there, shows the blur; paused at a point below 260 km/h, it does not.
+  - **Frame cost:** over 300 frames at 340 km/h (1470×830, 2× pixels, CLOSE) the median time of drawing the world plus the blur is at most 15 % above the same with blur Off.
+  - v1.16.0 fails it (no blur at top speed).
+- Since 1.17.0 `tilt_seam.test.js` and `camera_shake.test.js` run with Speed blur Off, so their measurements stay as before; `camera_tuning.test.js` expects 15 sliders (the three blur sliders added) and checks that they are saved per camera and reset by Reset to defaults.
 - `npm test` runs all tests (needs `npm install` and `npx playwright install chromium` once).
 
 ## 14. Change process
@@ -452,16 +497,14 @@ After tagging, push `main`, the tag and the feature branch to GitHub (`p3trk/mot
 
 ## 16. Version history
 
-See `CHANGELOG.md`. Current: **1.16.0** (practice starts on a chosen grid slot with no start lights; ghosts start with the player: standing-start recordings without the lights delay, curve-training spot starts synced to a chosen reference ghost).
+See `CHANGELOG.md`. Current: **1.17.0** (speed blur: at top speed the surroundings blur in the Behind and CLOSE cameras while the road, kerbs and bikes stay sharp; option on the start screen, tuning sliders per camera).
 
-### Open questions for 1.16.0 (recommended answer in bold; the design above uses it)
+### Open questions for 1.17.0 (recommended answer in bold; the design above uses it)
 
-1. Starting position shared between Practice and the 10 lap race, or one setting each? **Shared** (one control, as asked: "the same way as for race").
-2. With Curve training On (the default), the grid choice is not used. Show the Starting position control anyway, or only with Curve training Off? **Only with Curve training Off**, so it is clear which start applies.
-3. On the grid, hold the bike until the first input, or let the clock run from the session start? **Hold until the first input**, so the player and the ghosts really start together.
-4. Is the standing lap 1 saved as a practice lap in "Your laps"? **Yes**, like race lap 1; it is slower, so it never spoils a best lap.
-5. A standing-start ghost whose recording ends (e.g. a 10-lap race): disappear, or go on with its best lap each timed lap? **Disappear** (simplest; restart with R to race it again).
-6. Ghosts without a standing start on a grid start: wait for the line, or sync to the grid slot like a spot? **Wait for the line** (a flying lap beside a standing bike is not a useful comparison).
-7. Spot start, other ghosts: placed relative to the reference by lap time, or each on the spot? **Relative to the reference** (otherwise the reference choice has no effect).
-8. Spot start, speed mismatch: leave the ghost at its recorded speed, or hold it until the player reaches its speed? **Recorded speed**, plus the ghost's speed in the start message.
-9. Should qualifying also start on the grid? **No**, it keeps its out lap from the box.
+1. From which speed? Petr said "in Top speed only". **Start 260 km/h, full 330 km/h**, so it only shows on the long straights and never in braking zones; 200/300 would blur most of the lap.
+2. Zoom streaks from the vanishing point, or a plain soft blur? **Zoom streaks** (stronger at the screen edges, near zero at the horizon), so the corner ahead stays readable; it costs the same as a plain blur here.
+3. Are the pit lane, grid boxes and painted corner names "road"? **Grid boxes and painted names yes** (they are on the asphalt); **pit lane no** (it is beside the track).
+4. Riders off the road (a crash, a run through the gravel): blurred with the ground or sharp? **Sharp** (a blurred bike looks like a bug).
+5. Blur in replay when paused or in slow motion? **Yes, by the bike's speed**, so a paused frame looks like the moving one.
+6. Separate settings for Behind and CLOSE? **Yes**, like every other camera setting (CLOSE 24 px, Behind 20 px).
+7. Slow machines: lower the blur quality or turn it off? **Turn it off** when the tilted image quality drops; it is a pure effect.

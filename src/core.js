@@ -167,6 +167,15 @@ const T = {};
   const kerbRaw = new Uint8Array(N);
   for (let i = 0; i < N; i++) if (Math.abs(KS[i]) > 0.0052) kerbRaw[i] = 1;
   for (let i = 0; i < N; i++) { let on = 0; for (let o = -6; o <= 6; o++) if (kerbRaw[(i + o + N) % N]) on = 1; if (on) { const ins = KS[i] > 0 ? 0 : 1; KERB[ins][i] = 1.6; KERB[1 - ins][i] = 1.25; } }
+  // kerb ends narrow to nothing over 8 m instead of ending square (GDD 1.11.3)
+  for (let s = 0; s < 2; s++) {
+    const K = KERB[s], B = Float32Array.from(K);
+    for (let i = 0; i < N; i++) {
+      if (!B[i]) continue; let d = 1;
+      while (d < 5 && B[(i + d) % N] && B[(i - d + N) % N]) d++;
+      K[i] = B[i] * Math.min(1, (d - 1) / 4);
+    }
+  }
   // walls: desired distance, capped so they never cross another part of the circuit
   for (let s = 0; s < 2; s++) for (let i = 0; i < N; i++) {
     const e = EDGE[s][i]; let want = e + KERB[s][i] + RUN[s][i] + 9; want = Math.max(want, e + 13);

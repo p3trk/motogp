@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.11.3 (2026-10-28)
+- Kerbs narrow to nothing over their first and last 8 m instead of ending square, so kerb ends (and the gravel and run-off edges next to them) no longer look like a horizontal cut across the screen.
+- New automated test `tests/kerb_ends.test.js`: fails if any kerb ends square (v1.11.2 had 68 such ends).
+
 ## v1.11.2 (2026-10-28)
 - Replay no longer shakes: the replayed path is a smooth curve through the recorded samples, and new recordings take their samples exactly every 0.1 s.
 - Live riding: riders are drawn between physics steps, which removes a small stutter of the Behind camera when the frame rate and the 120 Hz physics drift apart.

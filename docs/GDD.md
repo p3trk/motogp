@@ -1,6 +1,6 @@
 # Silverstone GP — Game Design Document
 
-**Version:** 1.14.0 · **Last updated:** 2026-10-28 · **Owner:** Petr
+**Version:** 1.15.0 · **Last updated:** 2026-10-28 · **Owner:** Petr
 
 This document is the source of truth for how the game should work. Every
 change starts here: update the GDD on a feature branch first, then change the
@@ -143,6 +143,7 @@ Stored in `localStorage` key `sgp_records`, format `{v:1, laps, best, trace, tra
 - **Top centre:** lap stopwatch, last/best lap, sector splits; speed guide panel below it (§9).
 - **Bottom:** speedometer, rpm bar with shift light, gear, fuel (litres and laps left), damage bars, status tags.
 - **Top right:** minimap of Silverstone with all riders.
+  - The player's own pit box is marked by a ring in the team's main colour that blinks every 0.3 s.
 - Centre messages for start, pit, flags and session events.
 - Screens: menu, loading, pause, results.
 
@@ -271,6 +272,7 @@ where the ideal speed drops by more than 80 km/h.
 - Ghosts are drawn translucent with a "GHOST" name tag. They appear on the minimap as hollow dots.
 - They have no collisions and AI riders ignore them. They never pit, crash or use fuel; they replay positions only.
 - **Practice:** each ghost replays the best lap of its recording. It starts together with the player each time the player starts a timed lap (crossing the line after the out lap, or completing a lap), and disappears at the end of its lap. The timing tower lists each ghost's best lap.
+  - Since 1.15.0 this also applies in curve training (§11d): no ghost before the line, then the ghost starts with the first timed lap.
 - **Race (10 laps and Grand Prix):**
   - Each ghost replaces one of the slowest AI riders, so the grid stays at 22.
   - A race recording replays from its own lights out, aligned to this race's lights out. It follows its recorded line including its grid slot, start and pit stops.
@@ -303,7 +305,8 @@ Practise one corner again and again without riding the whole lap.
 - The bike starts on the spot, always in the **centre of the road** (lateral offset 0), pointing along the track, at the chosen speed and in the matching gear. The tank is full and the tyres are warm.
 - The bike waits on the spot, frozen, until the player presses W, S, A or D, then rides off at the chosen speed. "CURVE TRAINING · press W, S, A or D to go" is shown meanwhile.
 - **Restart session** (pause menu) and the **R** key put the bike back on the same spot at the same speed, with no delay.
-- Riding on past the line starts normal timed laps, as in practice. Ghosts (§11c) are not shown in curve training.
+- Riding on past the line starts normal timed laps, as in practice.
+- In curve training, ghosts (§11c) appear once the player crosses the line and starts a normal timed lap. They start with that lap as in practice. They are not shown while riding from the spot to the line.
 - Curve training is not available in qualifying or races.
 
 ## 11e. Session replay (since 1.11.0)
@@ -368,7 +371,8 @@ Watch one recording, or several together for comparison. Any recording in the li
   - Limits: speed 2 %, turn rate 0.08 rad/s, direction 0.08 rad/s, screen position 2 px (RMS). The test exits with an error if any case is over.
 - Tests: `node tests/tilt_seam.test.js [index.html]` draws a pattern of straight lines through the real Behind camera projection, in live riding and in replay, at 1280×800, 1470×830 (2× pixels) and 1024×700, and fails if a line bends by more than 0.5 px from one screen row to the next (v1.11.4 fails with about 1 px). It also measures how sharp the lines are on each screen row and fails if the sharpness changes by more than 15 % between the 8 px above and the 8 px below any row (since 1.11.6; v1.11.5 fails with a 25 % step where the near and far bands join, v1.11.6 measures 5–6 %). Since 1.13.0 it also runs at 1470×830 (2× pixels) with the Close camera profile (since 1.14.0: the CLOSE camera).
 - Tests: `node tests/track_edges.test.js [index.html]` checks that no outline beside the track ends square or jumps sideways between two neighbouring track points (~2 m apart). Limits: kerb width 0.45 m, run-off outer edge 2 m, wall 1.5 m, pit lane edges 1.5 m. Live riding and replay draw the same geometry, so this covers both; the test also draws the pit exit in both modes. v1.11.2 fails the kerb check (68 square ends); v1.11.3 fails run-off, wall and pit lane.
-- Tests: `node tests/camera_tuning.test.js [index.html]` checks the Behind camera tuning panel: 12 sliders in the pause menu, values applied, kept after a reload (localStorage), Reset to defaults, hidden with Top-down; since 1.13.0 also the profile list (Close sets its values, a moved slider shows Custom, the profile is kept after a reload, Reset to defaults gives Standard). Since 1.14.0 the profile checks are replaced by CLOSE camera checks: CLOSE can be chosen on the start screen and is remembered after a reload; C cycles Behind → CLOSE → Top-down → Behind (in a session and in replay); CLOSE starts with the Close values (tilt 55, distance 1.8, depth 6, far quality 0.7, …); the panel is shown for CLOSE with its title; values tuned on CLOSE do not change Behind and are kept after a reload (`sgp_cam_close`); Reset to defaults on CLOSE gives the Close values and on Behind the Behind values; an old `sgp_cam` saved with profile Close gives Behind its defaults. The sky check (at most 12 % on a straight at speed, 1470×830 @2×) uses the CLOSE camera. `npm test` runs all tests (needs `npm install` and `npx playwright install chromium` once).
+- Tests: `node tests/camera_tuning.test.js [index.html]` checks the Behind camera tuning panel: 12 sliders in the pause menu, values applied, kept after a reload (localStorage), Reset to defaults, hidden with Top-down; since 1.13.0 also the profile list (Close sets its values, a moved slider shows Custom, the profile is kept after a reload, Reset to defaults gives Standard). Since 1.14.0 the profile checks are replaced by CLOSE camera checks: CLOSE can be chosen on the start screen and is remembered after a reload; C cycles Behind → CLOSE → Top-down → Behind (in a session and in replay); CLOSE starts with the Close values (tilt 55, distance 1.8, depth 6, far quality 0.7, …); the panel is shown for CLOSE with its title; values tuned on CLOSE do not change Behind and are kept after a reload (`sgp_cam_close`); Reset to defaults on CLOSE gives the Close values and on Behind the Behind values; an old `sgp_cam` saved with profile Close gives Behind its defaults. The sky check (at most 12 % on a straight at speed, 1470×830 @2×) uses the CLOSE camera.
+- Tests (since 1.15.0): `node tests/practice_ghosts.test.js [index.html]` records a practice lap, selects it as a ghost and checks: with Curve training On, no ghost is shown before the line and a ghost is shown on the first timed lap; with Curve training Off, the ghost is shown on the first timed lap as before. v1.14.0 fails it (no ghost in curve training). `npm test` runs all tests (needs `npm install` and `npx playwright install chromium` once).
 
 ## 14. Change process
 
@@ -393,4 +397,4 @@ After tagging, push `main`, the tag and the feature branch to GitHub (`p3trk/mot
 
 ## 16. Version history
 
-See `CHANGELOG.md`. Current: **1.14.0** (CLOSE as its own camera on the start screen).
+See `CHANGELOG.md`. Current: **1.15.0** (ghosts in curve training timed laps).

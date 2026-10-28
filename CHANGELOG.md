@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.15.0 (2026-10-28)
+- Ghosts in curve training: selected ghosts now ride with you once you cross the line and start a normal timed lap, starting with that lap as in practice. They are not shown while riding from the training spot to the line, and R hides them again until the next timed lap. The Recordings panel hint says so.
+- GDD: the minimap ring that marks your own pit box (team colour, blinks every 0.3 s) is now documented.
+- New test `tests/practice_ghosts.test.js` (in `npm test`): with Curve training On no ghost before the line and a ghost on the first timed lap; with Curve training Off as before. v1.14.0 fails it.
+
 ## v1.14.0 (2026-10-28)
 - CLOSE is its own camera: the start screen Camera option has Behind / CLOSE / Top-down, and the choice is remembered after a reload for all three (before, only Top-down was kept). C switches Behind → CLOSE → Top-down → Behind in a session and in replay (also the replay Camera button) and updates the start-screen option. A replay opened from the start screen starts with the start-screen camera; from the pause menu or results it keeps the camera in use.
 - Camera tuning per camera: the pause-menu panel is titled "Camera tuning (Behind)" or "Camera tuning (CLOSE)" and edits only that camera; C in the pause menu switches the panel (hidden for Top-down). Behind is saved in `sgp_cam`, CLOSE in `sgp_cam_close`; Reset to defaults resets only the current camera. CLOSE starts with the 1.13.1 Close values.

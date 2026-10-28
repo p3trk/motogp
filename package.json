@@ -2,7 +2,7 @@
   "name": "silverstone-gp",
   "private": true,
   "scripts": {
-    "test": "node tests/camera_shake.test.js && node tests/track_edges.test.js && node tests/tilt_seam.test.js && node tests/camera_tuning.test.js"
+    "test": "node tests/camera_shake.test.js && node tests/track_edges.test.js && node tests/tilt_seam.test.js && node tests/camera_tuning.test.js && node tests/practice_ghosts.test.js"
   },
   "devDependencies": {
     "playwright": "^1.64.1"

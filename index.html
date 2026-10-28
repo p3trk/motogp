@@ -819,9 +819,10 @@ function setupSession(kind, opts) {
       W.bikes.push(b);
     });
   }
-  // ghost opponents (GDD 11c): in a race each one takes the place of one of the slowest AI riders
+  // ghost opponents (GDD 11c): in a race each one takes the place of one of the slowest AI riders;
+  // in practice, also curve training (GDD 11d), they only ride with the player's timed laps
   W.train = W.mode === 'practice' && opts.train ? opts.train : null;
-  Ghost.setup(W.train ? [] : opts.ghosts || []);
+  Ghost.setup(opts.ghosts || []);
   if (W.mode === 'race') for (const b of W.bikes.filter(b => !b.isPlayer).sort((a, b) => a.ai.pace - b.ai.pace).slice(0, W.ghosts.length)) W.bikes.splice(W.bikes.indexOf(b), 1);
   // box assignment: teammates share neighbouring boxes in team order
   const order = W.bikes.slice().sort((a, b) => a.team - b.team || a.id - b.id); order.forEach((b, k) => b.box = k);
@@ -2751,7 +2752,7 @@ const UI = {
     const src = { auto: '', import: 'imported', folder: 'saved_tracks' };
     $('recStatus').textContent = Lib.status || (Lib.stored ? 'Your last 10 sessions are kept in this browser. Imported and saved_tracks files are loaded for this visit only.' : 'Browser storage is blocked here, recordings are kept until the page closes.');
     $('btnReloadDir').hidden = !Lib.dir; if (Lib.dir) $('btnReloadDir').textContent = 'Reload ' + Lib.dir.name;
-    $('recGhostHint').textContent = Lib.ghosts.length ? `${Lib.ghosts.length} ghost${Lib.ghosts.length === 1 ? '' : 's'} selected. They ride with you in Practice and in races (each one replaces a slow AI rider).` : 'Switch on Ghost to ride against a recording in Practice or a race (up to 4).';
+    $('recGhostHint').textContent = Lib.ghosts.length ? `${Lib.ghosts.length} ghost${Lib.ghosts.length === 1 ? '' : 's'} selected. They ride with you in Practice (also on Curve training timed laps) and in races (each one replaces a slow AI rider).` : 'Switch on Ghost to ride against a recording in Practice or a race (up to 4).';
     Lib.cmp = Lib.cmp.filter(id => Lib.meta.some(m => m.id === id));
     $('btnReplaySel').disabled = !Lib.cmp.length; $('btnReplaySel').textContent = Lib.cmp.length > 1 ? `Replay ${Lib.cmp.length} together` : 'Replay selected';
     if (!Lib.meta.length) { el.innerHTML = '<span class="small">No recordings yet. Every session with a completed lap or a race start is recorded automatically.</span>'; return; }

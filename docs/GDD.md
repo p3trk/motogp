@@ -1,6 +1,6 @@
 # Silverstone GP — Game Design Document
 
-**Version:** 1.10.0 · **Last updated:** 2026-10-28 · **Owner:** Petr
+**Version:** 1.11.0 · **Last updated:** 2026-10-28 · **Owner:** Petr
 
 This document is the source of truth for how the game should work. Every
 change starts here: update the GDD on a feature branch first, then change the
@@ -47,6 +47,7 @@ chequered flag → results table (positions, gaps, best laps, DNFs).
 | M | Mute / unmute sound |
 | C | Switch camera: Behind ↔ Top-down (§11a) |
 | R | Curve training only: back to the training spot at once (§11d) |
+| Space, ←/→, ↓/↑, [ ], Tab | Replay viewer only: play/pause, jump 5 s, speed, lap, followed bike (§11e) |
 | Esc | Pause menu (resume, restart, end qualifying, quit). In Practice it also shows the Curve training map (§11d) |
 
 ## 4. Options (menu)
@@ -225,6 +226,8 @@ where the ideal speed drops by more than 80 km/h.
   - On the first start of 1.9.1, the newest 10 sessions from the old IndexedDB library are moved to `localStorage` once.
   - Exported JSON files keep the readable format below (unchanged), so older exports still import.
 - **Each row shows:** rider, session type, best lap, laps and date, plus three actions:
+  - **Replay** (since 1.11.0): watch the session in the replay viewer (§11e).
+  - **Compare** checkbox (since 1.11.0): pick several sessions and replay them together (§11e).
   - **Ghost** toggle: race against this recording.
   - **Export:** save that session as a JSON file (into the linked `saved_tracks/` folder, otherwise to Downloads). Every row in the list has its own Export button.
   - **Delete.**
@@ -279,6 +282,37 @@ Practise one corner again and again without riding the whole lap.
 - Riding on past the line starts normal timed laps, as in practice. Ghosts (§11c) are not shown in curve training.
 - Curve training is not available in qualifying or races.
 
+## 11e. Session replay (since 1.11.0)
+
+Watch one recording, or several together for comparison. Any recording in the list can be used (own sessions, imported files, `saved_tracks/` files).
+
+**Opening**
+- **Replay** button on each row of the Recordings list: replays that one session.
+- **Compare** checkbox on each row (up to 6) and a **Replay selected** button above the list: replays the ticked sessions together.
+- **Watch replay** on the results screen (race and qualifying) and in the pause menu (the session so far).
+
+**Comparing several sessions**
+- All selected bikes ride on the track at the same time on one shared timeline. The first ticked session is the **reference**; the others are drawn slightly translucent, each with a name tag (rider, session, date).
+- **Align** choice in the replay bar:
+  - **Best lap** (default): each session's best lap starts at 0 s, so the bikes leave the line together and the timeline is as long as the slowest of those laps.
+  - **Lap N**: the same, using lap N of every session (sessions without that lap are hidden).
+  - **Session start**: each session from its own start; race recordings from their own lights out.
+- **Gap panel** (top left): each bike's time gap to the reference at the same point of the track, updated live, plus its lap time for the aligned lap. Best of the group in purple.
+- **Tab** switches which bike the camera follows; the minimap shows all of them.
+
+**What is shown**
+- The bikes on the track, driven by the recorded samples (position, heading, lean, speed), smoothly interpolated between the 10 Hz samples.
+- Recordings hold only the player's bike, so AI riders are not in the replay.
+- The normal cameras (Behind / Top-down, C to switch) follow the followed bike.
+- HUD for the followed bike: speed, lean, lap number, current lap time, best lap, the corner name and the corner countdown. No fuel, damage or throttle data (not recorded).
+
+**Timeline (bottom of the screen)**
+- A full-width scrubber from session start to end. Click or drag to jump anywhere. Lap starts are marked with ticks and lap numbers; the best lap is purple.
+- Buttons: **Play / Pause**, **Rewind** and **Fast forward**, **Slow motion**, **Previous / next lap**, **Exit**.
+- Playback speeds: −8×, −4×, −2×, −1× (rewind), 0.25×, 0.5× (slow motion), 1×, 2×, 4×, 8× (fast forward). The current speed and time are shown next to the scrubber.
+- Keys: **Space** play/pause, **←/→** jump 5 s, **↓/↑** slower/faster (through the list above, through 0 into rewind), **[ / ]** previous/next lap (Session start alignment), **Tab** followed bike, **C** camera, **Esc** exit to the menu (or back to the results screen).
+- At the end of the recording playback pauses; rewinding to the start pauses there too.
+
 ## 12. Track and graphics
 
 - Centreline from the TUMFTM racetrack-database (LGPL-3.0), resampled every ~2 m (5 888 m, 2 944 points); start line at the real finish line.
@@ -322,4 +356,4 @@ After tagging, push `main`, the tag and the feature branch to GitHub (`p3trk/mot
 
 ## 16. Version history
 
-See `CHANGELOG.md`. Current: **1.10.0**.
+See `CHANGELOG.md`. Current: **1.11.0**.

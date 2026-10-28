@@ -1,6 +1,6 @@
 # Silverstone GP — Game Design Document
 
-**Version:** 1.13.1 · **Last updated:** 2026-10-28 · **Owner:** Petr
+**Version:** 1.14.0 · **Last updated:** 2026-10-28 · **Owner:** Petr
 
 This document is the source of truth for how the game should work. Every
 change starts here: update the GDD on a feature branch first, then change the
@@ -45,21 +45,21 @@ chequered flag → results table (positions, gaps, best laps, DNFs).
 | A / D | Lean left / right |
 | O / L | Shift up / down (ignored in automatic) |
 | M | Mute / unmute sound |
-| C | Switch camera: Behind ↔ Top-down (§11a) |
+| C | Switch camera: Behind → CLOSE → Top-down → Behind (§11a) |
 | R | Curve training only: back to the training spot at once (§11d) |
 | Space, ←/→, ↓/↑, [ ], Tab | Replay viewer only: play/pause, jump 5 s, speed, lap, followed bike (§11e) |
 | Esc | Pause menu (resume, restart, end qualifying, quit). In Practice it also shows the Curve training map (§11d) |
 
 ## 4. Options (menu)
 
-Stored in `localStorage` key `sgp_opts`.
+Stored in `localStorage` key `sgp_opts`. The camera choice is remembered for all three cameras (before 1.14.0 only Top-down was kept; a saved Behind was dropped and fell back to the default, which was also Behind).
 
 | Option | Values | Default |
 |---|---|---|
 | Transmission | Manual / Automatic | Manual |
 | Rider aids (lean limiter + traction control) | On / Off | On |
 | AI level | Rookie (0.905) / Pro (0.955) / Legend (0.99) of ideal pace | Pro |
-| Camera | Behind (tilted) / Top-down | Behind |
+| Camera | Behind (tilted) / CLOSE (tilted, low and close, since 1.14.0) / Top-down | Behind |
 | Speed guide (practice only) | On / Off | On |
 | Curve training (practice only) | Off / On toggle, plus spot on track and start speed 0–300 km/h | **On** (since 1.10.0), spot 350 m before Abbey, guide speed |
 | Starting fuel (races) | 25–100 % of tank, step 5 | 100 % |
@@ -148,7 +148,7 @@ Stored in `localStorage` key `sgp_records`, format `{v:1, laps, best, trace, tra
 
 ## 11a. Camera
 
-Two cameras, switched with **C** or in the menu.
+Three cameras (since 1.14.0): **Behind**, **CLOSE** and **Top-down**. Chosen on the start screen (Camera option, §4) and remembered there; **C** switches through them in order Behind → CLOSE → Top-down → Behind, in a session and in replay. Choosing with C also updates the start-screen option. Behind and CLOSE are both tilted views drawn the same way (below); they differ only in their settings.
 
 **Behind (default, since 1.7.0)**
 - A chase view from behind and slightly above the bike. The flat 2D world is tilted back in true perspective (see Tuning below).
@@ -166,26 +166,29 @@ Two cameras, switched with **C** or in the menu.
   - On slow machines the resolution of both bands drops by a further 20 %.
 - **Tuning:** the tilt is **40°** with a camera distance of 1.3 × screen height. The plane is 2.3 × screen width and 2.6 × screen height.
 
-**Behind camera tuning (since 1.12.0)**
-- With the Behind camera on, the pause menu (Esc) shows a **Camera tuning** panel: one slider with a number box per setting. The view behind the menu updates live while dragging.
-- Settings (default, range):
-  - Tilt: 40°, 20–70.
-  - Camera distance: 1.3 × screen height, 0.5–2.5.
-  - Bike height on screen: 20 %, 5–40.
-  - Zoom: maximum 20 px/m (10–30), base 30 m (10–60), speed factor 1.0 (0.3–2.0) in `ppm = min(max, min(VW, 1.25·VH) / (base + factor·v))`.
-  - Ground area: width 2.3 × screen (1.5–3.5), depth 2.6 × screen (1.5–6).
-  - Image quality: near band 0.75 (0.4–2.0), far band 0.45 (0.25–0.8), fade zone 30 % (0–60).
-  - Minimum bike length: 40 px, 20–80.
-- **Reset to defaults** button (= the Standard profile, since 1.13.0). Settings are saved in the browser (localStorage key `sgp_cam`) and kept after a reload.
-- Not shown with the Top-down camera.
-
-**Camera profiles (since 1.13.0)**
-- A **Profile** list at the top of the Camera tuning panel: **Standard** (the 1.12.0 defaults) and **Close**. Choosing a profile sets all sliders; moving any slider afterwards shows **Custom**. The chosen profile is saved with the other settings.
-- **Close** aims at what a rider really sees: tilt 55°, so the road stretches ahead and the ground is seen at a low angle; camera distance 1.8 × screen height and the bike 8 % above the bottom edge; zoomed in (maximum 30 px/m, base 12 m, speed factor 0.4); most detail (near image 1.5, far image 0.7; above 1.0 uses the extra pixels of Retina screens); a deeper and wider ground (depth 6 × screen, width 3.5 × screen) so the road reaches the horizon, which sits about 8 % of the way down the screen. Fade zone 30 % and minimum bike length 40 px as in Standard.
+**CLOSE (since 1.14.0)**
+- Its own camera, labelled **CLOSE** on the start screen and in the C message. It was the Close profile of the Behind camera in 1.13.0–1.13.1; it became a camera of its own so it can be picked on the start screen and compared with Behind using C.
+- Aims at what a rider really sees: tilt 55°, so the road stretches ahead and the ground is seen at a low angle; camera distance 1.8 × screen height and the bike 8 % above the bottom edge; zoomed in (maximum 30 px/m, base 12 m, speed factor 0.4); most detail (near image 1.5, far image 0.7; above 1.0 uses the extra pixels of Retina screens); a deeper and wider ground (depth 6 × screen, width 3.5 × screen) so the road reaches the horizon, which sits about 8 % of the way down the screen. Fade zone 30 % and minimum bike length 40 px as in Behind.
   - Fine-tuned on a 1470 × 830 Retina screen. The first draft had distance 0.6, depth 5, width 2.3 and speed factor 0.6. With tilt 60°, a distance of 0.6 puts the horizon only about 35 % above the bottom edge (it sits at distance × cot(tilt)), so two thirds of the screen were sky. Distance 1.6 with depth 5.5 brings the far edge of the ground to about 69 % of the screen height. Width 3.5 keeps the far ground as wide as the view, and speed factor 0.4 keeps the bike bigger at speed.
   - Since 1.13.1 (Petr, 2026-10-28): the 1.13.0 Close (tilt 60°, distance 1.6, depth 5.5) showed too much sky (31 % of the screen), so the tilt went down to 55°, the distance up to 1.8 and the depth up to 6: sky is now about 8 % of the screen, the ground reaches about 10 % further ahead (≈200 m instead of ≈183 m at 280 km/h) and the bike is about 20 % longer on screen, with the same zoom. The far image went from 0.6 to 0.7, because with the lower tilt the step in sharpness where the near image fades into the far one grew from 8 % to 14 % (0.7 brings it to about 3 %).
-- Slider ranges widened: tilt up to 70°, distance from 0.5, bike height from 5 %, near quality up to 2.0, ground depth up to 6, and (so the Close zoom fits) zoom base from 10 m and speed factor from 0.3.
-- Close draws more pixels and can be slower; the automatic quality drop for slow machines still applies.
+- CLOSE draws more pixels and can be slower; the automatic quality drop for slow machines applies to both tilted cameras.
+
+**Camera tuning (since 1.12.0; per camera since 1.14.0)**
+- With the Behind or the CLOSE camera on, the pause menu (Esc) shows a **Camera tuning** panel for that camera, titled "Camera tuning (Behind)" or "Camera tuning (CLOSE)": one slider with a number box per setting. The view behind the menu updates live while dragging. Pressing C in the pause menu switches the panel to the new camera (and hides it for Top-down).
+- Each tilted camera keeps its own values. Changing CLOSE does not change Behind and the other way round.
+- Settings (Behind default / CLOSE default, range):
+  - Tilt: 40° / 55°, 20–70.
+  - Camera distance: 1.3 / 1.8 × screen height, 0.5–2.5.
+  - Bike height on screen: 20 / 8 %, 5–40.
+  - Zoom: maximum 20 / 30 px/m (10–30), base 30 / 12 m (10–60), speed factor 1.0 / 0.4 (0.3–2.0) in `ppm = min(max, min(VW, 1.25·VH) / (base + factor·v))`.
+  - Ground area: width 2.3 / 3.5 × screen (1.5–3.5), depth 2.6 / 6 × screen (1.5–6).
+  - Image quality: near band 0.75 / 1.5 (0.4–2.0), far band 0.45 / 0.7 (0.25–0.8), fade zone 30 / 30 % (0–60).
+  - Minimum bike length: 40 / 40 px, 20–80.
+- **Reset to defaults** button: returns the current camera (only) to its own defaults above.
+- Saved in the browser and kept after a reload: Behind in `localStorage` key `sgp_cam` (as before), CLOSE in `sgp_cam_close`.
+- The **Profile** list of 1.13.0 (Standard / Close / Custom) is removed: Close is now its own camera, and Standard is what Reset to defaults gives on Behind, so the list had nothing left to choose.
+- Saved values from before 1.14.0 (`sgp_cam`) stay with Behind. If the saved profile was **Close** with the Close values unchanged, Behind starts from its defaults instead (that player had picked Close, which is now the CLOSE camera); any other saved values, also Custom ones, are kept as they are. The `profile` field is no longer written.
+- Not shown with the Top-down camera.
 
 **Top-down (Rotating)**
 - The pre-1.7 camera. Top-down, rotates with the bike's heading, zooms out with speed and looks ahead along the heading.
@@ -195,7 +198,7 @@ Two cameras, switched with **C** or in the menu.
 - Look-ahead camera: its far zoom took away the feel of speed.
 - North-up camera.
 
-The corner countdown (§11b) works with both cameras.
+The corner countdown (§11b) works with all three cameras.
 
 ## 11b. Corner countdown (HUD)
 
@@ -326,7 +329,7 @@ Watch one recording, or several together for comparison. Any recording in the li
   - Since 1.11.2 the path follows a cubic B-spline through the samples. Straight lines between samples turned the bike's direction in small steps ten times a second, and the camera shook in replay.
   - New recordings take each sample exactly on the 0.1 s grid (interpolated between physics steps); before, a sample could be up to 8 ms late.
 - Recordings hold only the player's bike, so AI riders are not in the replay.
-- The normal cameras (Behind / Top-down, C to switch) follow the followed bike.
+- The normal cameras (Behind / CLOSE / Top-down, C or the Camera button to switch, same order as in a session) follow the followed bike. The replay starts with the camera chosen on the start screen (or the one in use, when opened from the pause menu or results screen).
 - HUD for the followed bike: speed, lean, lap number, current lap time, best lap, the corner name and the corner countdown. No fuel, damage or throttle data (not recorded).
 
 **Timeline (bottom of the screen)**
@@ -360,12 +363,12 @@ Watch one recording, or several together for comparison. Any recording in the li
   - target 60 fps.
 - Smooth motion (since 1.11.2): physics runs at 120 Hz, the screen at its own rate. Riders are drawn between the last two physics steps, so the camera does not stutter when the frame clock and the physics drift apart.
 - Tests: `node tests/camera_shake.test.js [index.html]` (needs Playwright with Chromium) drives the real game loop with a fake frame clock (about 60 fps with ±1.5 ms jitter) and records the camera every frame.
-  - Cases: live riding and replay at 0.25×, 1× and 4×, each with the Behind and Top-down cameras.
+  - Cases: live riding and replay at 0.25×, 1× and 4×, each with the Behind and Top-down cameras, and since 1.14.0 also with CLOSE.
   - Measured against a 0.4 s moving average (in game time): camera speed, camera turn rate, direction of camera travel, and the bike's position on screen.
   - Limits: speed 2 %, turn rate 0.08 rad/s, direction 0.08 rad/s, screen position 2 px (RMS). The test exits with an error if any case is over.
-- Tests: `node tests/tilt_seam.test.js [index.html]` draws a pattern of straight lines through the real Behind camera projection, in live riding and in replay, at 1280×800, 1470×830 (2× pixels) and 1024×700, and fails if a line bends by more than 0.5 px from one screen row to the next (v1.11.4 fails with about 1 px). It also measures how sharp the lines are on each screen row and fails if the sharpness changes by more than 15 % between the 8 px above and the 8 px below any row (since 1.11.6; v1.11.5 fails with a 25 % step where the near and far bands join, v1.11.6 measures 5–6 %). Since 1.13.0 it also runs at 1470×830 (2× pixels) with the Close camera profile.
+- Tests: `node tests/tilt_seam.test.js [index.html]` draws a pattern of straight lines through the real Behind camera projection, in live riding and in replay, at 1280×800, 1470×830 (2× pixels) and 1024×700, and fails if a line bends by more than 0.5 px from one screen row to the next (v1.11.4 fails with about 1 px). It also measures how sharp the lines are on each screen row and fails if the sharpness changes by more than 15 % between the 8 px above and the 8 px below any row (since 1.11.6; v1.11.5 fails with a 25 % step where the near and far bands join, v1.11.6 measures 5–6 %). Since 1.13.0 it also runs at 1470×830 (2× pixels) with the Close camera profile (since 1.14.0: the CLOSE camera).
 - Tests: `node tests/track_edges.test.js [index.html]` checks that no outline beside the track ends square or jumps sideways between two neighbouring track points (~2 m apart). Limits: kerb width 0.45 m, run-off outer edge 2 m, wall 1.5 m, pit lane edges 1.5 m. Live riding and replay draw the same geometry, so this covers both; the test also draws the pit exit in both modes. v1.11.2 fails the kerb check (68 square ends); v1.11.3 fails run-off, wall and pit lane.
-- Tests: `node tests/camera_tuning.test.js [index.html]` checks the Behind camera tuning panel: 12 sliders in the pause menu, values applied, kept after a reload (localStorage), Reset to defaults, hidden with Top-down; since 1.13.0 also the profile list (Close sets its values, a moved slider shows Custom, the profile is kept after a reload, Reset to defaults gives Standard). `npm test` runs all tests (needs `npm install` and `npx playwright install chromium` once).
+- Tests: `node tests/camera_tuning.test.js [index.html]` checks the Behind camera tuning panel: 12 sliders in the pause menu, values applied, kept after a reload (localStorage), Reset to defaults, hidden with Top-down; since 1.13.0 also the profile list (Close sets its values, a moved slider shows Custom, the profile is kept after a reload, Reset to defaults gives Standard). Since 1.14.0 the profile checks are replaced by CLOSE camera checks: CLOSE can be chosen on the start screen and is remembered after a reload; C cycles Behind → CLOSE → Top-down → Behind (in a session and in replay); CLOSE starts with the Close values (tilt 55, distance 1.8, depth 6, far quality 0.7, …); the panel is shown for CLOSE with its title; values tuned on CLOSE do not change Behind and are kept after a reload (`sgp_cam_close`); Reset to defaults on CLOSE gives the Close values and on Behind the Behind values; an old `sgp_cam` saved with profile Close gives Behind its defaults. The sky check (at most 12 % on a straight at speed, 1470×830 @2×) uses the CLOSE camera. `npm test` runs all tests (needs `npm install` and `npx playwright install chromium` once).
 
 ## 14. Change process
 
@@ -390,4 +393,4 @@ After tagging, push `main`, the tag and the feature branch to GitHub (`p3trk/mot
 
 ## 16. Version history
 
-See `CHANGELOG.md`. Current: **1.13.1**.
+See `CHANGELOG.md`. Current: **1.14.0** (CLOSE as its own camera on the start screen).

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Camera tuning test (GDD 11a): the pause menu shows a Camera tuning panel with the Behind or CLOSE camera only.
-// It has 12 sliders, each with a number box; changed values apply to the camera at once, are kept after a
+// It has 15 sliders (since 1.17.0 with Blur start speed, Blur full speed and Blur strength), each with a number box; changed values apply to the camera at once, are kept after a
 // reload (localStorage 'sgp_cam'), and Reset to defaults brings back the built-in values.
 // Since 1.14.0 CLOSE is its own camera (the 1.13.x profile list is gone): chosen on the start screen and kept after
 // a reload, C cycles Behind -> CLOSE -> Top-down in a session and in replay, CLOSE starts with the Close values,
@@ -13,8 +13,8 @@ const { chromium } = require('playwright');
 const FILE = 'file://' + path.resolve(process.argv[2] || path.join(__dirname, '..', 'index.html'));
 const DEG = Math.PI / 180;
 // defaults in display units (tilt in degrees, bike height and fade zone in %)
-const DEF = { a: 40, p: 1.3, bike: 20, zMax: 20, zBase: 30, zK: 1.0, wk: 2.3, hk: 2.6, nearQ: 0.75, farQ: 0.45, fade: 30, minLen: 40 };
-const CLOSE = { a: 55, p: 1.8, bike: 8, zMax: 30, zBase: 12, zK: 0.4, wk: 3.5, hk: 6, nearQ: 1.5, farQ: 0.7, fade: 30, minLen: 40 };
+const DEF = { a: 40, p: 1.3, bike: 20, zMax: 20, zBase: 30, zK: 1.0, wk: 2.3, hk: 2.6, nearQ: 0.75, farQ: 0.45, fade: 30, minLen: 40, bv0: 260, bv1: 330, bs: 20 };
+const CLOSE = { a: 55, p: 1.8, bike: 8, zMax: 30, zBase: 12, zK: 0.4, wk: 3.5, hk: 6, nearQ: 1.5, farQ: 0.7, fade: 30, minLen: 40, bv0: 260, bv1: 330, bs: 24 };
 const UNIT = { a: DEG, bike: 0.01, fade: 0.01 }; // display unit -> TILT value
 
 (async () => {
@@ -61,7 +61,7 @@ const UNIT = { a: DEG, bike: 0.01, fade: 0.01 }; // display unit -> TILT value
   await pauseBehind();
   let p = await panel();
   check(p.visible, 'panel visible in the Behind pause menu');
-  check(p.sliders === 12 && p.boxes === 12, '12 sliders, each with a number box', `sliders ${p.sliders}  number boxes ${p.boxes}`);
+  check(p.sliders === 15 && p.boxes === 15, '15 sliders, each with a number box', `sliders ${p.sliders}  number boxes ${p.boxes}`);
 
   // b) change tilt with the slider and zoom maximum with the number box
   await page.evaluate(() => {
@@ -86,7 +86,7 @@ const UNIT = { a: DEG, bike: 0.01, fade: 0.01 }; // display unit -> TILT value
   check(p.visible && shown === 50, 'panel shows the saved values', `tilt slider ${shown}`);
   await page.locator('#pauseCam button', { hasText: 'Reset to defaults' }).click();
   T = await tilt();
-  check(isDef(T), 'Reset to defaults restores all 12 values', fmt(T));
+  check(isDef(T), 'Reset to defaults restores all 15 values', fmt(T));
   await page.reload(); await ready();
   T = await tilt();
   check(isDef(T), 'defaults kept after a reload', fmt(T));
@@ -117,6 +117,20 @@ const UNIT = { a: DEG, bike: 0.01, fade: 0.01 }; // display unit -> TILT value
   await pauseCam('close'); const Tc = await tilt();
   await pauseCam('behind'); const Tb = await tilt();
   check(near(Tc.zK, 0.8) && isDef(Tb), 'CLOSE value kept after reload, Behind unchanged', `CLOSE zK ${Tc.zK}  Behind ${isDef(Tb) ? 'defaults' : fmt(Tb)}`);
+
+  // h2) blur sliders (since 1.17.0): saved per camera, full speed kept at least 10 km/h above the start speed
+  await pauseCam('close'); await slide('bs', 30); await slide('bv0', 300); await slide('bv1', 280);
+  T = await tilt();
+  const sc2 = await stored('sgp_cam_close'), sb2 = await stored('sgp_cam'), shown2 = await page.evaluate(() => [+document.getElementById('cam_bv0').value, +document.getElementById('cam_bv1').value]);
+  check(T.bs === 30 && T.bv1 === 280 && T.bv0 === 270 && shown2.join() === '270,280' && sc2.bs === 30 && sc2.bv0 === 270 && (!sb2 || sb2.bs === DEF.bs), 'blur sliders saved for CLOSE, speeds kept 10 apart', `strength ${T.bs}  start ${T.bv0}  full ${T.bv1}  sliders ${shown2.join('/')}  sgp_cam strength ${sb2 ? sb2.bs : 'none'}`);
+  await slide('bv0', 300);
+  T = await tilt();
+  check(T.bv0 === 300 && T.bv1 === 310, 'raising the start speed pushes the full speed up', `start ${T.bv0}  full ${T.bv1}`);
+  await page.locator('#pauseCam button', { hasText: 'Reset to defaults' }).click();
+  T = await tilt();
+  check(T.bs === 24 && T.bv0 === 260 && T.bv1 === 330, 'Reset gives the CLOSE blur defaults', `strength ${T.bs}  start ${T.bv0}  full ${T.bv1}`);
+  await pauseCam('behind'); T = await tilt();
+  check(T.bs === 20 && T.bv0 === 260 && T.bv1 === 330, 'Behind keeps its own blur values', `strength ${T.bs}  start ${T.bv0}  full ${T.bv1}`);
 
   // i) C cycles Behind -> CLOSE -> Top-down -> Behind in a session; in the pause menu C switches the panel
   const seq = [];
@@ -152,7 +166,8 @@ const UNIT = { a: DEG, bike: 0.01, fade: 0.01 }; // display unit -> TILT value
 
   // l) old data: sgp_cam saved by 1.13.x with the Close profile unchanged gives Behind its defaults; other values stay
   const old = async v => { await page.evaluate(v => { localStorage.setItem('sgp_cam', JSON.stringify(v)); localStorage.removeItem('sgp_cam_close'); }, v); await page.reload(); await ready(); await pauseCam('behind'); return [await tilt(), await stored('sgp_cam')]; };
-  const [o1, s1] = await old(Object.assign({ profile: 'close' }, CLOSE)), [o2] = await old(Object.assign({ profile: 'custom' }, CLOSE, { zK: 0.8 })), [o3] = await old(Object.assign({}, DEF, { a: 50 }));
+  const CLOSE13 = Object.fromEntries(Object.entries(CLOSE).filter(([k]) => !/^b[vs]/.test(k))); // 1.13.x had no blur fields
+  const [o1, s1] = await old(Object.assign({ profile: 'close' }, CLOSE13)), [o2] = await old(Object.assign({ profile: 'custom' }, CLOSE, { zK: 0.8 })), [o3] = await old(Object.assign({}, DEF, { a: 50 }));
   check(isDef(o1) && !('profile' in (s1 || {})), 'old Close profile: Behind starts from defaults', `Behind ${isDef(o1) ? 'defaults' : fmt(o1)}  profile field ${s1 && 'profile' in s1 ? 'kept' : 'gone'}`);
   check(near(o2.zK, 0.8) && near(o2.a, 55 * DEG) && near(o3.a, 50 * DEG), 'other old saved values stay with Behind', `custom -> ${fmt(o2)}  1.12 tilt 50 -> ${(o3.a / DEG).toFixed(1)}°`);
   await page.evaluate(() => { window.__sgp.UI.togglePause(); localStorage.removeItem('sgp_cam'); localStorage.removeItem('sgp_cam_close'); }); await page.reload(); await ready();

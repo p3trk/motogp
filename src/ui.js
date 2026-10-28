@@ -431,12 +431,12 @@ window.addEventListener('blur', () => { Input.k = {}; if (UI.state === 'play' &&
 // ---------------------------------------------------------------------------
 const $ = id => document.getElementById(id);
 const UI = {
-  state: 'menu', opts: { mode: 'sprint', trans: 'manual', aids: 'on', ai: 'pro', cam: 'behind', guide: 'on', train: 'on', trainS: -1, trainV: -1, fuel: 100, grid: 'mid', name: 'Petr', num: 25, team: 2 },
+  state: 'menu', opts: { mode: 'sprint', trans: 'manual', aids: 'on', ai: 'pro', cam: 'behind', guide: 'on', blur: 'on', train: 'on', trainS: -1, trainV: -1, fuel: 100, grid: 'mid', name: 'Petr', num: 25, team: 2 },
   init() {
     try { const s = JSON.parse(localStorage.getItem('sgp_opts') || 'null'); if (s) { if (!CAM_ORDER.includes(s.cam)) delete s.cam; if (!s.trainDef) delete s.train; Object.assign(this.opts, s); } this.opts.trainDef = 1; } catch (e) { }
     const sel = $('optTeam'); TEAMS.forEach((t, k) => { const o = document.createElement('option'); o.value = k; o.textContent = t.name; sel.appendChild(o); });
     document.querySelectorAll('.mode').forEach(m => m.addEventListener('click', () => { this.opts.mode = m.dataset.mode; this.sync(); }));
-    for (const [id, key] of [['optTrans', 'trans'], ['optAids', 'aids'], ['optAI', 'ai'], ['optCam', 'cam'], ['optGuide', 'guide'], ['optTrain', 'train']]) $(id).querySelectorAll('button').forEach(bt => bt.addEventListener('click', () => { this.opts[key] = bt.dataset.v; this.sync(); }));
+    for (const [id, key] of [['optTrans', 'trans'], ['optAids', 'aids'], ['optAI', 'ai'], ['optCam', 'cam'], ['optGuide', 'guide'], ['optBlur', 'blur'], ['optTrain', 'train']]) $(id).querySelectorAll('button').forEach(bt => bt.addEventListener('click', () => { this.opts[key] = bt.dataset.v; this.sync(); }));
     $('optFuel').addEventListener('input', e => { this.opts.fuel = +e.target.value; this.sync(); });
     $('optGrid').addEventListener('change', e => { this.opts.grid = e.target.value; });
     $('optTeam').addEventListener('change', e => { this.opts.team = +e.target.value; });
@@ -473,7 +473,7 @@ const UI = {
   sync() {
     const o = this.opts;
     document.querySelectorAll('.mode').forEach(m => m.setAttribute('aria-pressed', String(m.dataset.mode === o.mode)));
-    for (const [id, key] of [['optTrans', 'trans'], ['optAids', 'aids'], ['optAI', 'ai'], ['optCam', 'cam'], ['optGuide', 'guide'], ['optTrain', 'train']]) $(id).querySelectorAll('button').forEach(bt => bt.setAttribute('aria-pressed', String(bt.dataset.v === o[key])));
+    for (const [id, key] of [['optTrans', 'trans'], ['optAids', 'aids'], ['optAI', 'ai'], ['optCam', 'cam'], ['optGuide', 'guide'], ['optBlur', 'blur'], ['optTrain', 'train']]) $(id).querySelectorAll('button').forEach(bt => bt.setAttribute('aria-pressed', String(bt.dataset.v === o[key])));
     $('optFuel').value = o.fuel; $('optGrid').value = o.grid; $('optTeam').value = o.team; $('optName').value = o.name; $('optNum').value = o.num;
     const laps = o.mode === 'gp' ? 20 : 10; const L = PHYS.tank * o.fuel / 100; const range = L / 2.65;
     $('optFuelV').textContent = L.toFixed(1) + ' L';
@@ -623,7 +623,7 @@ const UI = {
       const head = document.createElement('div'); head.className = 'opt'; head.style.gridColumn = '1/-1';
       head.innerHTML = '<span class="lbl" id="camTitle">Camera tuning</span><span class="hint">The view behind this menu updates as you change a value. Each camera keeps its own values, saved in this browser. C switches the camera.</span>';
       P.appendChild(head);
-      const rows = CAM_SET.map(d => {
+      const refresh = {}, rows = CAM_SET.map(d => {
         const w = document.createElement('div'); w.className = 'opt';
         const id = 'cam_' + d.k, lb = document.createElement('label'); lb.htmlFor = id; lb.textContent = d.lbl + (d.unit ? ' (' + d.unit + ')' : '');
         const rg = document.createElement('input'), nb = document.createElement('input');
@@ -631,11 +631,12 @@ const UI = {
         for (const el of [rg, nb]) { el.min = d.min; el.max = d.max; el.step = d.step; }
         const line = document.createElement('div'); line.style.cssText = 'display:flex;gap:10px;align-items:center';
         nb.style.width = '92px'; nb.style.flex = 'none'; line.append(rg, nb); w.append(lb, line);
-        const put = (v, save) => { v = camSet(d, v, save); rg.value = v; if (document.activeElement !== nb || !save) nb.value = v; if (d.rs && save) resize(); if (save && W.paused) CAM.init = false; }; // paused: the camera barely moves, so snap it to the new zoom/framing
+        const put = (v, save) => { v = camSet(d, v, save); rg.value = v; if (document.activeElement !== nb || !save) nb.value = v; if (d.rs && save) resize(); if (save && W.paused) CAM.init = false; // paused: the camera barely moves, so snap it to the new zoom/framing
+          const pk = { bv0: 'bv1', bv1: 'bv0' }[d.k]; if (save && pk) refresh[pk](); }; // blur start and full speed keep 10 km/h apart
         rg.addEventListener('input', () => put(rg.value, true));
         nb.addEventListener('input', () => { if (nb.value !== '' && isFinite(+nb.value)) put(nb.value, true); });
         nb.addEventListener('change', () => { put(nb.value, true); nb.value = camGet(d); });
-        P.appendChild(w); return () => put(camGet(d), false);
+        P.appendChild(w); return refresh[d.k] = () => put(camGet(d), false);
       });
       const act = document.createElement('div'); act.style.gridColumn = '1/-1';
       const rb = document.createElement('button'); rb.className = 'chip'; rb.textContent = 'Reset to defaults';
@@ -749,5 +750,5 @@ function boot() {
   requestAnimationFrame(t => { last = t; requestAnimationFrame(frame); });
   setInterval(() => { if (UI.state === 'menu') { for (let k = 0; k < 4; k++) simStep(SUB); } }, 1000 / 30);
 }
-window.__sgp = { tiltProjectX: draw => { for (const Ly of LAYERS) { const g = Ly.g; g.setTransform(Ly.dpr, 0, 0, Ly.dpr, 0, 0); g.translate(-Ly.x0, -Ly.y0); draw(g, RW, RH); } projectTilted(); return { VW, VH, RW, RH }; }, worldToScreenX: (x, y) => worldToScreen(x, y), frameX: t => frame(t), setCamModeX: m => setCamMode(m), CAM, RP, Rec, Lib, Ghost, W, T, PHYS, Input, FX, Records, completeLapX: b => completeLap(b), drawWorldX: () => drawWorld(), camNameX: () => TILT_CAM, setupSession, simStep, standings, UI, SUB, TILT, setAIReal: v => { AI_REAL = v; } };
+window.__sgp = { tiltProjectX: draw => { for (const Ly of LAYERS) { const g = Ly.g; g.setTransform(Ly.dpr, 0, 0, Ly.dpr, 0, 0); g.translate(-Ly.x0, -Ly.y0); draw(g, RW, RH); } projectTilted(); return { VW, VH, RW, RH }; }, worldToScreenX: (x, y) => worldToScreen(x, y), worldToCanvasX: (x, y) => worldToCanvas(x, y), frameX: t => frame(t), setCamModeX: m => setCamMode(m), CAM, RP, Rec, Lib, Ghost, W, T, PHYS, Input, FX, Records, completeLapX: b => completeLap(b), drawWorldX: () => drawWorld(), speedBlurX: () => speedBlur(), camNameX: () => TILT_CAM, setupSession, simStep, standings, UI, SUB, TILT, setAIReal: v => { AI_REAL = v; } };
 if (document.fonts && document.fonts.ready) { Promise.race([document.fonts.ready, new Promise(r => setTimeout(r, 1500))]).then(boot).catch(e => { console.error("boot failed", e && e.stack); }); } else boot();

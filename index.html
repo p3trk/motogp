@@ -116,6 +116,7 @@ tr.me td.pos{color:var(--accent)}
       <div class="opt"><span class="lbl">Rider aids (traction &amp; lean control)</span><div class="seg" id="optAids"><button data-v="on" aria-pressed="true">On</button><button data-v="off" aria-pressed="false">Off</button></div></div>
       <div class="opt"><span class="lbl">Opponents</span><div class="seg" id="optAI"><button data-v="rookie" aria-pressed="false">Rookie</button><button data-v="pro" aria-pressed="true">Pro</button><button data-v="legend" aria-pressed="false">Legend</button></div></div>
       <div class="opt"><span class="lbl">Camera</span><div class="seg" id="optCam"><button data-v="behind" aria-pressed="true">Behind</button><button data-v="close" aria-pressed="false">CLOSE</button><button data-v="chase" aria-pressed="false">Top-down</button></div></div>
+      <div class="opt"><span class="lbl">Speed blur</span><div class="seg" id="optBlur"><button data-v="on" aria-pressed="true">On</button><button data-v="off" aria-pressed="false">Off</button></div><span class="hint">Blurs the surroundings at top speed in the Behind and CLOSE cameras. The road, kerbs and bikes stay sharp.</span></div>
       <div class="opt"><label for="optName">Rider</label><div class="row2"><input id="optName" type="text" maxlength="14" value="Petr" style="flex:1"><input id="optNum" type="number" min="1" max="99" value="25" style="width:74px" aria-label="Race number"></div></div>
       <div class="opt"><label for="optTeam">Team livery</label><select id="optTeam"></select></div>
       <div class="opt" id="optFuelWrap"><label for="optFuel">Starting fuel <span id="optFuelV" style="color:var(--fg)"></span></label><input id="optFuel" type="range" min="25" max="100" step="5" value="100"><span class="hint" id="optFuelHint"></span></div>
@@ -1607,7 +1608,7 @@ let DPR_CAP = 1.5;
 // virtual ground canvas RW x RH (css px): the screen in top-down, larger when tilted, split into LAYERS
 let RW = 800, RH = 600, ODPR = 1;
 let LAYERS = [];
-const TILT = { a: 40 * DEG, p: 1.3, wk: 2.3, hk: 2.6, bike: 0.2, zMax: 20, zBase: 30, zK: 1.0, nearQ: 0.75, farQ: 0.45, fade: 0.3, minLen: 40, q: 1 }; // q: resolution scale, lowered on slow machines
+const TILT = { a: 40 * DEG, p: 1.3, wk: 2.3, hk: 2.6, bike: 0.2, zMax: 20, zBase: 30, zK: 1.0, nearQ: 0.75, farQ: 0.45, fade: 0.3, minLen: 40, bv0: 260, bv1: 330, bs: 20, q: 1 }; // q: resolution scale, lowered on slow machines
 // tilted camera tuning (GDD 11a): the pause-menu panel edits these in display units (deg, %), per camera (below)
 const CAM_SET = [ // k: TILT field, f: display unit -> TILT value, rs: needs resize()
   { k: 'a', lbl: 'Tilt', unit: '\u00B0', min: 20, max: 70, step: 1, f: DEG, rs: 1 },
@@ -1622,6 +1623,9 @@ const CAM_SET = [ // k: TILT field, f: display unit -> TILT value, rs: needs res
   { k: 'farQ', lbl: 'Far band quality', unit: '', min: 0.25, max: 0.8, step: 0.05, rs: 1 },
   { k: 'fade', lbl: 'Fade zone', unit: '%', min: 0, max: 60, step: 1, f: 0.01, rs: 1 },
   { k: 'minLen', lbl: 'Minimum bike length', unit: 'px', min: 20, max: 80, step: 1 },
+  { k: 'bv0', lbl: 'Blur start speed', unit: 'km/h', min: 150, max: 340, step: 5 }, // speed blur (GDD 11f)
+  { k: 'bv1', lbl: 'Blur full speed', unit: 'km/h', min: 160, max: 345, step: 5 }, // always at least 10 above the start speed
+  { k: 'bs', lbl: 'Blur strength', unit: 'px', min: 0, max: 40, step: 1 }, // 0 turns the blur off for this camera
 ];
 const TILT_DEF = Object.freeze(Object.fromEntries(CAM_SET.map(d => [d.k, TILT[d.k]])));
 const camGet = d => +(TILT[d.k] / (d.f || 1)).toFixed(4); // display value
@@ -1629,7 +1633,7 @@ const camGet = d => +(TILT[d.k] / (d.f || 1)).toFixed(4); // display value
 // localStorage 'sgp_cam' (Behind) and 'sgp_cam_close' (CLOSE); TILT holds the values of the tilted camera in use
 const CAM_DEF = {
   behind: Object.fromEntries(CAM_SET.map(d => [d.k, camGet(d)])),
-  close: { a: 55, p: 1.8, bike: 8, zMax: 30, zBase: 12, zK: 0.4, wk: 3.5, hk: 6, nearQ: 1.5, farQ: 0.7, fade: 30, minLen: 40 }, // 1.13.1: less sky, sees further
+  close: { a: 55, p: 1.8, bike: 8, zMax: 30, zBase: 12, zK: 0.4, wk: 3.5, hk: 6, nearQ: 1.5, farQ: 0.7, fade: 30, minLen: 40, bv0: 260, bv1: 330, bs: 24 }, // 1.13.1: less sky, sees further
 };
 const CAM_KEY = { behind: 'sgp_cam', close: 'sgp_cam_close' };
 const CAM_VAL = { behind: Object.assign({}, CAM_DEF.behind), close: Object.assign({}, CAM_DEF.close) };
@@ -1637,7 +1641,9 @@ let TILT_CAM = 'behind'; // the tilted camera whose values are in TILT
 function camSave(name) { try { localStorage.setItem(CAM_KEY[name], JSON.stringify(CAM_VAL[name])); } catch (e) { } }
 function camSet(d, v, save) { // clamps, applies to the tilted camera in use, saves; returns the display value
   v = +v; if (!isFinite(v)) v = CAM_DEF[TILT_CAM][d.k];
-  v = clamp(v, d.min, d.max); CAM_VAL[TILT_CAM][d.k] = v; TILT[d.k] = v * (d.f || 1);
+  v = clamp(v, d.min, d.max); const V = CAM_VAL[TILT_CAM]; V[d.k] = v; TILT[d.k] = v * (d.f || 1);
+  if (d.k === 'bv0' && V.bv1 < v + 10) TILT.bv1 = V.bv1 = v + 10; // blur full speed stays at least 10 km/h above the start
+  if (d.k === 'bv1' && V.bv0 > v - 10) TILT.bv0 = V.bv0 = v - 10;
   if (save) camSave(TILT_CAM);
   return v;
 }
@@ -1648,7 +1654,7 @@ for (const name in CAM_KEY) try {
   if (!s || typeof s !== 'object') continue;
   // 1.13.x kept the Close profile in 'sgp_cam': unchanged Close values there mean the player picked Close, which is
   // now the CLOSE camera, so Behind starts from its defaults; any other saved values (also Custom) stay with Behind
-  const wasClose = name === 'behind' && s.profile === 'close' && CAM_SET.every(d => Math.abs(+s[d.k] - CAM_DEF.close[d.k]) < 1e-6);
+  const wasClose = name === 'behind' && s.profile === 'close' && CAM_SET.every(d => !(d.k in s) && /^b[vs]/.test(d.k) || Math.abs(+s[d.k] - CAM_DEF.close[d.k]) < 1e-6); // 1.13.x had no blur fields
   if (!wasClose) for (const d of CAM_SET) { const v = +s[d.k]; if (d.k in s && isFinite(v)) CAM_VAL[name][d.k] = clamp(v, d.min, d.max); }
   if ('profile' in s) camSave(name); // the profile field is no longer written
 } catch (e) { }
@@ -1912,7 +1918,7 @@ function bikeSprite(team, num) {
 }
 
 // --- camera: 'behind' and 'close' = tilted chase views with their own values, 'chase' = top-down rotating (GDD 11a)
-const CAM = { x: 0, y: 0, rot: 0, ppm: 10, mode: 'behind', init: false, ax: 0.5, ay: 0.6, boost: 1 };
+const CAM = { x: 0, y: 0, rot: 0, v: 0, ppm: 10, mode: 'behind', init: false, ax: 0.5, ay: 0.6, boost: 1 };
 const CAM_ORDER = ['behind', 'close', 'chase'], CAM_NAME = { behind: 'Behind', close: 'CLOSE', chase: 'Top-down' }; // C goes through them in this order
 const camTilted = () => CAM.mode !== 'chase';
 function setCamMode(m) { if (CAM.mode === m || !CAM_NAME[m]) return; CAM.mode = m; if (m in CAM_KEY) camLoad(m); CAM.init = false; resize(); }
@@ -1920,6 +1926,7 @@ function updateCamera(dt) {
   const b = W.player; if (!b) return;
   let px = b.x, py = b.y, h = b.h, v = b.v;
   if (b.crashed && b.crash) { px = b.crash.rd.x; py = b.crash.rd.y; v = Math.hypot(b.crash.rd.vx, b.crash.rd.vy); }
+  CAM.v = v; // the speed the camera follows, also for the speed blur (GDD 11f)
   let tx, ty, targetPpm;
   if (camTilted()) {
     CAM.ay = 1 - tiltBikeH() / RH;
@@ -2006,7 +2013,69 @@ function drawWorld() {
   tileFrame++;
   let sx = 0, sy = 0; if (HUD.shake > 0.01) { sx = (Math.random() - 0.5) * 8 * HUD.shake; sy = (Math.random() - 0.5) * 8 * HUD.shake; }
   try { for (const Ly of LAYERS) { ctx = Ly.g; drawWorldLayer(Ly, sx, sy); } } finally { ctx = mainCtx; }
-  if (camTilted()) projectTilted();
+  if (camTilted()) { projectTilted(); speedBlur(); }
+}
+// --- speed blur (GDD 11f): at top speed the surroundings smear into zoom streaks from the horizon point straight
+// ahead, on a 1/4 resolution copy of the screen; the road with its kerbs (+0.3 m) and the bikes are cut out of it
+const BLUR = { a: mkCanvas(1, 1), b: mkCanvas(1, 1), s: 0 };
+BLUR.ga = BLUR.a.getContext('2d', { alpha: false }); BLUR.gb = BLUR.b.getContext('2d');
+function blurStrength() {
+  if (!camTilted() || TILT.q < 1 || TILT.bs <= 0 || UI.opts.blur === 'off') return 0; // TILT.q < 1: slow machine, off for the session
+  const t = clamp((CAM.v * 3.6 - TILT.bv0) / (TILT.bv1 - TILT.bv0), 0, 1); return t * t * (3 - 2 * t);
+}
+function speedBlur() {
+  const s = BLUR.s = blurStrength(); if (s <= 0.01) return;
+  const Q = 0.25, w = Math.max(1, Math.ceil(VW * Q)), h = Math.max(1, Math.ceil(VH * Q)), A = BLUR.a, B = BLUR.b, ga = BLUR.ga, gb = BLUR.gb;
+  if (A.width !== w || A.height !== h) { A.width = B.width = w; A.height = B.height = h; }
+  ga.setTransform(1, 0, 0, 1, 0, 0); ga.imageSmoothingEnabled = true; ga.drawImage(cv, 0, 0, cv.width, cv.height, 0, 0, w, h);
+  // zoom about the horizon point: every pixel moves by k times its distance from it, so streaks grow to the edges
+  const P = TILT.p * VH, uTop = RH * Math.cos(TILT.a) * P / (P + RH * Math.sin(TILT.a)), hx = VW / 2, hy = Math.max(0, VH - uTop);
+  const far = Math.hypot(VW / 2, Math.max(hy, VH - hy)), k = TILT.bs * s / far;
+  gb.globalCompositeOperation = 'source-over'; gb.imageSmoothingEnabled = true;
+  for (const [z, al] of [[1 + k, 1], [1 + k / 2, 1 / 2], [1, 1 / 3]]) { // equal thirds
+    gb.globalAlpha = al; gb.setTransform(z, 0, 0, z, hx * Q * (1 - z), hy * Q * (1 - z)); gb.drawImage(A, 0, 0);
+  }
+  gb.globalAlpha = 1; gb.setTransform(Q, 0, 0, Q, 0, 0); gb.globalCompositeOperation = 'destination-out';
+  gb.fillStyle = gb.strokeStyle = '#000'; gb.lineWidth = 6; gb.lineJoin = 'round'; // the stroke keeps the soft mask edge outside the margin
+  for (const run of blurRoadRuns()) { gb.beginPath(); gb.moveTo(run[0], run[1]); for (let j = 2; j < run.length; j += 2) gb.lineTo(run[j], run[j + 1]); gb.closePath(); gb.fill(); gb.stroke(); }
+  gb.beginPath(); for (const [x, y, rx, ry] of blurBikeSpots()) { gb.moveTo(x + rx, y); gb.ellipse(x, y, rx, ry, 0, 0, TAU); } gb.fill();
+  gb.globalCompositeOperation = 'source-over';
+  const g = mainCtx; g.setTransform(ODPR, 0, 0, ODPR, 0, 0); g.imageSmoothingEnabled = true; g.globalAlpha = s; g.drawImage(B, 0, 0, VW, VH); g.globalAlpha = 1;
+}
+// the road (both edges plus kerb plus 0.3 m) on screen, as polygons of contiguous runs of track points in the ground area
+function blurRoadRuns() {
+  const N = T.N, P = TILT.p * VH, yMax = RH + 0.5 * P / Math.sin(TILT.a), runs = [];
+  const inside = i => { const [cx, cy] = worldToCanvas(T.X[i], T.Y[i]); return cx > -0.3 * RW && cx < 1.3 * RW && cy > -0.05 * RH && cy < yMax; };
+  const flags = new Uint8Array(N); let start = -1;
+  for (let i = 0; i < N; i++) { flags[i] = inside(i) ? 1 : 0; if (!flags[i] && start < 0) start = i; }
+  if (start < 0) start = 0; // the whole track in view
+  for (let n = 0; n < N; n++) {
+    if (!flags[(start + n) % N]) continue;
+    const idx = []; while (n < N && flags[(start + n) % N]) { idx.push((start + n) % N); n++; }
+    if (idx.length === N) idx.push(idx[0]);
+    idx.unshift((idx[0] - 1 + N) % N); idx.push((idx[idx.length - 1] + 1) % N); // one point beyond each end
+    const L = [], R = [];
+    for (const i of idx) {
+      const [lx, ly] = worldToScreen(...T.pt(i, -(T.WL[i] + T.KERB[1][i] + 0.3))), [rx, ry] = worldToScreen(...T.pt(i, T.WR[i] + T.KERB[0][i] + 0.3));
+      L.push(lx, ly); R.push(rx, ry);
+    }
+    for (let j = R.length - 2; j >= 0; j -= 2) L.push(R[j], R[j + 1]);
+    runs.push(L);
+  }
+  return runs;
+}
+// an ellipse around each bike and ghost on screen, 1.3 x its drawn length across (also off the road and crashed)
+function blurBikeSpots() {
+  const out = [], r = 0.65 * 2.5 * PHYS.VS * CAM.boost * CAM.ppm, P = TILT.p * VH, sa = Math.sin(TILT.a), ca = Math.cos(TILT.a);
+  const add = (x, y) => {
+    const [cx, cy] = worldToCanvas(x, y), yy = cy - RH; if (P - (yy + r) * sa <= 0) return;
+    const scr = q => P / (P - q * sa), y0 = VH + (yy - r) * ca * scr(yy - r), y1 = VH + (yy + r) * ca * scr(yy + r);
+    out.push([VW / 2 + (cx - RW / 2) * scr(yy), (y0 + y1) / 2, r * scr(yy + r), Math.max(1, (y1 - y0) / 2)]);
+  };
+  for (const b of W.bikes.concat(W.ghosts.filter(g => g.show))) {
+    if (b.crashed && b.crash) { add(b.crash.bk.x, b.crash.bk.y); add(b.crash.rd.x, b.crash.rd.y); } else if (!b.dnf) add(b.x, b.y);
+  }
+  return out;
 }
 // perspective: screen height u above the bottom edge <-> plane distance h, as seen from TILT.p*VH away at angle TILT.a
 function projectTilted() {
@@ -2672,12 +2741,12 @@ window.addEventListener('blur', () => { Input.k = {}; if (UI.state === 'play' &&
 // ---------------------------------------------------------------------------
 const $ = id => document.getElementById(id);
 const UI = {
-  state: 'menu', opts: { mode: 'sprint', trans: 'manual', aids: 'on', ai: 'pro', cam: 'behind', guide: 'on', train: 'on', trainS: -1, trainV: -1, fuel: 100, grid: 'mid', name: 'Petr', num: 25, team: 2 },
+  state: 'menu', opts: { mode: 'sprint', trans: 'manual', aids: 'on', ai: 'pro', cam: 'behind', guide: 'on', blur: 'on', train: 'on', trainS: -1, trainV: -1, fuel: 100, grid: 'mid', name: 'Petr', num: 25, team: 2 },
   init() {
     try { const s = JSON.parse(localStorage.getItem('sgp_opts') || 'null'); if (s) { if (!CAM_ORDER.includes(s.cam)) delete s.cam; if (!s.trainDef) delete s.train; Object.assign(this.opts, s); } this.opts.trainDef = 1; } catch (e) { }
     const sel = $('optTeam'); TEAMS.forEach((t, k) => { const o = document.createElement('option'); o.value = k; o.textContent = t.name; sel.appendChild(o); });
     document.querySelectorAll('.mode').forEach(m => m.addEventListener('click', () => { this.opts.mode = m.dataset.mode; this.sync(); }));
-    for (const [id, key] of [['optTrans', 'trans'], ['optAids', 'aids'], ['optAI', 'ai'], ['optCam', 'cam'], ['optGuide', 'guide'], ['optTrain', 'train']]) $(id).querySelectorAll('button').forEach(bt => bt.addEventListener('click', () => { this.opts[key] = bt.dataset.v; this.sync(); }));
+    for (const [id, key] of [['optTrans', 'trans'], ['optAids', 'aids'], ['optAI', 'ai'], ['optCam', 'cam'], ['optGuide', 'guide'], ['optBlur', 'blur'], ['optTrain', 'train']]) $(id).querySelectorAll('button').forEach(bt => bt.addEventListener('click', () => { this.opts[key] = bt.dataset.v; this.sync(); }));
     $('optFuel').addEventListener('input', e => { this.opts.fuel = +e.target.value; this.sync(); });
     $('optGrid').addEventListener('change', e => { this.opts.grid = e.target.value; });
     $('optTeam').addEventListener('change', e => { this.opts.team = +e.target.value; });
@@ -2714,7 +2783,7 @@ const UI = {
   sync() {
     const o = this.opts;
     document.querySelectorAll('.mode').forEach(m => m.setAttribute('aria-pressed', String(m.dataset.mode === o.mode)));
-    for (const [id, key] of [['optTrans', 'trans'], ['optAids', 'aids'], ['optAI', 'ai'], ['optCam', 'cam'], ['optGuide', 'guide'], ['optTrain', 'train']]) $(id).querySelectorAll('button').forEach(bt => bt.setAttribute('aria-pressed', String(bt.dataset.v === o[key])));
+    for (const [id, key] of [['optTrans', 'trans'], ['optAids', 'aids'], ['optAI', 'ai'], ['optCam', 'cam'], ['optGuide', 'guide'], ['optBlur', 'blur'], ['optTrain', 'train']]) $(id).querySelectorAll('button').forEach(bt => bt.setAttribute('aria-pressed', String(bt.dataset.v === o[key])));
     $('optFuel').value = o.fuel; $('optGrid').value = o.grid; $('optTeam').value = o.team; $('optName').value = o.name; $('optNum').value = o.num;
     const laps = o.mode === 'gp' ? 20 : 10; const L = PHYS.tank * o.fuel / 100; const range = L / 2.65;
     $('optFuelV').textContent = L.toFixed(1) + ' L';
@@ -2864,7 +2933,7 @@ const UI = {
       const head = document.createElement('div'); head.className = 'opt'; head.style.gridColumn = '1/-1';
       head.innerHTML = '<span class="lbl" id="camTitle">Camera tuning</span><span class="hint">The view behind this menu updates as you change a value. Each camera keeps its own values, saved in this browser. C switches the camera.</span>';
       P.appendChild(head);
-      const rows = CAM_SET.map(d => {
+      const refresh = {}, rows = CAM_SET.map(d => {
         const w = document.createElement('div'); w.className = 'opt';
         const id = 'cam_' + d.k, lb = document.createElement('label'); lb.htmlFor = id; lb.textContent = d.lbl + (d.unit ? ' (' + d.unit + ')' : '');
         const rg = document.createElement('input'), nb = document.createElement('input');
@@ -2872,11 +2941,12 @@ const UI = {
         for (const el of [rg, nb]) { el.min = d.min; el.max = d.max; el.step = d.step; }
         const line = document.createElement('div'); line.style.cssText = 'display:flex;gap:10px;align-items:center';
         nb.style.width = '92px'; nb.style.flex = 'none'; line.append(rg, nb); w.append(lb, line);
-        const put = (v, save) => { v = camSet(d, v, save); rg.value = v; if (document.activeElement !== nb || !save) nb.value = v; if (d.rs && save) resize(); if (save && W.paused) CAM.init = false; }; // paused: the camera barely moves, so snap it to the new zoom/framing
+        const put = (v, save) => { v = camSet(d, v, save); rg.value = v; if (document.activeElement !== nb || !save) nb.value = v; if (d.rs && save) resize(); if (save && W.paused) CAM.init = false; // paused: the camera barely moves, so snap it to the new zoom/framing
+          const pk = { bv0: 'bv1', bv1: 'bv0' }[d.k]; if (save && pk) refresh[pk](); }; // blur start and full speed keep 10 km/h apart
         rg.addEventListener('input', () => put(rg.value, true));
         nb.addEventListener('input', () => { if (nb.value !== '' && isFinite(+nb.value)) put(nb.value, true); });
         nb.addEventListener('change', () => { put(nb.value, true); nb.value = camGet(d); });
-        P.appendChild(w); return () => put(camGet(d), false);
+        P.appendChild(w); return refresh[d.k] = () => put(camGet(d), false);
       });
       const act = document.createElement('div'); act.style.gridColumn = '1/-1';
       const rb = document.createElement('button'); rb.className = 'chip'; rb.textContent = 'Reset to defaults';
@@ -2990,7 +3060,7 @@ function boot() {
   requestAnimationFrame(t => { last = t; requestAnimationFrame(frame); });
   setInterval(() => { if (UI.state === 'menu') { for (let k = 0; k < 4; k++) simStep(SUB); } }, 1000 / 30);
 }
-window.__sgp = { tiltProjectX: draw => { for (const Ly of LAYERS) { const g = Ly.g; g.setTransform(Ly.dpr, 0, 0, Ly.dpr, 0, 0); g.translate(-Ly.x0, -Ly.y0); draw(g, RW, RH); } projectTilted(); return { VW, VH, RW, RH }; }, worldToScreenX: (x, y) => worldToScreen(x, y), frameX: t => frame(t), setCamModeX: m => setCamMode(m), CAM, RP, Rec, Lib, Ghost, W, T, PHYS, Input, FX, Records, completeLapX: b => completeLap(b), drawWorldX: () => drawWorld(), camNameX: () => TILT_CAM, setupSession, simStep, standings, UI, SUB, TILT, setAIReal: v => { AI_REAL = v; } };
+window.__sgp = { tiltProjectX: draw => { for (const Ly of LAYERS) { const g = Ly.g; g.setTransform(Ly.dpr, 0, 0, Ly.dpr, 0, 0); g.translate(-Ly.x0, -Ly.y0); draw(g, RW, RH); } projectTilted(); return { VW, VH, RW, RH }; }, worldToScreenX: (x, y) => worldToScreen(x, y), worldToCanvasX: (x, y) => worldToCanvas(x, y), frameX: t => frame(t), setCamModeX: m => setCamMode(m), CAM, RP, Rec, Lib, Ghost, W, T, PHYS, Input, FX, Records, completeLapX: b => completeLap(b), drawWorldX: () => drawWorld(), speedBlurX: () => speedBlur(), camNameX: () => TILT_CAM, setupSession, simStep, standings, UI, SUB, TILT, setAIReal: v => { AI_REAL = v; } };
 if (document.fonts && document.fonts.ready) { Promise.race([document.fonts.ready, new Promise(r => setTimeout(r, 1500))]).then(boot).catch(e => { console.error("boot failed", e && e.stack); }); } else boot();
 
 })();

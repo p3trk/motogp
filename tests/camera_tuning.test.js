@@ -2,6 +2,8 @@
 // Behind camera tuning test (GDD 11a): the pause menu shows a Camera tuning panel with the Behind camera only.
 // It has 12 sliders, each with a number box; changed values apply to the camera at once, are kept after a
 // reload (localStorage 'sgp_cam'), and Reset to defaults brings back the built-in values.
+// Since 1.13.0: a profile list (Standard, Close, Custom); a profile sets all sliders, a moved slider shows
+// Custom, the profile is kept after a reload, Reset to defaults = Standard, old saved data still loads.
 // Usage: node tests/camera_tuning.test.js [path/to/index.html]   (needs Playwright + Chromium)
 const path = require('path');
 const { chromium } = require('playwright');
@@ -9,6 +11,7 @@ const FILE = 'file://' + path.resolve(process.argv[2] || path.join(__dirname, '.
 const DEG = Math.PI / 180;
 // defaults in display units (tilt in degrees, bike height and fade zone in %)
 const DEF = { a: 40, p: 1.3, bike: 20, zMax: 20, zBase: 30, zK: 1.0, wk: 2.3, hk: 2.6, nearQ: 0.75, farQ: 0.45, fade: 30, minLen: 40 };
+const CLOSE = { a: 60, p: 1.6, bike: 8, zMax: 30, zBase: 12, zK: 0.4, wk: 3.5, hk: 5.5, nearQ: 1.5, farQ: 0.6, fade: 30, minLen: 40 };
 const UNIT = { a: DEG, bike: 0.01, fade: 0.01 }; // display unit -> TILT value
 
 (async () => {
@@ -20,7 +23,9 @@ const UNIT = { a: DEG, bike: 0.01, fade: 0.01 }; // display unit -> TILT value
   const ready = () => page.waitForFunction(() => window.__sgp && document.getElementById('loading').hidden);
   const tilt = () => page.evaluate(() => Object.assign({}, window.__sgp.TILT));
   const near = (a, b) => Math.abs(a - b) < 1e-6;
-  const isDef = T => Object.keys(DEF).every(k => near(T[k], DEF[k] * (UNIT[k] || 1)));
+  const isProf = (T, V) => Object.keys(V).every(k => near(T[k], V[k] * (UNIT[k] || 1)));
+  const isDef = T => isProf(T, DEF);
+  const prof = () => page.evaluate(() => { const b = document.querySelector('#camProfile [aria-pressed="true"]'); return { name: window.__sgp.camProfX(), shown: b ? b.dataset.prof : null, chips: [...document.querySelectorAll('#camProfile button')].map(c => c.textContent) }; });
   const fmt = T => `tilt ${(T.a / DEG).toFixed(1)}°  zoom max ${T.zMax}`;
   // start practice with the Behind camera and pause it the way a player does (Escape)
   const pauseBehind = async () => {
@@ -74,6 +79,40 @@ const UNIT = { a: DEG, bike: 0.01, fade: 0.01 }; // display unit -> TILT value
   await page.reload(); await ready();
   T = await tilt();
   check(isDef(T), 'defaults kept after a reload', fmt(T));
+
+  // f) profile list: Standard / Close / Custom, Standard after Reset to defaults
+  await pauseBehind();
+  let pr = await prof();
+  check(pr.chips.join() === 'Standard,Close,Custom' && pr.shown === 'standard' && pr.name === 'standard', 'profile list, Standard selected', `chips ${pr.chips.join('/')}  selected ${pr.shown}`);
+
+  // g) Close sets all values (and a bigger main canvas for near quality 1.5 on a 2x screen is tested by tilt_seam)
+  await page.locator('#camProfile button', { hasText: 'Close' }).click();
+  T = await tilt(); pr = await prof();
+  const shownA = await page.$eval('#cam_a', el => +el.value);
+  check(isProf(T, CLOSE) && pr.shown === 'close' && shownA === CLOSE.a, 'Close sets all 12 values', `${fmt(T)}  tilt slider ${shownA}  selected ${pr.shown}`);
+
+  // h) moving a slider afterwards shows Custom
+  await page.evaluate(() => { const rg = document.getElementById('cam_zK'); rg.value = 0.8; rg.dispatchEvent(new Event('input', { bubbles: true })); });
+  pr = await prof(); T = await tilt();
+  check(pr.shown === 'custom' && pr.name === 'custom' && near(T.zK, 0.8), 'moved slider shows Custom', `selected ${pr.shown}  zoom speed factor ${T.zK}`);
+
+  // i) profile kept after a reload
+  await page.locator('#camProfile button', { hasText: 'Close' }).click();
+  await page.reload(); await ready();
+  await pauseBehind();
+  T = await tilt(); pr = await prof();
+  check(pr.name === 'close' && pr.shown === 'close' && isProf(T, CLOSE), 'Close profile kept after a reload', `profile ${pr.name}  ${fmt(T)}`);
+
+  // j) Reset to defaults gives Standard
+  await page.locator('#pauseCam button', { hasText: 'Reset to defaults' }).click();
+  T = await tilt(); pr = await prof();
+  check(pr.name === 'standard' && pr.shown === 'standard' && isDef(T), 'Reset to defaults gives Standard', `profile ${pr.name}  ${fmt(T)}`);
+
+  // k) data saved by 1.12.0 (no profile name): defaults load as Standard, other values as Custom
+  const old = async v => { await page.evaluate(v => localStorage.setItem('sgp_cam', JSON.stringify(v)), v); await page.reload(); await ready(); return page.evaluate(() => [window.__sgp.camProfX(), window.__sgp.TILT.a]); };
+  const o1 = await old(DEF), o2 = await old(Object.assign({}, DEF, { a: 50 }));
+  check(o1[0] === 'standard' && o2[0] === 'custom' && near(o2[1], 50 * DEG), 'old saved data loads (Standard / Custom)', `defaults -> ${o1[0]}  tilt 50 -> ${o2[0]}`);
+  await page.evaluate(() => localStorage.removeItem('sgp_cam')); await page.reload(); await ready();
 
   // e) hidden with the Top-down camera (panel built first in a Behind pause, then a Top-down session paused)
   await pauseBehind();

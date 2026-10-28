@@ -601,6 +601,18 @@ const UI = {
       const head = document.createElement('div'); head.className = 'opt'; head.style.gridColumn = '1/-1';
       head.innerHTML = '<span class="lbl">Camera tuning (Behind)</span><span class="hint">The view behind this menu updates as you change a value. Saved in this browser.</span>';
       P.appendChild(head);
+      // profile list (GDD 1.13.0): Standard and Close set all sliders; Custom only shows that a slider was moved
+      const pw = document.createElement('div'); pw.className = 'opt'; pw.style.gridColumn = '1/-1';
+      const pl = document.createElement('span'); pl.className = 'lbl'; pl.textContent = 'Profile';
+      const pc = document.createElement('div'); pc.id = 'camProfile'; pc.setAttribute('role', 'group'); pc.setAttribute('aria-label', 'Camera profile'); pc.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap';
+      const chips = [['standard', 'Standard'], ['close', 'Close'], ['custom', 'Custom']].map(([k, t]) => {
+        const c = document.createElement('button'); c.className = 'chip'; c.dataset.prof = k; c.textContent = t;
+        if (k === 'custom') { c.disabled = true; c.title = 'Shown after a slider was moved'; }
+        else c.addEventListener('click', () => { camProfile(k, true); resize(); if (W.paused) CAM.init = false; this.camSync(); });
+        pc.appendChild(c); return c;
+      });
+      pw.append(pl, pc); P.appendChild(pw);
+      const profSync = () => chips.forEach(c => c.setAttribute('aria-pressed', c.dataset.prof === CAM_PROF ? 'true' : 'false'));
       const rows = CAM_SET.map(d => {
         const w = document.createElement('div'); w.className = 'opt';
         const id = 'cam_' + d.k, lb = document.createElement('label'); lb.htmlFor = id; lb.textContent = d.lbl + (d.unit ? ' (' + d.unit + ')' : '');
@@ -609,7 +621,7 @@ const UI = {
         for (const el of [rg, nb]) { el.min = d.min; el.max = d.max; el.step = d.step; }
         const line = document.createElement('div'); line.style.cssText = 'display:flex;gap:10px;align-items:center';
         nb.style.width = '92px'; nb.style.flex = 'none'; line.append(rg, nb); w.append(lb, line);
-        const put = (v, save) => { v = camSet(d, v, save); rg.value = v; if (document.activeElement !== nb || !save) nb.value = v; if (d.rs && save) resize(); if (save && W.paused) CAM.init = false; }; // paused: the camera barely moves, so snap it to the new zoom/framing
+        const put = (v, save) => { if (save) { CAM_PROF = 'custom'; profSync(); } v = camSet(d, v, save); rg.value = v; if (document.activeElement !== nb || !save) nb.value = v; if (d.rs && save) resize(); if (save && W.paused) CAM.init = false; }; // paused: the camera barely moves, so snap it to the new zoom/framing
         rg.addEventListener('input', () => put(rg.value, true));
         nb.addEventListener('input', () => { if (nb.value !== '' && isFinite(+nb.value)) put(nb.value, true); });
         nb.addEventListener('change', () => { put(nb.value, true); nb.value = camGet(d); });
@@ -617,9 +629,9 @@ const UI = {
       });
       const act = document.createElement('div'); act.style.gridColumn = '1/-1';
       const rb = document.createElement('button'); rb.className = 'chip'; rb.textContent = 'Reset to defaults';
-      rb.addEventListener('click', () => { for (const d of CAM_SET) camSet(d, TILT_DEF[d.k] / (d.f || 1), true); resize(); if (W.paused) CAM.init = false; this.camSync(); });
+      rb.addEventListener('click', () => { camProfile('standard', true); resize(); if (W.paused) CAM.init = false; this.camSync(); }); // = Standard profile
       act.appendChild(rb); P.appendChild(act);
-      this.camSync = () => rows.forEach(r => r());
+      this.camSync = () => { rows.forEach(r => r()); profSync(); };
       $('pause').querySelector('.wrap').appendChild(P);
     }
     if (P) { P.hidden = !show; if (show) this.camSync(); }
@@ -726,5 +738,5 @@ function boot() {
   requestAnimationFrame(t => { last = t; requestAnimationFrame(frame); });
   setInterval(() => { if (UI.state === 'menu') { for (let k = 0; k < 4; k++) simStep(SUB); } }, 1000 / 30);
 }
-window.__sgp = { tiltProjectX: draw => { for (const Ly of LAYERS) { const g = Ly.g; g.setTransform(Ly.dpr, 0, 0, Ly.dpr, 0, 0); g.translate(-Ly.x0, -Ly.y0); draw(g, RW, RH); } projectTilted(); return { VW, VH, RW, RH }; }, worldToScreenX: (x, y) => worldToScreen(x, y), frameX: t => frame(t), setCamModeX: m => setCamMode(m), CAM, RP, Rec, Lib, Ghost, W, T, PHYS, Input, FX, Records, completeLapX: b => completeLap(b), drawWorldX: () => drawWorld(), setupSession, simStep, standings, UI, SUB, TILT, setAIReal: v => { AI_REAL = v; } };
+window.__sgp = { tiltProjectX: draw => { for (const Ly of LAYERS) { const g = Ly.g; g.setTransform(Ly.dpr, 0, 0, Ly.dpr, 0, 0); g.translate(-Ly.x0, -Ly.y0); draw(g, RW, RH); } projectTilted(); return { VW, VH, RW, RH }; }, worldToScreenX: (x, y) => worldToScreen(x, y), frameX: t => frame(t), setCamModeX: m => setCamMode(m), CAM, RP, Rec, Lib, Ghost, W, T, PHYS, Input, FX, Records, completeLapX: b => completeLap(b), drawWorldX: () => drawWorld(), setCamProfileX: name => { camProfile(name, false); resize(); CAM.init = false; if (UI.camSync) UI.camSync(); return CAM_PROF; }, camProfX: () => CAM_PROF, setupSession, simStep, standings, UI, SUB, TILT, setAIReal: v => { AI_REAL = v; } };
 if (document.fonts && document.fonts.ready) { Promise.race([document.fonts.ready, new Promise(r => setTimeout(r, 1500))]).then(boot).catch(e => { console.error("boot failed", e && e.stack); }); } else boot();

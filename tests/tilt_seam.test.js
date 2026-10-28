@@ -5,18 +5,19 @@
 // Draws a test pattern of straight lines through the real projection, in live riding and in replay, and
 // measures how far each line bends sharply from one screen row to the next, and whether the lines get
 // suddenly blurrier at some row (where the sharper near image hands over to the far one).
+// Runs with the Standard camera profile at three screen sizes and with the Close profile at 1470x830 @2x.
 // Usage: node tests/tilt_seam.test.js [path/to/index.html]   (needs Playwright + Chromium)
 const path = require('path');
 const { chromium } = require('playwright');
 const FILE = 'file://' + path.resolve(process.argv[2] || path.join(__dirname, '..', 'index.html'));
 const LIMIT = 0.5; // px: largest sharp bend of a straight line between neighbouring screen rows
 const SHARP_STEP = 0.15; // largest change of line sharpness between the 8 px above and the 8 px below a screen row
-const SIZES = [[1280, 800, 1], [1470, 830, 2], [1024, 700, 1]];
+const SIZES = [[1280, 800, 1, 'standard'], [1470, 830, 2, 'standard'], [1024, 700, 1, 'standard'], [1470, 830, 2, 'close']]; // last: Close camera profile (GDD 1.13.0)
 
 (async () => {
   const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
   let failed = 0, total = 0;
-  for (const [w, h, sf] of SIZES) {
+  for (const [w, h, sf, prof] of SIZES) {
     const page = await browser.newPage({ viewport: { width: w, height: h }, deviceScaleFactor: sf });
     page.on('pageerror', e => { console.error('page error:', e.message); process.exitCode = 1; });
     await page.goto(FILE);
@@ -29,7 +30,7 @@ const SIZES = [[1280, 800, 1], [1470, 830, 2], [1024, 700, 1]];
         for (let n = -10; n <= 10; n++) { g.beginPath(); g.moveTo(RW / 2 + n * 70, 0); g.lineTo(RW / 2 + n * 70 + n * 40, RH); g.stroke(); }
       });
       const c = document.getElementById('game'), ctx = c.getContext('2d'), k = c.width / G.VW;
-      const P = 1.3 * G.VH, a = 40 * Math.PI / 180, uTop = G.RH * Math.cos(a) * P / (P + G.RH * Math.sin(a));
+      const P = S.TILT.p * G.VH, a = S.TILT.a, uTop = G.RH * Math.cos(a) * P / (P + G.RH * Math.sin(a));
       const y0 = Math.ceil((G.VH - uTop + 25) * k), y1 = Math.floor((G.VH - 4) * k), Wd = c.width;
       const img = ctx.getImageData(0, y0, Wd, y1 - y0).data, lum = (x, y) => { const i = (y * Wd + x) * 4; return img[i] + img[i + 1] + img[i + 2]; };
       // follow each line upwards from the bottom row by its brightness centroid
@@ -60,18 +61,18 @@ const SIZES = [[1280, 800, 1], [1470, 830, 2], [1024, 700, 1]];
       return { lines: starts.length, worst, worstY: Math.round(worstY), step, stepY: Math.round(stepY) };
     });
     // live riding (Behind camera), then replay of the recorded lap
-    await page.evaluate(() => {
-      const S = window.__sgp; S.UI.opts.cam = 'behind'; S.UI.opts.train = 'off'; S.UI.launch('practice', {}); S.setCamModeX('behind');
+    await page.evaluate(prof => {
+      const S = window.__sgp; S.UI.opts.cam = 'behind'; S.UI.opts.train = 'off'; S.UI.launch('practice', {}); S.setCamModeX('behind'); S.setCamProfileX(prof);
       const W = S.W, b = W.player; b.autopilot = true; W.paused = true; let g = 0;
       while (b.laps.length < 1 && g < 120 * 900) { S.simStep(S.SUB); g++; }
       W.paused = false; S.drawWorldX();
-    });
+    }, prof);
     const live = await measure();
-    await page.evaluate(() => { const S = window.__sgp; S.UI.toMenu(); S.RP.open([S.Lib.data[S.Lib.meta[0].id]], 'menu'); S.setCamModeX('behind'); S.RP.seek(40); S.drawWorldX(); });
+    await page.evaluate(prof => { const S = window.__sgp; S.UI.toMenu(); S.RP.open([S.Lib.data[S.Lib.meta[0].id]], 'menu'); S.setCamModeX('behind'); S.setCamProfileX(prof); S.RP.seek(40); S.drawWorldX(); }, prof);
     const rep = await measure();
     for (const [name, m] of [['live', live], ['replay', rep]]) {
       total++; const bad = m.lines < 5 || m.worst > LIMIT || m.step > SHARP_STEP; if (bad) failed++;
-      console.log(`${bad ? 'FAIL' : 'PASS'}  ${(name + ' ' + w + 'x' + h + ' @' + sf + 'x').padEnd(24)} lines ${m.lines}  sharpest bend ${m.worst.toFixed(2)} px at row ${m.worstY} (limit ${LIMIT})  sharpness step ${(m.step * 100).toFixed(0)}% at row ${m.stepY} (limit ${SHARP_STEP * 100}%)`);
+      console.log(`${bad ? 'FAIL' : 'PASS'}  ${(name + ' ' + w + 'x' + h + ' @' + sf + 'x ' + prof).padEnd(33)} lines ${m.lines}  sharpest bend ${m.worst.toFixed(2)} px at row ${m.worstY} (limit ${LIMIT})  sharpness step ${(m.step * 100).toFixed(0)}% at row ${m.stepY} (limit ${SHARP_STEP * 100}%)`);
     }
     await page.close();
   }

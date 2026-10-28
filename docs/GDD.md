@@ -1,6 +1,6 @@
 # Silverstone GP — Game Design Document
 
-**Version:** 1.15.0 · **Last updated:** 2026-10-28 · **Owner:** Petr
+**Version:** 1.16.0 · **Last updated:** 2026-10-28 · **Owner:** Petr
 
 This document is the source of truth for how the game should work. Every
 change starts here: update the GDD on a feature branch first, then change the
@@ -24,7 +24,7 @@ Teams, riders and liveries are **fictional**; no real MotoGP names or branding.
 
 | Mode | Grid | Length | Notes |
 |---|---|---|---|
-| **Practice** | Player alone | Unlimited | Starts from the pit box, or from a chosen spot with Curve training (§11d). Lap and sector times, pit stops, optional speed guide (§9). Laps are saved (§10). |
+| **Practice** | Player alone | Unlimited | Since 1.16.0 starts on a grid slot the player picks, the same way as for the 10 lap race (§2a), or from a chosen spot with Curve training (§11d). No start lights. Lap and sector times, pit stops, optional speed guide (§9). Laps are saved (§10). |
 | **10 Lap Race** | 22 riders | 10 laps | Player picks the starting slot (pole / front row / mid-pack / back of the grid). |
 | **Grand Prix + Qualifying** | 22 riders | Qualifying, then 20 laps | Qualifying: out lap + 3 flying laps, best lap sets the grid. AI quali times are simulated from their pace. Player can end qualifying early from the pause menu. |
 
@@ -36,6 +36,19 @@ Start lights (since 1.7.2): when a race starts or is restarted, the countdown be
 Race flow: grid → start lights → race →
 chequered flag → results table (positions, gaps, best laps, DNFs).
 
+## 2a. Practice start (since 1.16.0)
+
+Before 1.16.0 normal practice started in the pit box, and the player had to ride down the pit lane first. Since 1.16.0 practice starts on the grid.
+
+- **Grid slot:** the player picks the slot on the start screen with the same **Starting position** control as the 10 lap race (Pole / Front row / Mid-pack / Back, §4), and the bike stands on exactly the same slot as in the race (same grid boxes, same row and column). The track is empty apart from the player and any ghosts (§11c).
+- **No start lights.** The session starts at once: no lights, no countdown, no grid wait.
+- **Hold until the first input:** the bike stands still on the slot until the player presses W, S, A or D (the same hold as Curve training, §11d). "FREE PRACTICE · P12 on the grid · press W, S, A or D to go" is shown meanwhile. The moment of that first input is the **start moment** of the session: lap 1 is timed from it, and ghosts start moving at it (§11c).
+- **Lap 1 is a timed standing-start lap**, as in the race: it runs from the start moment to the first time the line is crossed after a full lap (crossing the line just ahead of the grid does not count). It is saved like any other lap (§10). There is no out lap.
+- Full tank, cold tyres, as at a race start.
+- **The pit box is still usable:** pit in at any time to refuel; W leaves the box as before. The box marker on the minimap stays (§11).
+- **Restart session** (pause menu) and **R** put the bike back on the same grid slot, held, with the ghosts re-synced (§11c). With Curve training On, Restart and R go to the training spot instead (§11d).
+- Qualifying still starts from the pit box (out lap + 3 flying laps).
+
 ## 3. Controls
 
 | Key | Action |
@@ -46,7 +59,7 @@ chequered flag → results table (positions, gaps, best laps, DNFs).
 | O / L | Shift up / down (ignored in automatic) |
 | M | Mute / unmute sound |
 | C | Switch camera: Behind → CLOSE → Top-down → Behind (§11a) |
-| R | Curve training only: back to the training spot at once (§11d) |
+| R | Practice only: back to the start at once, ghosts re-synced. With Curve training On, to the training spot (§11d); otherwise, since 1.16.0, to the chosen grid slot (§2a) |
 | Space, ←/→, ↓/↑, [ ], Tab | Replay viewer only: play/pause, jump 5 s, speed, lap, followed bike (§11e) |
 | Esc | Pause menu (resume, restart, end qualifying, quit). In Practice it also shows the Curve training map (§11d) |
 
@@ -63,7 +76,8 @@ Stored in `localStorage` key `sgp_opts`. The camera choice is remembered for all
 | Speed guide (practice only) | On / Off | On |
 | Curve training (practice only) | Off / On toggle, plus spot on track and start speed 0–300 km/h | **On** (since 1.10.0), spot 350 m before Abbey, guide speed |
 | Starting fuel (races) | 25–100 % of tank, step 5 | 100 % |
-| Starting position (10 lap race) | Pole / Front row / Mid-pack / Back | Mid-pack |
+| Starting position (10 lap race and, since 1.16.0, Practice with Curve training Off) | Pole / Front row / Mid-pack / Back. One setting shared by both modes | Mid-pack |
+| Sync ghosts to (since 1.16.0) | One of the selected ghosts (§11c) | The first selected ghost |
 | Rider name, number, team | up to 14 chars / 1–99 / 11 teams | Petr, 25, Arancia Tech |
 
 ## 5. Bike physics
@@ -229,6 +243,7 @@ where the ideal speed drops by more than 80 km/h.
 - What is recorded:
   - Samples at 10 Hz: x, y, heading, speed, lean, track distance `s`, and race progress `p` (laps × track length + `s`).
   - Events: lap start and end times, the race start (lights out) time, and the finish.
+  - Since 1.16.0 also the **start** of the session: how it started (`grid`, `spot` or `box`), the start moment `t` (lights out in a race; the first input in practice, §2a and §11d), the grid slot or the spot. Restart and R begin a new recording, so each recording has one start.
 - A session is kept when the player completed at least one timed lap, or started a race.
 
 **Recording file (JSON, `format: "silverstone-gp-session"`, `version: 1`)**
@@ -237,8 +252,12 @@ where the ideal speed drops by more than 80 km/h.
   kind: "practice|quali|sprint|gp", mode: "practice|quali|race", totalLaps,
   rider: { name, num, team, short }, aids, auto,
   laps: [ { start, end, time } ], bestLap, raceStart, finishT, position,
+  start: { kind: "grid|spot|box", t, slot, s, v },        // since 1.16.0
   samples: { dt: 0.1, x: [], y: [], h: [], v: [], lean: [], s: [], p: [] } }
 ```
+- `start` is an added field, so the version stays 1 and older files still load. A file without it is read as: race recording with `raceStart` → `grid` start at `raceStart`; any other → `box` start.
+- `slot` is the grid position (1–22) for a `grid` start; `s` (track distance) and `v` (start speed, m/s) are for a `spot` start.
+- `raceStart` stays race-only (practice recordings keep it 0, so the Recordings list does not show them as a DNF).
 - Numbers are rounded to keep files small. A 20-lap race is about 1 MB.
 - File name: `silverstone_<mode>_<rider>_<best lap>_<yyyy-mm-dd_hhmm>.json`.
 
@@ -254,6 +273,7 @@ where the ideal speed drops by more than 80 km/h.
   - **Replay** (since 1.11.0): watch the session in the replay viewer (§11e).
   - **Compare** checkbox (since 1.11.0): pick several sessions and replay them together (§11e).
   - **Ghost** toggle: race against this recording.
+  - **Sync** (since 1.16.0): shown on rows whose Ghost is on; picks which ghost is the sync reference for spot starts (see Ghost sync below). Exactly one is marked. Saved in `localStorage` key `sgp_ghost_sync`. When the reference is switched off, the first remaining ghost becomes the reference.
   - **Export:** save that session as a JSON file (into the linked `saved_tracks/` folder, otherwise to Downloads). Every row in the list has its own Export button.
   - **Delete.**
 - **Import file…** imports one or more `.json` files.
@@ -271,8 +291,33 @@ where the ideal speed drops by more than 80 km/h.
 **Ghost opponents** (up to 4 selected recordings)
 - Ghosts are drawn translucent with a "GHOST" name tag. They appear on the minimap as hollow dots.
 - They have no collisions and AI riders ignore them. They never pit, crash or use fuel; they replay positions only.
-- **Practice:** each ghost replays the best lap of its recording. It starts together with the player each time the player starts a timed lap (crossing the line after the out lap, or completing a lap), and disappears at the end of its lap. The timing tower lists each ghost's best lap.
-  - Since 1.15.0 this also applies in curve training (§11d): no ghost before the line, then the ghost starts with the first timed lap.
+- **Practice (since 1.16.0, see Ghost sync below):** ghosts start moving at the same moment as the player, from the grid or from the curve-training spot. After that, from the player's first line crossing on, each ghost replays the best lap of its recording with every timed lap the player starts (crossing the line, or completing a lap) and disappears at the end of its lap, as before. The timing tower lists each ghost's best lap.
+  - 1.15.0 (replaced): in curve training no ghost was shown before the line; the ghosts only started with the first timed lap. Petr found that this did not work well: the ghost was missing for the part being practised.
+
+**Ghost sync in practice (since 1.16.0)**
+
+The ghosts are synced to the player at the **start moment** (the first W, S, A or D press on the grid or on the spot; §2a, §11d). Until then the player and the ghosts all stand still, each ghost shown at its sync position. How a ghost is synced depends on how the player starts and on what its recording holds.
+
+*Grid start (Curve training Off)*
+- **Recordings with a standing start** (a race recording, or a practice recording made since 1.16.0 that started on the grid): the ghost stands on its own recorded grid slot and launches at the start moment, together with the player. The time between the recorded lights out and the recorded rider's launch (start lights, hold and reaction) is cut:
+  - The **launch moment** of a recording is found from its samples: from `start.t`, the first sample with speed above 0.5 m/s; the launch moment is the sample before it (still standing). For a 1.16.0 practice grid recording this is about `start.t` itself.
+  - The ghost then plays its recording at `launch + (now − start moment)`: the whole recording as ridden, lap after lap, including its pit stops, until the recording ends; then it disappears. Its race laps are listed in the timing tower like its best lap.
+  - Its grid slot can be the same as the player's; ghosts have no collisions, so they simply overlap.
+- **Recordings without a standing start** (older practice recordings that started in the box, qualifying, curve training): no ghost on the standing lap. The ghost starts its best lap at the player's first line crossing, as before 1.16.0. (Its best lap is a flying lap; starting it beside a standing bike would put it 20 m ahead at 250 km/h in the first second.)
+
+*Spot start (Curve training, Go to spot, R)*
+- The player stands on the spot at track distance `s0`. Each ghost uses its **sync lap**: its best lap (the same lap the practice rule uses; laps ridden on autopilot only if there is no other).
+- **The reference ghost** (the one marked Sync) is placed where it passes `s0` on its sync lap:
+  - `t_spot` = the time in the recording where its track distance crosses `s0` within its sync lap, interpolated between the two 10 Hz samples around it. Every point of the track is passed once in a lap from line to line, so there is one answer.
+  - Until the start moment the ghost is shown standing at that sample; from the start moment it plays at `t_spot + (now − start moment)`.
+- **The other ghosts are aligned to the reference by lap time**, the same way as Align = Best lap in the replay viewer (§11e): with `τ = t_spot − (start of the reference's sync lap)`, each other ghost plays from `τ` seconds into its own sync lap. So at the start moment the reference is right on the player, and each other ghost is ahead or behind by how much faster or slower it reached that point of its lap than the reference did. If `τ` is longer than a ghost's lap, that ghost appears only with the next timed lap.
+  - Why not sync every ghost to the spot: they would all stand on top of each other and the choice of reference would mean nothing. Relative to the reference, the gap between the ghosts is shown from the first metre.
+- **Speed:** a ghost passes the spot at its recorded speed, while the player starts at the curve-training start speed (the guide speed by default, any value 0–300 km/h). Rule: the ghost always runs at its recorded speed; nothing is slowed down or bent. With the guide speed the two speeds are close; with a much lower start speed the ghost pulls away at once, which is what really happens when entering a corner too slowly. The start message names the reference's speed at the spot so the player can match it, e.g. "CURVE TRAINING · Abbey · 212 km/h · ghost VAL 218 km/h".
+- After the sync lap: a ghost that reaches the line disappears; from the player's first line crossing on, the normal practice rule applies (best lap with each timed lap).
+
+*Restart, R and Go to spot* put the player back on the grid slot or spot and sync all ghosts again in the same way, with the reference chosen at that moment.
+
+*Choosing the reference*: the **Sync** mark in the Recordings list (above) and a **Sync ghosts to** list in the practice pause menu (only with 2 or more ghosts). A change in the pause menu applies from the next Restart, R or Go to spot, like the other curve-training settings. The reference only matters for spot starts; on the grid every ghost syncs to its own launch.
 - **Race (10 laps and Grand Prix):**
   - Each ghost replaces one of the slowest AI riders, so the grid stays at 22.
   - A race recording replays from its own lights out, aligned to this race's lights out. It follows its recorded line including its grid slot, start and pit stops.
@@ -299,14 +344,15 @@ Practise one corner again and again without riding the whole lap.
 - The pause menu shows the same Curve training block as the main menu: the **On / Off toggle**, the track map, the corner list and the start speed slider with **Guide speed**.
 - **Go to spot** puts the bike on the chosen spot at the chosen speed at once (a fresh curve-training session, as with Restart). It turns Curve training On if it was Off.
 - **Resume** carries on riding where the bike is. Changes to the toggle, spot or speed are saved and apply from the next restart or R.
-- Turning the toggle Off and pressing **Restart session** starts normal practice from the pit box.
+- Turning the toggle Off and pressing **Restart session** starts normal practice on the chosen grid slot (§2a; before 1.16.0, from the pit box).
+- **Sync ghosts to** (since 1.16.0, with 2 or more ghosts selected): picks the reference ghost (§11c).
 
 **Session**
 - The bike starts on the spot, always in the **centre of the road** (lateral offset 0), pointing along the track, at the chosen speed and in the matching gear. The tank is full and the tyres are warm.
 - The bike waits on the spot, frozen, until the player presses W, S, A or D, then rides off at the chosen speed. "CURVE TRAINING · press W, S, A or D to go" is shown meanwhile.
 - **Restart session** (pause menu) and the **R** key put the bike back on the same spot at the same speed, with no delay.
 - Riding on past the line starts normal timed laps, as in practice.
-- In curve training, ghosts (§11c) appear once the player crosses the line and starts a normal timed lap. They start with that lap as in practice. They are not shown while riding from the spot to the line.
+- Since 1.16.0 ghosts (§11c) ride from the spot too: the reference ghost stands on the spot with the player and both start at the first input; the other ghosts are placed relative to it (Ghost sync in §11c). From the first line crossing on they ride with each timed lap as in practice. (1.15.0: ghosts appeared only from the first timed lap.)
 - Curve training is not available in qualifying or races.
 
 ## 11e. Session replay (since 1.11.0)
@@ -372,7 +418,16 @@ Watch one recording, or several together for comparison. Any recording in the li
 - Tests: `node tests/tilt_seam.test.js [index.html]` draws a pattern of straight lines through the real Behind camera projection, in live riding and in replay, at 1280×800, 1470×830 (2× pixels) and 1024×700, and fails if a line bends by more than 0.5 px from one screen row to the next (v1.11.4 fails with about 1 px). It also measures how sharp the lines are on each screen row and fails if the sharpness changes by more than 15 % between the 8 px above and the 8 px below any row (since 1.11.6; v1.11.5 fails with a 25 % step where the near and far bands join, v1.11.6 measures 5–6 %). Since 1.13.0 it also runs at 1470×830 (2× pixels) with the Close camera profile (since 1.14.0: the CLOSE camera).
 - Tests: `node tests/track_edges.test.js [index.html]` checks that no outline beside the track ends square or jumps sideways between two neighbouring track points (~2 m apart). Limits: kerb width 0.45 m, run-off outer edge 2 m, wall 1.5 m, pit lane edges 1.5 m. Live riding and replay draw the same geometry, so this covers both; the test also draws the pit exit in both modes. v1.11.2 fails the kerb check (68 square ends); v1.11.3 fails run-off, wall and pit lane.
 - Tests: `node tests/camera_tuning.test.js [index.html]` checks the Behind camera tuning panel: 12 sliders in the pause menu, values applied, kept after a reload (localStorage), Reset to defaults, hidden with Top-down; since 1.13.0 also the profile list (Close sets its values, a moved slider shows Custom, the profile is kept after a reload, Reset to defaults gives Standard). Since 1.14.0 the profile checks are replaced by CLOSE camera checks: CLOSE can be chosen on the start screen and is remembered after a reload; C cycles Behind → CLOSE → Top-down → Behind (in a session and in replay); CLOSE starts with the Close values (tilt 55, distance 1.8, depth 6, far quality 0.7, …); the panel is shown for CLOSE with its title; values tuned on CLOSE do not change Behind and are kept after a reload (`sgp_cam_close`); Reset to defaults on CLOSE gives the Close values and on Behind the Behind values; an old `sgp_cam` saved with profile Close gives Behind its defaults. The sky check (at most 12 % on a straight at speed, 1470×830 @2×) uses the CLOSE camera.
-- Tests (since 1.15.0): `node tests/practice_ghosts.test.js [index.html]` records a practice lap, selects it as a ghost and checks: with Curve training On, no ghost is shown before the line and a ghost is shown on the first timed lap; with Curve training Off, the ghost is shown on the first timed lap as before. v1.14.0 fails it (no ghost in curve training). `npm test` runs all tests (needs `npm install` and `npx playwright install chromium` once).
+- Tests (since 1.15.0): `node tests/practice_ghosts.test.js [index.html]` records a practice lap, selects it as a ghost and checks: with Curve training On, no ghost is shown before the line and a ghost is shown on the first timed lap; with Curve training Off, the ghost is shown on the first timed lap as before. v1.14.0 fails it (no ghost in curve training). Since 1.16.0 its curve-training check is replaced by the one in `practice_start.test.js` (the ghost is now shown on the spot); the Curve training Off check now expects the ghost of a practice recording without a standing start from the first line crossing.
+- Tests (since 1.16.0): `node tests/practice_start.test.js [index.html]` builds small recordings inside the test (no hand-made files) and checks:
+  - **Grid start:** Practice with Curve training Off and each Starting position (Pole, Front row, Mid-pack, Back) puts the bike on the same slot as the 10 lap race (track distance and lateral offset within 0.1 m), not in the pit lane; no start lights at any time (`W.lights` stays 0, no lights phase); the bike does not move before the first input; lap 1 is timed from the first input.
+  - **No lights delay for ghosts:** a race recording with lights out at 6.2 s and its launch at 6.5 s, used as a ghost on the grid: the ghost does not move before the player's first input; 2 s after it, the ghost has covered the same distance as the recording 2 s after its launch (within 0.5 m).
+  - **Spot sync:** with Curve training at a spot `s0`, the reference ghost is within 2 m of `s0` (along the track) at the start moment, and 3 s later it is where its recording is 3 s after `t_spot`.
+  - **Several ghosts:** with two ghosts, the non-reference ghost is `τ` seconds into its best lap at the start moment; changing the reference and pressing R puts the other ghost on the spot.
+  - **Re-sync:** after riding 5 s, R and Go to spot put the ghosts back on their sync positions, standing.
+  - **Old files:** a practice recording without `start` still loads and rides from the first line crossing.
+  - v1.15.0 fails it (practice starts in the pit box, no ghost on the spot).
+- `npm test` runs all tests (needs `npm install` and `npx playwright install chromium` once).
 
 ## 14. Change process
 
@@ -397,4 +452,16 @@ After tagging, push `main`, the tag and the feature branch to GitHub (`p3trk/mot
 
 ## 16. Version history
 
-See `CHANGELOG.md`. Current: **1.15.0** (ghosts in curve training timed laps).
+See `CHANGELOG.md`. Current: **1.16.0** (practice starts on a chosen grid slot with no start lights; ghosts start with the player: standing-start recordings without the lights delay, curve-training spot starts synced to a chosen reference ghost).
+
+### Open questions for 1.16.0 (recommended answer in bold; the design above uses it)
+
+1. Starting position shared between Practice and the 10 lap race, or one setting each? **Shared** (one control, as asked: "the same way as for race").
+2. With Curve training On (the default), the grid choice is not used. Show the Starting position control anyway, or only with Curve training Off? **Only with Curve training Off**, so it is clear which start applies.
+3. On the grid, hold the bike until the first input, or let the clock run from the session start? **Hold until the first input**, so the player and the ghosts really start together.
+4. Is the standing lap 1 saved as a practice lap in "Your laps"? **Yes**, like race lap 1; it is slower, so it never spoils a best lap.
+5. A standing-start ghost whose recording ends (e.g. a 10-lap race): disappear, or go on with its best lap each timed lap? **Disappear** (simplest; restart with R to race it again).
+6. Ghosts without a standing start on a grid start: wait for the line, or sync to the grid slot like a spot? **Wait for the line** (a flying lap beside a standing bike is not a useful comparison).
+7. Spot start, other ghosts: placed relative to the reference by lap time, or each on the spot? **Relative to the reference** (otherwise the reference choice has no effect).
+8. Spot start, speed mismatch: leave the ghost at its recorded speed, or hold it until the player reaches its speed? **Recorded speed**, plus the ghost's speed in the start message.
+9. Should qualifying also start on the grid? **No**, it keeps its out lap from the box.

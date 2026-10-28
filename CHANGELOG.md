@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.7.2 (2026-10-28)
+- The start-light countdown begins immediately when a race starts or restarts, with no 2.5 s grid wait. The first light is on at once.
+
 ## v1.7.1 (2026-10-28)
 - Behind camera sits closer at high speed (about 1.3× closer at 300 km/h) for a stronger feel of speed. It still shows about 200 m of road ahead.
 - The built game file is now `index.html` (was `motogp.html`).

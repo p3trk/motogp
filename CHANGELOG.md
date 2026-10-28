@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.11.5 (2026-10-28)
+- Behind camera: the tilted view is drawn one screen row at a time instead of in 3 px strips. Track edges and kerbs no longer show small steps and a kink across the screen (live and replay).
+- New automated test `tests/tilt_seam.test.js`: straight lines through the Behind camera projection must stay straight (live and replay, three screen sizes). v1.11.4 fails it; v1.11.5 passes.
+
 ## v1.11.4 (2026-10-28)
 - No more horizontal cut at the pit exit before Abbey (live and replay): the pit lane entry and exit merge into the track edge over 20 m, run-off areas narrow gradually at their ends, and walls no longer step by up to 4 m at the pit zone.
 - `tests/kerb_ends.test.js` became `tests/track_edges.test.js`: it now also checks run-off, walls and the pit lane ends. v1.11.3 fails it; v1.11.4 passes.

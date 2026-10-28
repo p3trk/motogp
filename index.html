@@ -865,6 +865,8 @@ const SUB = 1 / 120;
 function simStep(dt) {
   W.time += dt;
   const bikes = W.bikes;
+  for (const b of bikes) { b.px = b.x; b.py = b.y; b.ph = b.h; } // pose before this step, for drawing between steps
+  for (const g of W.ghosts) { g.px = g.x; g.py = g.y; g.ph = g.h; }
   // race start procedure
   if (W.mode === 'race' && W.phase === 'grid') { W.phase = 'lights'; W.phaseT = 0; W.lightsHold = 0.6 + W.rand() * 1.8; } // no grid wait: lights start at once (GDD 1.7.2)
   else if (W.phase === 'lights') {
@@ -1110,7 +1112,7 @@ const r2 = (x, k) => Math.round(x * k) / k;
 const Rec = {
   cur: null, last: null,
   start() {
-    const b = W.player, o = W.opts;
+    const b = W.player, o = W.opts; this.prev = null;
     this.cur = {
       format: REC_FMT, version: 1, game: 'Silverstone GP', track: 'silverstone',
       id: 'r' + Date.now().toString(36) + ((Math.random() * 1296) | 0).toString(36), date: new Date().toISOString(),
@@ -1120,11 +1122,14 @@ const Rec = {
       samples: { dt: REC_DT, x: [], y: [], h: [], v: [], lean: [], s: [], p: [] }
     };
   },
-  sample() {
+  sample() { // samples land exactly on the 0.1 s grid, interpolated between the last two physics steps (1.11.2)
     const R = this.cur; if (!R) return; const S = R.samples, b = W.player;
-    if (W.time < S.x.length * REC_DT) return;
-    const x = b.crashed && b.crash ? b.crash.bk.x : b.x, y = b.crashed && b.crash ? b.crash.bk.y : b.y;
-    S.x.push(r2(x, 100)); S.y.push(r2(y, 100)); S.h.push(r2(b.h, 1000)); S.v.push(r2(b.crashed ? 0 : b.v, 100)); S.lean.push(r2(b.crashed ? 0 : b.lean, 1000)); S.s.push(r2(b.s, 10)); S.p.push(r2(b.progress, 10));
+    const c = { t: W.time, x: b.crashed && b.crash ? b.crash.bk.x : b.x, y: b.crashed && b.crash ? b.crash.bk.y : b.y, h: b.h, v: b.crashed ? 0 : b.v, lean: b.crashed ? 0 : b.lean, s: b.s, p: b.progress };
+    const q = this.prev; this.prev = c;
+    const tg = S.x.length * REC_DT; if (W.time < tg) return;
+    let f = 1; if (q && W.time > q.t && Math.abs(c.p - q.p) < T.L / 2) f = clamp((tg - q.t) / (W.time - q.t), 0, 1);
+    const m = (k) => q && f < 1 ? q[k] + (c[k] - q[k]) * f : c[k];
+    S.x.push(r2(m('x'), 100)); S.y.push(r2(m('y'), 100)); S.h.push(r2(q && f < 1 ? q.h + angWrap(c.h - q.h) * f : c.h, 1000)); S.v.push(r2(m('v'), 100)); S.lean.push(r2(m('lean'), 1000)); S.s.push(r2(f < 1 ? c.s : c.s, 10)); S.p.push(r2(m('p'), 10));
   },
   lap(start, end, t, ap) { if (this.cur) this.cur.laps.push(ap ? { start: r2(start, 1000), end: r2(end, 1000), time: r2(t, 1000), ap: 1 } : { start: r2(start, 1000), end: r2(end, 1000), time: r2(t, 1000) }); },
   snapshot() { // finished copy of the session so far
@@ -1309,12 +1314,18 @@ const Lib = {
 };
 
 // ghosts: replay recorded positions; never physical, AI does not see them
-function recAt(R, t) { // interpolated sample at recording time t
+function recAt(R, t) { // sample at recording time t
+  // position, heading, speed and lean follow a cubic B-spline through the 10 Hz samples: straight-line
+  // interpolation turned the path direction in steps every 0.1 s, which shook the replay camera (1.11.2)
   const S = R.samples, n = S.x.length, f0 = clamp(t / S.dt, 0, n - 1), k = Math.min(n - 2, Math.floor(f0)), f = n > 1 ? f0 - k : 0, j = Math.min(n - 1, k + 1);
+  const i0 = Math.max(0, k - 1), i3 = Math.min(n - 1, k + 2), f2 = f * f, f3 = f2 * f;
+  const w0 = (1 - f) ** 3 / 6, w1 = (3 * f3 - 6 * f2 + 4) / 6, w2 = (-3 * f3 + 3 * f2 + 3 * f + 1) / 6, w3 = f3 / 6;
+  const B = a => a[i0] * w0 + a[k] * w1 + a[j] * w2 + a[i3] * w3;
+  const hk = S.h[k], hB = hk + angWrap(S.h[i0] - hk) * w0 + angWrap(S.h[j] - hk) * w2 + angWrap(S.h[i3] - hk) * w3;
   const L = (a) => a[k] + (a[j] - a[k]) * f;
   const jump = Math.abs(S.p[j] - S.p[k]) > T.L / 2;
   const p = jump ? (f < 0.5 ? S.p[k] : S.p[j]) : L(S.p);
-  return { x: L(S.x), y: L(S.y), h: S.h[k] + angWrap(S.h[j] - S.h[k]) * f, v: L(S.v), lean: L(S.lean), p, dv: S.v[j] - S.v[k] };
+  return { x: B(S.x), y: B(S.y), h: hB, v: B(S.v), lean: B(S.lean), p, dv: S.v[j] - S.v[k] };
 }
 function makeGhost(R) {
   const rd = R.rider; const own = R.laps.filter(l => !l.ap); const pool = own.length ? own : R.laps;
@@ -2733,9 +2744,13 @@ function frame(now) {
   }
   if (UI.state === 'replay') { RP.step(dt); UI.rbarUpdate(); }
   if (W.player) {
+    // draw riders between the last two physics steps: the frame clock and the 120 Hz physics drift
+    // apart, and drawing the last step made the Behind camera stutter (1.11.2)
+    const lerpPose = UI.state === 'play' && !W.paused, al = clamp(acc / SUB, 0, 1), saved = [];
+    if (lerpPose) for (const b of W.bikes.concat(W.ghosts)) if (b.px !== undefined && !b.crashed) { saved.push([b, b.x, b.y, b.h]); b.x = b.px + (b.x - b.px) * al; b.y = b.py + (b.y - b.py) * al; b.h = b.ph + angWrap(b.h - b.ph) * al; }
     updateCamera((UI.state === 'play' && !W.paused) || UI.state === 'replay' ? dt : 0.0001); drawWorld();
     ctx = hudCtx; ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, hcv.width, hcv.height);
-    try { if (UI.state === 'play') drawHUD(dt); else if (UI.state === 'replay') drawReplayHUD(); } finally { ctx = mainCtx; }
+    try { if (UI.state === 'play') drawHUD(dt); else if (UI.state === 'replay') drawReplayHUD(); } finally { ctx = mainCtx; for (const [b, x, y, h] of saved) { b.x = x; b.y = y; b.h = h; } }
   }
   Sound.update(UI.state === 'play' ? W.player : null);
   requestAnimationFrame(frame);
@@ -2753,7 +2768,7 @@ function boot() {
   requestAnimationFrame(t => { last = t; requestAnimationFrame(frame); });
   setInterval(() => { if (UI.state === 'menu') { for (let k = 0; k < 4; k++) simStep(SUB); } }, 1000 / 30);
 }
-window.__sgp = { RP, Rec, Lib, Ghost, W, T, PHYS, Input, FX, Records, completeLapX: b => completeLap(b), drawWorldX: () => drawWorld(), setupSession, simStep, standings, UI, SUB, setAIReal: v => { AI_REAL = v; } };
+window.__sgp = { worldToScreenX: (x, y) => worldToScreen(x, y), frameX: t => frame(t), setCamModeX: m => setCamMode(m), CAM, RP, Rec, Lib, Ghost, W, T, PHYS, Input, FX, Records, completeLapX: b => completeLap(b), drawWorldX: () => drawWorld(), setupSession, simStep, standings, UI, SUB, setAIReal: v => { AI_REAL = v; } };
 if (document.fonts && document.fonts.ready) { Promise.race([document.fonts.ready, new Promise(r => setTimeout(r, 1500))]).then(boot).catch(e => { console.error("boot failed", e && e.stack); }); } else boot();
 
 })();

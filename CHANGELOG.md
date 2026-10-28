@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.11.2 (2026-10-28)
+- Replay no longer shakes: the replayed path is a smooth curve through the recorded samples, and new recordings take their samples exactly every 0.1 s.
+- Live riding: riders are drawn between physics steps, which removes a small stutter of the Behind camera when the frame rate and the 120 Hz physics drift apart.
+- New automated test `tests/camera_shake.test.js` for camera shake in live riding and replay (0.25×, 1×, 4×), Behind and Top-down cameras. v1.11.1 failed 4 of 8 cases; v1.11.2 passes all 8.
+
 ## v1.11.1 (2026-10-28)
 - Replay: the Play/Pause button works reliably (the labels are no longer rewritten every frame, which could swallow clicks in Safari).
 - Replay: new **1×** button, and clicking the speed readout, return to normal speed.

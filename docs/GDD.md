@@ -1,6 +1,6 @@
 # Silverstone GP — Game Design Document
 
-**Version:** 1.11.1 · **Last updated:** 2026-10-28 · **Owner:** Petr
+**Version:** 1.11.2 · **Last updated:** 2026-10-28 · **Owner:** Petr
 
 This document is the source of truth for how the game should work. Every
 change starts here: update the GDD on a feature branch first, then change the
@@ -302,6 +302,8 @@ Watch one recording, or several together for comparison. Any recording in the li
 
 **What is shown**
 - The bikes on the track, driven by the recorded samples (position, heading, lean, speed), smoothly interpolated between the 10 Hz samples.
+  - Since 1.11.2 the path follows a cubic B-spline through the samples. Straight lines between samples turned the bike's direction in small steps ten times a second, and the camera shook in replay.
+  - New recordings take each sample exactly on the 0.1 s grid (interpolated between physics steps); before, a sample could be up to 8 ms late.
 - Recordings hold only the player's bike, so AI riders are not in the replay.
 - The normal cameras (Behind / Top-down, C to switch) follow the followed bike.
 - HUD for the followed bike: speed, lean, lap number, current lap time, best lap, the corner name and the corner countdown. No fuel, damage or throttle data (not recorded).
@@ -333,6 +335,11 @@ Watch one recording, or several together for comparison. Any recording in the li
   - device pixel ratio capped at 1.5, dropping to 1 when frames are slow;
   - only dynamic things are drawn each frame;
   - target 60 fps.
+- Smooth motion (since 1.11.2): physics runs at 120 Hz, the screen at its own rate. Riders are drawn between the last two physics steps, so the camera does not stutter when the frame clock and the physics drift apart.
+- Tests: `node tests/camera_shake.test.js [index.html]` (needs Playwright with Chromium) drives the real game loop with a fake frame clock (about 60 fps with ±1.5 ms jitter) and records the camera every frame.
+  - Cases: live riding and replay at 0.25×, 1× and 4×, each with the Behind and Top-down cameras.
+  - Measured against a 0.4 s moving average (in game time): camera speed, camera turn rate, direction of camera travel, and the bike's position on screen.
+  - Limits: speed 2 %, turn rate 0.08 rad/s, direction 0.08 rad/s, screen position 2 px (RMS). The test exits with an error if any case is over.
 
 ## 14. Change process
 
@@ -357,4 +364,4 @@ After tagging, push `main`, the tag and the feature branch to GitHub (`p3trk/mot
 
 ## 16. Version history
 
-See `CHANGELOG.md`. Current: **1.11.1**.
+See `CHANGELOG.md`. Current: **1.11.2**.

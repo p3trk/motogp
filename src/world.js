@@ -160,6 +160,8 @@ const SUB = 1 / 120;
 function simStep(dt) {
   W.time += dt;
   const bikes = W.bikes;
+  for (const b of bikes) { b.px = b.x; b.py = b.y; b.ph = b.h; } // pose before this step, for drawing between steps
+  for (const g of W.ghosts) { g.px = g.x; g.py = g.y; g.ph = g.h; }
   // race start procedure
   if (W.mode === 'race' && W.phase === 'grid') { W.phase = 'lights'; W.phaseT = 0; W.lightsHold = 0.6 + W.rand() * 1.8; } // no grid wait: lights start at once (GDD 1.7.2)
   else if (W.phase === 'lights') {

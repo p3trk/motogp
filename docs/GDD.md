@@ -1,6 +1,6 @@
 # Silverstone GP — Game Design Document
 
-**Version:** 1.13.0 · **Last updated:** 2026-10-28 · **Owner:** Petr
+**Version:** 1.13.1 · **Last updated:** 2026-10-28 · **Owner:** Petr
 
 This document is the source of truth for how the game should work. Every
 change starts here: update the GDD on a feature branch first, then change the
@@ -181,8 +181,9 @@ Two cameras, switched with **C** or in the menu.
 
 **Camera profiles (since 1.13.0)**
 - A **Profile** list at the top of the Camera tuning panel: **Standard** (the 1.12.0 defaults) and **Close**. Choosing a profile sets all sliders; moving any slider afterwards shows **Custom**. The chosen profile is saved with the other settings.
-- **Close** aims at what a rider really sees: tilt 60°, so the road stretches ahead and the ground is seen at a low angle; camera distance 1.6 × screen height and the bike 8 % above the bottom edge; zoomed in (maximum 30 px/m, base 12 m, speed factor 0.4); most detail (near image 1.5, far image 0.6; above 1.0 uses the extra pixels of Retina screens); a deeper and wider ground (depth 5.5 × screen, width 3.5 × screen) so the road reaches the horizon, which sits about a third of the way down the screen. Fade zone 30 % and minimum bike length 40 px as in Standard.
+- **Close** aims at what a rider really sees: tilt 55°, so the road stretches ahead and the ground is seen at a low angle; camera distance 1.8 × screen height and the bike 8 % above the bottom edge; zoomed in (maximum 30 px/m, base 12 m, speed factor 0.4); most detail (near image 1.5, far image 0.7; above 1.0 uses the extra pixels of Retina screens); a deeper and wider ground (depth 6 × screen, width 3.5 × screen) so the road reaches the horizon, which sits about 8 % of the way down the screen. Fade zone 30 % and minimum bike length 40 px as in Standard.
   - Fine-tuned on a 1470 × 830 Retina screen. The first draft had distance 0.6, depth 5, width 2.3 and speed factor 0.6. With tilt 60°, a distance of 0.6 puts the horizon only about 35 % above the bottom edge (it sits at distance × cot(tilt)), so two thirds of the screen were sky. Distance 1.6 with depth 5.5 brings the far edge of the ground to about 69 % of the screen height. Width 3.5 keeps the far ground as wide as the view, and speed factor 0.4 keeps the bike bigger at speed.
+  - Since 1.13.1 (Petr, 2026-10-28): the 1.13.0 Close (tilt 60°, distance 1.6, depth 5.5) showed too much sky (31 % of the screen), so the tilt went down to 55°, the distance up to 1.8 and the depth up to 6: sky is now about 8 % of the screen, the ground reaches about 10 % further ahead (≈200 m instead of ≈183 m at 280 km/h) and the bike is about 20 % longer on screen, with the same zoom. The far image went from 0.6 to 0.7, because with the lower tilt the step in sharpness where the near image fades into the far one grew from 8 % to 14 % (0.7 brings it to about 3 %).
 - Slider ranges widened: tilt up to 70°, distance from 0.5, bike height from 5 %, near quality up to 2.0, ground depth up to 6, and (so the Close zoom fits) zoom base from 10 m and speed factor from 0.3.
 - Close draws more pixels and can be slower; the automatic quality drop for slow machines still applies.
 
@@ -389,4 +390,4 @@ After tagging, push `main`, the tag and the feature branch to GitHub (`p3trk/mot
 
 ## 16. Version history
 
-See `CHANGELOG.md`. Current: **1.13.0**.
+See `CHANGELOG.md`. Current: **1.13.1**.

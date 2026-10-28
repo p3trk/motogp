@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.7.0 (2026-10-28)
+- New default **Behind** camera: a chase view from behind the bike with the track tilted back 40° in perspective, a sky and horizon haze. Corners show up much further down the road while the near track keeps the feel of speed.
+- C switches between Behind and Top-down, and the menu has a Camera option again.
+- The HUD is drawn on its own layer, and rider name tags follow the perspective.
+- Bikes are drawn larger when zoomed out in Behind view. Resolution drops automatically on slow machines.
+
 ## v1.6.1 (2026-10-28)
 - Corner countdown made compact: the panel is about 250 × 44 px instead of 380 × 74 px, with smaller boards and pictogram.
 

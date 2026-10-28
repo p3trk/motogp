@@ -350,6 +350,7 @@ window.addEventListener('keydown', e => {
     if (e.code === 'KeyO' && !b.auto) shift(b, 1);
     if (e.code === 'KeyL' && !b.auto) shift(b, -1);
   }
+  if (e.code === 'KeyC' && UI.state === 'play') { setCamMode(CAM.mode === 'behind' ? 'chase' : 'behind'); UI.opts.cam = CAM.mode; UI.sync(); HUD.msg('CAMERA', CAM.mode === 'behind' ? 'Behind' : 'Top-down', '#4cc3ff', 1.2); }
   if (e.code === 'Escape' && (UI.state === 'play')) UI.togglePause();
   if (e.code === 'KeyM') Sound.on = !Sound.on;
 });
@@ -361,12 +362,12 @@ window.addEventListener('blur', () => { Input.k = {}; if (UI.state === 'play' &&
 // ---------------------------------------------------------------------------
 const $ = id => document.getElementById(id);
 const UI = {
-  state: 'menu', opts: { mode: 'sprint', trans: 'manual', aids: 'on', ai: 'pro', guide: 'on', fuel: 100, grid: 'mid', name: 'Petr', num: 25, team: 2 },
+  state: 'menu', opts: { mode: 'sprint', trans: 'manual', aids: 'on', ai: 'pro', cam: 'behind', guide: 'on', fuel: 100, grid: 'mid', name: 'Petr', num: 25, team: 2 },
   init() {
-    try { const s = JSON.parse(localStorage.getItem('sgp_opts') || 'null'); if (s) { delete s.cam; Object.assign(this.opts, s); } } catch (e) { }
+    try { const s = JSON.parse(localStorage.getItem('sgp_opts') || 'null'); if (s) { if (s.cam !== 'chase') delete s.cam; Object.assign(this.opts, s); } } catch (e) { }
     const sel = $('optTeam'); TEAMS.forEach((t, k) => { const o = document.createElement('option'); o.value = k; o.textContent = t.name; sel.appendChild(o); });
     document.querySelectorAll('.mode').forEach(m => m.addEventListener('click', () => { this.opts.mode = m.dataset.mode; this.sync(); }));
-    for (const [id, key] of [['optTrans', 'trans'], ['optAids', 'aids'], ['optAI', 'ai'], ['optGuide', 'guide']]) $(id).querySelectorAll('button').forEach(bt => bt.addEventListener('click', () => { this.opts[key] = bt.dataset.v; this.sync(); }));
+    for (const [id, key] of [['optTrans', 'trans'], ['optAids', 'aids'], ['optAI', 'ai'], ['optCam', 'cam'], ['optGuide', 'guide']]) $(id).querySelectorAll('button').forEach(bt => bt.addEventListener('click', () => { this.opts[key] = bt.dataset.v; this.sync(); }));
     $('optFuel').addEventListener('input', e => { this.opts.fuel = +e.target.value; this.sync(); });
     $('optGrid').addEventListener('change', e => { this.opts.grid = e.target.value; });
     $('optTeam').addEventListener('change', e => { this.opts.team = +e.target.value; });
@@ -383,7 +384,7 @@ const UI = {
   sync() {
     const o = this.opts;
     document.querySelectorAll('.mode').forEach(m => m.setAttribute('aria-pressed', String(m.dataset.mode === o.mode)));
-    for (const [id, key] of [['optTrans', 'trans'], ['optAids', 'aids'], ['optAI', 'ai'], ['optGuide', 'guide']]) $(id).querySelectorAll('button').forEach(bt => bt.setAttribute('aria-pressed', String(bt.dataset.v === o[key])));
+    for (const [id, key] of [['optTrans', 'trans'], ['optAids', 'aids'], ['optAI', 'ai'], ['optCam', 'cam'], ['optGuide', 'guide']]) $(id).querySelectorAll('button').forEach(bt => bt.setAttribute('aria-pressed', String(bt.dataset.v === o[key])));
     $('optFuel').value = o.fuel; $('optGrid').value = o.grid; $('optTeam').value = o.team; $('optName').value = o.name; $('optNum').value = o.num;
     const laps = o.mode === 'gp' ? 20 : 10; const L = PHYS.tank * o.fuel / 100; const range = L / 2.65;
     $('optFuelV').textContent = L.toFixed(1) + ' L';
@@ -409,7 +410,7 @@ const UI = {
     return Object.assign({ name: o.name, num: o.num, team: o.team, aids: o.aids === 'on', auto: o.trans === 'auto', level: o.ai, fuelPct: o.fuel / 100, gridPos: o.grid, guide: o.guide === 'on' }, extra);
   },
   launch(kind, extra) {
-    this.hideAll(); this.state = 'play'; CAM.init = false;
+    this.hideAll(); this.state = 'play'; setCamMode(this.opts.cam); CAM.init = false;
     setupSession(kind, this.sessionOpts(extra));
     if (kind === 'gp' || kind === 'sprint') W.kind = kind;
     $('btnEndQ').hidden = kind !== 'quali';
@@ -463,6 +464,7 @@ function frame(now) {
   // adaptive resolution: drop to 1x pixels if the machine can't keep up
   perfAvg = perfAvg * 0.97 + dt * 0.03; perfN++;
   if (perfN > 180 && perfAvg > 0.024 && DPR_CAP > 1 && UI.state === 'play') { DPR_CAP = 1; resize(); perfN = 0; }
+  else if (perfN > 180 && perfAvg > 0.024 && CAM.mode === 'behind' && TILT.q > 0.8 && UI.state === 'play') { TILT.q = 0.8; resize(); perfN = 0; }
   if (UI.state === 'play' && !W.paused) {
     acc += dt; let n = 0;
     while (acc >= SUB && n < 16) { simStep(SUB); acc -= SUB; n++; }
@@ -471,7 +473,11 @@ function frame(now) {
     if (W.endTimer > 0) { W.endTimer -= dt; if (W.endTimer <= 0) { if (W.mode === 'race') UI.raceResults(); else if (W.mode === 'quali') UI.finishQuali(); } }
     if (W.mode === 'race' && W.player.dnf && !W.endTimer && !W.resultsShown) { W.resultsShown = true; W.endTimer = 3; }
   }
-  if (W.player) { updateCamera(UI.state === 'play' && !W.paused ? dt : 0.0001); drawWorld(); if (UI.state === 'play') drawHUD(dt); }
+  if (W.player) {
+    updateCamera(UI.state === 'play' && !W.paused ? dt : 0.0001); drawWorld();
+    ctx = hudCtx; ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, hcv.width, hcv.height);
+    try { if (UI.state === 'play') drawHUD(dt); } finally { ctx = mainCtx; }
+  }
   Sound.update(UI.state === 'play' ? W.player : null);
   requestAnimationFrame(frame);
 }

@@ -671,9 +671,13 @@ function frame(now) {
   }
   if (UI.state === 'replay') { RP.step(dt); UI.rbarUpdate(); }
   if (W.player) {
+    // draw riders between the last two physics steps: the frame clock and the 120 Hz physics drift
+    // apart, and drawing the last step made the Behind camera stutter (1.11.2)
+    const lerpPose = UI.state === 'play' && !W.paused, al = clamp(acc / SUB, 0, 1), saved = [];
+    if (lerpPose) for (const b of W.bikes.concat(W.ghosts)) if (b.px !== undefined && !b.crashed) { saved.push([b, b.x, b.y, b.h]); b.x = b.px + (b.x - b.px) * al; b.y = b.py + (b.y - b.py) * al; b.h = b.ph + angWrap(b.h - b.ph) * al; }
     updateCamera((UI.state === 'play' && !W.paused) || UI.state === 'replay' ? dt : 0.0001); drawWorld();
     ctx = hudCtx; ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, hcv.width, hcv.height);
-    try { if (UI.state === 'play') drawHUD(dt); else if (UI.state === 'replay') drawReplayHUD(); } finally { ctx = mainCtx; }
+    try { if (UI.state === 'play') drawHUD(dt); else if (UI.state === 'replay') drawReplayHUD(); } finally { ctx = mainCtx; for (const [b, x, y, h] of saved) { b.x = x; b.y = y; b.h = h; } }
   }
   Sound.update(UI.state === 'play' ? W.player : null);
   requestAnimationFrame(frame);
@@ -691,5 +695,5 @@ function boot() {
   requestAnimationFrame(t => { last = t; requestAnimationFrame(frame); });
   setInterval(() => { if (UI.state === 'menu') { for (let k = 0; k < 4; k++) simStep(SUB); } }, 1000 / 30);
 }
-window.__sgp = { RP, Rec, Lib, Ghost, W, T, PHYS, Input, FX, Records, completeLapX: b => completeLap(b), drawWorldX: () => drawWorld(), setupSession, simStep, standings, UI, SUB, setAIReal: v => { AI_REAL = v; } };
+window.__sgp = { worldToScreenX: (x, y) => worldToScreen(x, y), frameX: t => frame(t), setCamModeX: m => setCamMode(m), CAM, RP, Rec, Lib, Ghost, W, T, PHYS, Input, FX, Records, completeLapX: b => completeLap(b), drawWorldX: () => drawWorld(), setupSession, simStep, standings, UI, SUB, setAIReal: v => { AI_REAL = v; } };
 if (document.fonts && document.fonts.ready) { Promise.race([document.fonts.ready, new Promise(r => setTimeout(r, 1500))]).then(boot).catch(e => { console.error("boot failed", e && e.stack); }); } else boot();

@@ -1,6 +1,6 @@
 # Silverstone GP — Game Design Document
 
-**Version:** 1.11.3 · **Last updated:** 2026-10-28 · **Owner:** Petr
+**Version:** 1.11.4 · **Last updated:** 2026-10-28 · **Owner:** Petr
 
 This document is the source of truth for how the game should work. Every
 change starts here: update the GDD on a feature branch first, then change the
@@ -322,6 +322,7 @@ Watch one recording, or several together for comparison. Any recording in the li
 - Racing line from curvature relaxation; ideal speed profile from forward/backward acceleration passes (ideal lap ≈ 2:08).
 - Track: asphalt texture, white lines, red/white kerbs, tarmac run-off, gravel traps, grass, walls, start grid boxes, braking boards and corner names.
 - Kerb ends (since 1.11.3): kerbs run along corners on both sides of the track. Each kerb narrows to nothing over its first and last 8 m, instead of ending square. Before, both kerbs ended on the same line across the track and the run-off and gravel edges next to them jumped sideways by the kerb width, which looked like a horizontal cut through the screen. The kerb surface (grip, braking) follows the same narrowing.
+- No square ends beside the track (since 1.11.4): run-off areas narrow at their ends, and where gravel meets tarmac run-off, by at most 1.5 m per track point (~2 m). Walls change their distance from the track by at most 1.2 m per track point (before, the walls stepped by up to 4 m at the pit zone). The pit lane entry and exit merge into the track edge over 20 m instead of ending square, and the pit lane never covers the track's white edge line. These square ends caused the same horizontal cut through the screen at the pit exit before Abbey, in live riding and in replay.
 - Scenery: grandstands, Wing pit building, garages, trees.
 - Bikes: detailed top-down sprites in team livery with rider and number, lean and shadow.
 - Effects: tyre marks, smoke, sparks, debris, dust on grass and gravel.
@@ -341,7 +342,7 @@ Watch one recording, or several together for comparison. Any recording in the li
   - Cases: live riding and replay at 0.25×, 1× and 4×, each with the Behind and Top-down cameras.
   - Measured against a 0.4 s moving average (in game time): camera speed, camera turn rate, direction of camera travel, and the bike's position on screen.
   - Limits: speed 2 %, turn rate 0.08 rad/s, direction 0.08 rad/s, screen position 2 px (RMS). The test exits with an error if any case is over.
-- Tests: `node tests/kerb_ends.test.js [index.html]` checks that no kerb ends square: between two neighbouring track points (~2 m apart) the kerb width may change by at most 0.45 m (since 1.11.3; v1.11.2 fails it with 68 square ends).
+- Tests: `node tests/track_edges.test.js [index.html]` checks that no outline beside the track ends square or jumps sideways between two neighbouring track points (~2 m apart). Limits: kerb width 0.45 m, run-off outer edge 2 m, wall 1.5 m, pit lane edges 1.5 m. Live riding and replay draw the same geometry, so this covers both; the test also draws the pit exit in both modes. v1.11.2 fails the kerb check (68 square ends); v1.11.3 fails run-off, wall and pit lane.
 
 ## 14. Change process
 
@@ -366,4 +367,4 @@ After tagging, push `main`, the tag and the feature branch to GitHub (`p3trk/mot
 
 ## 16. Version history
 
-See `CHANGELOG.md`. Current: **1.11.3**.
+See `CHANGELOG.md`. Current: **1.11.4**.

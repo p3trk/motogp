@@ -203,7 +203,30 @@ const T = {};
       KERB[1][i] = 0;
     }
   }
+  // no square steps in the run-off and wall outlines (GDD 1.11.4): a run-off area narrows at its ends and where
+  // gravel meets tarmac run-off by at most 1.5 m per track point; walls change by at most 1.2 m per track point (the wall steps next to the pit zone)
+  for (let s = 0; s < 2; s++) {
+    const R = RUN[s], Wl = WALL[s];
+    for (let pass = 0; pass < 2; pass++) for (let n = 0; n < N; n++) { // forward then backward sweep
+      const i = pass ? (N - 1 - n) : n, j = pass ? (i + 1) % N : (i - 1 + N) % N;
+      const rj = R[j] > 1 ? R[j] : 0; if (R[i] > rj + 1.5) R[i] = rj + 1.5;
+      if (Wl[i] < Wl[j] - 1.2) Wl[i] = Wl[j] - 1.2;
+    }
+    for (let pass = 0; pass < 2; pass++) for (let n = 0; n < N; n++) { // second round settles the wrap-around
+      const i = pass ? (N - 1 - n) : n, j = pass ? (i + 1) % N : (i - 1 + N) % N;
+      const rj = R[j] > 1 ? R[j] : 0; if (R[i] > rj + 1.5) R[i] = rj + 1.5;
+      if (Wl[i] < Wl[j] - 1.2) Wl[i] = Wl[j] - 1.2;
+    }
+  }
   Object.assign(T, { KERB, RUN, RT, WALL, EDGE });
+  // pit lane outline as drawn: the lane ends merge into the track edge over 20 m instead of ending square (GDD 1.11.4)
+  PIT.PX = 20;
+  PIT.edge = function (k, sgn, inset) { // offset of a pit lane edge at point k (sgn -1 inner, +1 outer)
+    const PX = PIT.PX, sr = T.rel(k * DS), ce = sr < PIT.sIn ? PIT.sIn : sr > PIT.sOut ? PIT.sOut : sr;
+    const c = PIT.center(ce) ?? WR[k], w = sgn * (PIT.halfW(ce) - inset), f = sr < PIT.sIn ? 1 - (PIT.sIn - sr) / PX : sr > PIT.sOut ? 1 - (sr - PIT.sOut) / PX : 1;
+    const e = f >= 1 ? c + w : WR[k] + (c + w - WR[T.idx(ce)]) * Math.max(0, f);
+    return sgn < 0 ? Math.max(e, EDGE[0][k] + inset) : e; // the lane never covers the track's white edge line
+  };
 
   T.surface = function (i, s, d) {
     const side = d >= 0 ? 0 : 1, ad = Math.abs(d), e = EDGE[side][i];

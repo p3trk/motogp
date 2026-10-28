@@ -149,10 +149,12 @@ function buildGeometry() {
   GEO.pit = new Path2D(); GEO.pitLines = new Path2D(); GEO.pitDash = new Path2D(); GEO.pitWall = new Path2D(); GEO.hatch = new Path2D();
   const i0 = T.idx(PIT.sIn), i1 = T.idx(PIT.sOut); const idxs = []; for (let k = i0; k !== (i1 + 1) % N; k = (k + 1) % N) idxs.push(k);
   const prs = k => T.rel(k * T.DS);
-  idxs.forEach((k, j) => { const sr = prs(k); const c = PIT.center(sr) ?? T.WR[k]; const [x, y] = P(k, c - PIT.halfW(sr)); j ? GEO.pit.lineTo(x, y) : GEO.pit.moveTo(x, y); });
-  for (let j = idxs.length - 1; j >= 0; j--) { const k = idxs[j], sr = prs(k); const c = PIT.center(sr) ?? T.WR[k]; const [x, y] = P(k, c + PIT.halfW(sr)); GEO.pit.lineTo(x, y); }
+  const PX = PIT.PX, ie0 = T.idx(PIT.sIn - PX), ie1 = T.idx(PIT.sOut + PX), idxE = []; for (let k = ie0; k !== (ie1 + 1) % N; k = (k + 1) % N) idxE.push(k);
+  const pitEdge = PIT.edge;
+  idxE.forEach((k, j) => { const [x, y] = P(k, pitEdge(k, -1, 0)); j ? GEO.pit.lineTo(x, y) : GEO.pit.moveTo(x, y); });
+  for (let j = idxE.length - 1; j >= 0; j--) { const k = idxE[j]; const [x, y] = P(k, pitEdge(k, 1, 0)); GEO.pit.lineTo(x, y); }
   GEO.pit.closePath();
-  for (const sgn of [-1, 1]) idxs.forEach((k, j) => { const sr = prs(k); const c = PIT.center(sr) ?? T.WR[k]; const [x, y] = P(k, c + sgn * (PIT.halfW(sr) - 0.3)); j ? GEO.pitLines.lineTo(x, y) : GEO.pitLines.moveTo(x, y); });
+  for (const sgn of [-1, 1]) idxE.forEach((k, j) => { const [x, y] = P(k, pitEdge(k, sgn, 0.3)); j ? GEO.pitLines.lineTo(x, y) : GEO.pitLines.moveTo(x, y); });
   let first = true; idxs.forEach(k => { const sr = prs(k); if (sr < PIT.flatIn || sr > PIT.flatOut) return; const [x, y] = P(k, PIT.d + 1.3); first ? GEO.pitDash.moveTo(x, y) : GEO.pitDash.lineTo(x, y); first = false; });
   first = true; idxs.forEach(k => { const sr = prs(k); if (sr < PIT.flatIn - 6 || sr > PIT.flatOut + 6) return; const [x, y] = P(k, PIT.wallD); first ? GEO.pitWall.moveTo(x, y) : GEO.pitWall.lineTo(x, y); first = false; });
   // painted chevrons between track and pit ramps

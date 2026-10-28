@@ -1,6 +1,6 @@
 # Silverstone GP — Game Design Document
 
-**Version:** 1.11.2 · **Last updated:** 2026-10-28 · **Owner:** Petr
+**Version:** 1.11.3 · **Last updated:** 2026-10-28 · **Owner:** Petr
 
 This document is the source of truth for how the game should work. Every
 change starts here: update the GDD on a feature branch first, then change the
@@ -321,6 +321,7 @@ Watch one recording, or several together for comparison. Any recording in the li
 - Centreline from the TUMFTM racetrack-database (LGPL-3.0), resampled every ~2 m (5 888 m, 2 944 points); start line at the real finish line.
 - Racing line from curvature relaxation; ideal speed profile from forward/backward acceleration passes (ideal lap ≈ 2:08).
 - Track: asphalt texture, white lines, red/white kerbs, tarmac run-off, gravel traps, grass, walls, start grid boxes, braking boards and corner names.
+- Kerb ends (since 1.11.3): kerbs run along corners on both sides of the track. Each kerb narrows to nothing over its first and last 8 m, instead of ending square. Before, both kerbs ended on the same line across the track and the run-off and gravel edges next to them jumped sideways by the kerb width, which looked like a horizontal cut through the screen. The kerb surface (grip, braking) follows the same narrowing.
 - Scenery: grandstands, Wing pit building, garages, trees.
 - Bikes: detailed top-down sprites in team livery with rider and number, lean and shadow.
 - Effects: tyre marks, smoke, sparks, debris, dust on grass and gravel.
@@ -340,6 +341,7 @@ Watch one recording, or several together for comparison. Any recording in the li
   - Cases: live riding and replay at 0.25×, 1× and 4×, each with the Behind and Top-down cameras.
   - Measured against a 0.4 s moving average (in game time): camera speed, camera turn rate, direction of camera travel, and the bike's position on screen.
   - Limits: speed 2 %, turn rate 0.08 rad/s, direction 0.08 rad/s, screen position 2 px (RMS). The test exits with an error if any case is over.
+- Tests: `node tests/kerb_ends.test.js [index.html]` checks that no kerb ends square: between two neighbouring track points (~2 m apart) the kerb width may change by at most 0.45 m (since 1.11.3; v1.11.2 fails it with 68 square ends).
 
 ## 14. Change process
 
@@ -364,4 +366,4 @@ After tagging, push `main`, the tag and the feature branch to GitHub (`p3trk/mot
 
 ## 16. Version history
 
-See `CHANGELOG.md`. Current: **1.11.2**.
+See `CHANGELOG.md`. Current: **1.11.3**.

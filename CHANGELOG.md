@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.7.1 (2026-10-28)
+- Behind camera sits closer at high speed (about 1.3× closer at 300 km/h) for a stronger feel of speed. It still shows about 200 m of road ahead.
+- The built game file is now `index.html` (was `motogp.html`).
+
 ## v1.7.0 (2026-10-28)
 - New default **Behind** camera: a chase view from behind the bike with the track tilted back 40° in perspective, a sky and horizon haze. Corners show up much further down the road while the near track keeps the feel of speed.
 - C switches between Behind and Top-down, and the menu has a Camera option again.

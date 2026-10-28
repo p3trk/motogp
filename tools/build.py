@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Build motogp.html from src/.
+"""Build index.html from src/.
 
 Concatenates the source parts into one self-contained page and makes it
 ASCII-only (HTML entities / \\u escapes) so it opens correctly from disk
 in any browser regardless of encoding detection.
 
-Usage: python3 tools/build.py            -> writes motogp.html
+Usage: python3 tools/build.py            -> writes index.html
        python3 tools/build.py --utf8 X   -> also writes a UTF-8 artifact body to X
 """
 import os, sys
@@ -49,9 +49,9 @@ def main():
            + body.replace('<canvas id="game"', '</head>\n<body style="margin:0">\n<canvas id="game"', 1)
            + '</body>\n</html>\n')
     assert all(ord(c) < 128 for c in out)
-    with open(os.path.join(ROOT, 'motogp.html'), 'w', encoding='ascii', newline='\n') as f:
+    with open(os.path.join(ROOT, 'index.html'), 'w', encoding='ascii', newline='\n') as f:
         f.write(out)
-    print('motogp.html', len(out), 'bytes')
+    print('index.html', len(out), 'bytes')
 
 
 if __name__ == '__main__':

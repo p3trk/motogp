@@ -1,6 +1,6 @@
 # Silverstone GP — Game Design Document
 
-**Version:** 1.7.0 · **Last updated:** 2026-10-28 · **Owner:** Petr
+**Version:** 1.7.1 · **Last updated:** 2026-10-28 · **Owner:** Petr
 
 This document is the source of truth for how the game should work. Every
 change starts here: update the GDD on a feature branch first, then change the
@@ -13,7 +13,7 @@ code to match (see [§14 Change process](#14-change-process)).
 | | |
 |---|---|
 | Genre | 2D top-down motorcycle racing sim |
-| Platform | Desktop browser, single self-contained HTML file (`motogp.html`), keyboard only |
+| Platform | Desktop browser, single self-contained HTML file (`index.html`), keyboard only |
 | Track | Silverstone Grand Prix circuit, 5.89 km, 18 turns |
 | Player fantasy | Ride a MotoGP prototype around a realistic Silverstone against a full grid, manage fuel and damage, and chase lap records |
 | Pillars | Believable physics · readable top-down racing · full race weekend feel · fast to start, nothing to install |
@@ -146,8 +146,8 @@ Two cameras, switched with **C** or in the menu.
 - A chase view from behind and slightly above the bike. The flat 2D world is tilted back in true perspective (see Tuning below).
 - Near track is big, which keeps the feel of speed. Far track shrinks towards the horizon, so corners coming up are visible much earlier than top-down.
 - The bike sits ~20 % above the bottom edge. The view rotates with the bike's heading, smoothed. Bikes are drawn at least ~40 px long so they stay readable when zoomed out (visual only).
-- Zoom eases out with speed: `ppm = min(20, min(VW, 1.25·VH) / (30 + 1.45·v))`.
-  - At 300 km/h roughly 250–300 m of track ahead is on screen.
+- Zoom eases out with speed: `ppm = min(20, min(VW, 1.25·VH) / (30 + 1.0·v))`. Since 1.7.1 it is closer at speed (it was `1.45·v`), because the far view made the game feel slow.
+  - At 300 km/h roughly 200 m of track ahead is on screen, about the Stowe braking distance.
   - In a slow corner it stays close.
 - HUD, name tags and panels are drawn flat on a separate layer on top. Name tags are projected through the same perspective.
 - **Implementation:** the ground plane is rendered top-down into two offscreen canvases.
@@ -200,7 +200,7 @@ where the ideal speed drops by more than 80 km/h.
 ## 13. Technical design
 
 - Single HTML file; no external code, only Google Fonts (Saira Condensed, Barlow). The built file is ASCII-only so it opens correctly from disk.
-- Source in `src/` (`head.html`, `core.js`, `world.js`, `render.js`, `ui.js`, `track.txt`), joined by `tools/build.py` into `motogp.html`.
+- Source in `src/` (`head.html`, `core.js`, `world.js`, `render.js`, `ui.js`, `track.txt`), joined by `tools/build.py` into `index.html`.
 - Performance:
   - static world baked into 512 px tiles of 40 m (LRU cache of 160);
   - device pixel ratio capped at 1.5, dropping to 1 when frames are slow;
@@ -230,4 +230,4 @@ The repository is local only (no remote push).
 
 ## 16. Version history
 
-See `CHANGELOG.md`. Current: **1.7.0**.
+See `CHANGELOG.md`. Current: **1.7.1**.

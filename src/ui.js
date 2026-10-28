@@ -88,7 +88,7 @@ function drawHUD(dt) {
   const st = standings(); const pos = st.indexOf(b) + 1;
   if (W.mode === 'race') {
     txt('P' + pos, cx + 16, cy + 50, 46, '#ffcf1f', 800, 'left', true);
-    txt('/' + W.bikes.length, cx + 16 + ctx.measureText('P' + pos).width + 4, cy + 50, 18, '#8d9aa4', 700);
+    txt('/' + st.length, cx + 16 + ctx.measureText('P' + pos).width + 4, cy + 50, 18, '#8d9aa4', 700);
     txt('LAP', cx + cw - 16, cy + 22, 12, '#8d9aa4', 600, 'right');
     txt(Math.min(W.totalLaps, b.lap + 1) + '/' + W.totalLaps, cx + cw - 16, cy + 52, 30, '#fff', 800, 'right', true);
   } else {
@@ -157,6 +157,14 @@ function drawHUD(dt) {
     const label = '#' + o.num + ' ' + o.short; ctx.font = `700 12px ${FD}`; const tw = ctx.measureText(label).width + 10;
     ctx.fillStyle = 'rgba(9,13,16,.75)'; ctx.fillRect(sx - tw / 2, sy - 34, tw, 16); ctx.fillStyle = TEAMS[o.team].c1; ctx.fillRect(sx - tw / 2, sy - 34, 3, 16);
     txt(label, sx + 1, sy - 22, 12, '#fff', 700, 'center'); ctx.globalAlpha = 1;
+  }
+  for (const o of W.ghosts) {
+    if (!o.show) continue; const dd = Math.hypot(o.x - b.x, o.y - b.y); if (dd > 90) continue;
+    const [sx, sy] = worldToScreen(o.x, o.y); if (sx < 0 || sy < 0 || sx > VW || sy > VH) continue;
+    ctx.globalAlpha = clamp((90 - dd) / 20, 0, 0.85);
+    const label = '#' + o.num + ' ' + o.short + ' GHOST'; ctx.font = `700 12px ${FD}`; const tw = ctx.measureText(label).width + 10;
+    ctx.fillStyle = 'rgba(30,60,90,.75)'; ctx.fillRect(sx - tw / 2, sy - 34, tw, 16); ctx.fillStyle = TEAMS[o.team].c1; ctx.fillRect(sx - tw / 2, sy - 34, 3, 16);
+    txt(label, sx + 1, sy - 22, 12, '#bfe4ff', 700, 'center'); ctx.globalAlpha = 1;
   }
   if (b.crashed) { txt('Recovering rider…', VW / 2, VH * 0.36 + 56, 15, '#c9d2d8', 600, 'center'); }
 }
@@ -261,7 +269,8 @@ function drawTower(st, me) {
       if (o === me) { ctx.fillStyle = 'rgba(255,207,31,.18)'; ctx.fillRect(x + 2, yy, w - 4, rowH); }
       txt(String(p), x + 22, yy + 14, 14, o === me ? '#ffcf1f' : '#fff', 800, 'right', true);
       ctx.fillStyle = TEAMS[o.team].c1; ctx.fillRect(x + 28, yy + 3, 4, rowH - 6);
-      txt(o.isPlayer ? o.short : o.short, x + 38, yy + 14, 14, '#fff', 700);
+      txt(o.short, x + 38, yy + 14, 14, o.ghost ? '#9fd8ff' : '#fff', 700);
+      if (o.ghost) txt('G', x + 38 + ctx.measureText(o.short).width + 4, yy + 14, 10, '#9fd8ff', 800);
       let g = '';
       if (o.dnf) g = 'OUT'; else if (o.crashed) g = 'CRASH'; else if (o.inPitLane) g = 'PIT'; else if (o.finished) g = '🏁'.length ? 'FIN' : ''; else if (p === 1) g = 'Leader'; else { const lapsDown = st[0].lap - o.lap - (st[0].s < o.s ? 1 : 0); g = lapsDown >= 1 ? '+' + lapsDown + ' LAP' : '+' + ((gapOf(o) || 0) - lead).toFixed(1); }
       txt(g, x + w - 10, yy + 14, 13, g === 'PIT' ? '#ffcf1f' : (g === 'OUT' || g === 'CRASH') ? '#e3312a' : '#c9d2d8', 600, 'right');
@@ -269,7 +278,7 @@ function drawTower(st, me) {
   } else {
     let rows;
     if (W.mode === 'quali') rows = W.qualiAI.map(q => ({ short: q.name.split(' ').slice(-1)[0].toUpperCase().slice(0, 3), t: q.best, me: false, c: '#8d9aa4' })).concat([{ short: me.short, t: me.bestLap || 1e9, me: true }]).sort((a, c) => a.t - c.t);
-    else { rows = me.laps.slice(-12).map((t, k, arr) => ({ short: 'LAP ' + (me.laps.length - arr.length + k + 1), t, me: t === me.bestLap })); if (Records.d.traceT) rows.unshift({ short: 'ALL-TIME', t: Records.d.traceT, me: false, rec: true }); }
+    else { rows = me.laps.slice(-12).map((t, k, arr) => ({ short: 'LAP ' + (me.laps.length - arr.length + k + 1), t, me: t === me.bestLap })); if (Records.d.traceT) rows.unshift({ short: 'ALL-TIME', t: Records.d.traceT, me: false, rec: true }); W.ghosts.forEach((g, k) => rows.splice(k + (Records.d.traceT ? 1 : 0), 0, { short: 'GHOST ' + g.short, t: g.recBest, me: false, gh: true })); }
     const maxRows = Math.max(6, Math.floor((VH - 200 - 56) / rowH)); let start = 0;
     if (rows.length > maxRows) { const mi = rows.findIndex(r => r.me); start = clamp(mi - Math.floor(maxRows / 2), 0, rows.length - maxRows); }
     const vis = rows.slice(start, start + maxRows);
@@ -279,8 +288,9 @@ function drawTower(st, me) {
       const yy = y + 26 + k * rowH;
       if (r.me) { ctx.fillStyle = W.mode === 'quali' ? 'rgba(255,207,31,.18)' : 'rgba(180,107,255,.2)'; ctx.fillRect(x + 2, yy, w - 4, rowH); }
       if (W.mode === 'quali') txt(String(start + k + 1), x + 22, yy + 14, 14, r.me ? '#ffcf1f' : '#fff', 800, 'right', true);
-      txt(r.short, x + (W.mode === 'quali' ? 30 : 10), yy + 14, 14, r.rec ? '#b46bff' : '#fff', 700);
-      txt(r.t < 1e8 ? fmtTime(r.t) : 'NO TIME', x + w - 10, yy + 14, 13, r.rec ? '#b46bff' : '#c9d2d8', 600, 'right');
+      const rc = r.rec ? '#b46bff' : r.gh ? '#9fd8ff' : null;
+      txt(r.short, x + (W.mode === 'quali' ? 30 : 10), yy + 14, 14, rc || '#fff', 700);
+      txt(r.t < 1e8 ? fmtTime(r.t) : 'NO TIME', x + w - 10, yy + 14, 13, rc || '#c9d2d8', 600, 'right');
     });
   }
 }
@@ -294,6 +304,7 @@ function drawMinimap(me) {
     const [mx, my] = M.tf(px, py); ctx.fillStyle = o === me ? '#ffcf1f' : TEAMS[o.team].c1; ctx.strokeStyle = '#000'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.arc(x + mx * k, y + my * k, o === me ? 5 : 3.2, 0, TAU); ctx.fill(); ctx.stroke();
   }
+  for (const o of W.ghosts) { if (!o.show) continue; const [mx, my] = M.tf(o.x, o.y); ctx.strokeStyle = '#bfe4ff'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.arc(x + mx * k, y + my * k, 3.4, 0, TAU); ctx.stroke(); }
 }
 
 // ---------------------------------------------------------------------------
@@ -379,6 +390,19 @@ const UI = {
     $('btnRestart').addEventListener('click', () => { this.hideAll(); this.launch(W.kind === 'quali' ? 'quali' : this.opts.mode, W.kind === 'gp' ? { qualiGrid: W.opts.qualiGrid } : {}); });
     $('btnQuit').addEventListener('click', () => this.toMenu());
     $('btnEndQ').addEventListener('click', () => { this.hideAll(); this.finishQuali(); });
+    $('btnExport').addEventListener('click', () => Lib.export(Rec.snapshot()));
+    $('btnImport').addEventListener('click', () => $('fileImport').click());
+    $('fileImport').addEventListener('change', e => { Lib.importFiles([...e.target.files], 'import'); e.target.value = ''; });
+    $('btnFolder').addEventListener('click', () => { if (Lib.canPickDir()) Lib.pickDir(); else $('dirImport').click(); });
+    $('dirImport').addEventListener('change', e => { Lib.importFiles([...e.target.files], 'folder'); e.target.value = ''; });
+    $('btnReloadDir').addEventListener('click', () => Lib.reloadDir());
+    $('recList').addEventListener('click', e => {
+      const bt = e.target.closest('button[data-act]'); if (!bt) return; const id = bt.dataset.id;
+      if (bt.dataset.act === 'ghost') Lib.toggleGhost(id);
+      else if (bt.dataset.act === 'export') Lib.get(id).then(R => Lib.export(R));
+      else if (bt.dataset.act === 'del') { if (bt.dataset.armed) Lib.del(id); else { bt.dataset.armed = '1'; bt.textContent = 'Sure?'; setTimeout(() => this.renderLib(), 3000); } }
+    });
+    Lib.onChange = () => this.renderLib();
     this.sync();
   },
   sync() {
@@ -402,16 +426,31 @@ const UI = {
     el.innerHTML = `<div class="recs">${best}<div class="rec"><span class="lbl">Laps logged</span><b>${n}</b></div></div><div class="tablewrap"><table><thead><tr><th>Lap</th><th>Session</th><th>Sectors</th><th>When</th></tr></thead><tbody>${last}</tbody></table></div>`;
     $('btnClearRec').hidden = false; $('btnClearRec').textContent = 'Clear saved laps';
   },
+  renderLib() {
+    const el = $('recList'); if (!el) return;
+    const lbl = { practice: 'Practice', quali: 'Qualifying', sprint: '10 lap race', gp: 'Grand Prix' };
+    const src = { auto: '', import: 'imported', folder: 'saved_tracks' };
+    $('recStatus').textContent = Lib.status || (Lib.db ? '' : 'Browser storage is blocked here, recordings are kept until the page closes.');
+    $('btnReloadDir').hidden = !Lib.dir; if (Lib.dir) $('btnReloadDir').textContent = 'Reload ' + Lib.dir.name;
+    $('recGhostHint').textContent = Lib.ghosts.length ? `${Lib.ghosts.length} ghost${Lib.ghosts.length === 1 ? '' : 's'} selected. They ride with you in Practice and in races (each one replaces a slow AI rider).` : 'Switch on Ghost to ride against a recording in Practice or a race (up to 4).';
+    if (!Lib.meta.length) { el.innerHTML = '<span class="small">No recordings yet. Every session with a completed lap or a race start is recorded automatically.</span>'; return; }
+    el.innerHTML = '<table><thead><tr><th>Ghost</th><th>Rider</th><th>Session</th><th>Best lap</th><th>Laps</th><th>Result</th><th>When</th><th></th></tr></thead><tbody>' + Lib.meta.map(m => {
+      const on = Lib.ghosts.includes(m.id);
+      const res = m.raceStart ? (m.position ? 'P' + m.position + (m.finishT ? ' · ' + fmtTime(m.finishT) : '') : 'DNF') : '';
+      return `<tr><td><button class="chip" data-act="ghost" data-id="${esc(m.id)}" aria-pressed="${on}">${on ? 'Ghost on' : 'Ghost'}</button></td><td>${sw(clamp(m.rider.team | 0, 0, TEAMS.length - 1))}#${m.rider.num | 0} ${esc(m.rider.name)}</td><td>${lbl[m.kind] || esc(m.mode)}${src[m.src] ? ' <span class="small">· ' + src[m.src] + '</span>' : ''}</td><td>${m.bestLap ? fmtTime(m.bestLap) : '–'}</td><td>${m.laps | 0}</td><td>${res}</td><td class="small">${new Date(m.date).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</td><td><button class="chip" data-act="export" data-id="${esc(m.id)}">Export</button> <button class="chip" data-act="del" data-id="${esc(m.id)}">Delete</button></td></tr>`;
+    }).join('') + '</tbody></table>';
+  },
   hideAll() { for (const id of ['menu', 'pause', 'results']) $(id).hidden = true; },
-  toMenu() { this.hideAll(); this.state = 'menu'; W.paused = false; $('menu').hidden = false; this.renderRecords(); },
+  toMenu() { Rec.stop(); this.hideAll(); this.state = 'menu'; W.paused = false; $('menu').hidden = false; this.renderRecords(); },
   start() { Sound.start(); this.launch(this.opts.mode === 'gp' ? 'quali' : this.opts.mode, {}); },
   sessionOpts(extra) {
     const o = this.opts;
     return Object.assign({ name: o.name, num: o.num, team: o.team, aids: o.aids === 'on', auto: o.trans === 'auto', level: o.ai, fuelPct: o.fuel / 100, gridPos: o.grid, guide: o.guide === 'on' }, extra);
   },
   launch(kind, extra) {
-    this.hideAll(); this.state = 'play'; setCamMode(this.opts.cam); CAM.init = false;
-    setupSession(kind, this.sessionOpts(extra));
+    Rec.stop(); this.hideAll(); this.state = 'play'; setCamMode(this.opts.cam); CAM.init = false;
+    setupSession(kind, this.sessionOpts(Object.assign({ ghosts: Lib.ghostRecs() }, extra)));
+    Rec.start();
     if (kind === 'gp' || kind === 'sprint') W.kind = kind;
     $('btnEndQ').hidden = kind !== 'quali';
   },
@@ -422,25 +461,27 @@ const UI = {
     if (W.paused) $('btnResume').focus();
   },
   finishQuali() {
+    const rec = Rec.stop();
     const me = W.player; const rows = W.qualiAI.map(q => ({ id: q.id, name: q.name, num: q.num, t: q.best, me: false })).concat([{ id: 0, name: me.name, num: me.num, t: me.bestLap || 1e9, me: true }]).sort((a, b) => a.t - b.t);
     const grid = rows.map(r => r.id);
     const pole = rows[0].t;
     this.results('Qualifying', 'Grid for the 20 lap British Grand Prix', `Your best: ${me.bestLap ? fmtTime(me.bestLap) : 'no time set'} · P${rows.findIndex(r => r.me) + 1}`,
       ['Pos', '#', 'Rider', 'Team', 'Best lap', 'Gap'],
       rows.map((r, k) => { const team = r.me ? me.team : W.bikes.length ? teamForId(r.id, me.team) : 0; return { me: r.me, cells: [k + 1, r.num, r.name, sw(team) + TEAMS[team].name, r.t < 1e8 ? fmtTime(r.t) : 'No time', k ? (r.t < 1e8 ? '+' + (r.t - pole).toFixed(3) : '') : 'Pole'] }; }),
-      [['Start the race', () => this.launch('gp', { qualiGrid: grid })], ['Back to menu', () => this.toMenu(), true]]);
+      [['Start the race', () => this.launch('gp', { qualiGrid: grid })], ...(rec ? [['Export session', () => Lib.export(rec), true]] : []), ['Back to menu', () => this.toMenu(), true]]);
   },
   raceResults() {
     // let the rest of the field finish (fast-forward)
+    const rec = Rec.stop();
     W.player.autopilot = true;
-    let guard = 0; while (W.bikes.some(b => !b.finished && !b.dnf) && guard < 120 * 240) { simStep(SUB); guard++; }
+    let guard = 0; while ((W.bikes.some(b => !b.finished && !b.dnf) || W.ghosts.some(g => !g.finished && !g.dnf)) && guard < 120 * 240) { simStep(SUB); guard++; }
     const st = standings(); const win = st[0];
     const me = W.player; const myPos = st.indexOf(me) + 1;
-    let fl = null; for (const b of W.bikes) if (b.bestLap && (!fl || b.bestLap < fl.bestLap)) fl = b;
-    this.results('Race result', 'British Grand Prix · ' + W.totalLaps + ' laps', me.dnf ? 'You did not finish.' : `You finished P${myPos} of ${W.bikes.length}. Fastest lap: #${fl.num} ${fl.name} ${fmtTime(fl.bestLap)}`,
+    let fl = null; for (const b of st) if (b.bestLap && (!fl || b.bestLap < fl.bestLap)) fl = b;
+    this.results('Race result', 'British Grand Prix · ' + W.totalLaps + ' laps', me.dnf ? 'You did not finish.' : `You finished P${myPos} of ${st.length}. Fastest lap: #${fl.num} ${fl.name} ${fmtTime(fl.bestLap)}`,
       ['Pos', '#', 'Rider', 'Team', 'Time / gap', 'Best lap', 'Pits'],
-      st.map((b, k) => ({ me: b === me, cells: [b.dnf ? 'DNF' : k + 1, b.num, b.name, sw(b.team) + TEAMS[b.team].name, b.dnf ? 'Retired' : k === 0 ? fmtTime(b.finishT) : (b.lap < win.lap ? '+' + (win.lap - b.lap) + ' lap' + (win.lap - b.lap > 1 ? 's' : '') : '+' + (b.finishT - win.finishT).toFixed(3)), b.bestLap ? (b === fl ? '<span class="pb">' + fmtTime(b.bestLap) + '</span>' : fmtTime(b.bestLap)) : '–', b.pits] })),
-      [['Race again', () => this.launch(W.kind, W.kind === 'gp' ? { qualiGrid: W.opts.qualiGrid } : {})], ['Back to menu', () => this.toMenu(), true]]);
+      st.map((b, k) => ({ me: b === me, cells: [b.dnf ? 'DNF' : k + 1, b.num, b.ghost ? b.name.replace(' (ghost)', '') + ' · GHOST' : b.name, sw(b.team) + TEAMS[b.team].name, b.dnf ? 'Retired' : k === 0 ? fmtTime(b.finishT) : (b.lap < win.lap ? '+' + (win.lap - b.lap) + ' lap' + (win.lap - b.lap > 1 ? 's' : '') : '+' + (b.finishT - win.finishT).toFixed(3)), b.bestLap ? (b === fl ? '<span class="pb">' + fmtTime(b.bestLap) + '</span>' : fmtTime(b.bestLap)) : '–', b.ghost ? '–' : b.pits] })),
+      [['Race again', () => this.launch(W.kind, W.kind === 'gp' ? { qualiGrid: W.opts.qualiGrid } : {})], ...(rec ? [['Export session', () => Lib.export(rec), true]] : []), ['Back to menu', () => this.toMenu(), true]]);
   },
   results(eyebrow, title, sub, head, rows, actions) {
     this.state = 'results'; this.hideAll();
@@ -484,7 +525,7 @@ function frame(now) {
 function boot() {
   resize(); window.addEventListener('resize', resize);
   buildTextures(); buildGeometry(); buildMinimap();
-  UI.init();
+  UI.init(); Lib.init();
   // attract mode behind the menu: AI field circulating
   setupSession('sprint', UI.sessionOpts({ gridPos: 'mid' }));
   W.player.autopilot = true; W.phase = 'run'; for (const b of W.bikes) { b.held = false; b.lapStartT = 0; }
@@ -492,5 +533,5 @@ function boot() {
   requestAnimationFrame(t => { last = t; requestAnimationFrame(frame); });
   setInterval(() => { if (UI.state === 'menu') { for (let k = 0; k < 4; k++) simStep(SUB); } }, 1000 / 30);
 }
-window.__sgp = { W, T, PHYS, Input, FX, Records, completeLapX: b => completeLap(b), drawWorldX: () => drawWorld(), setupSession, simStep, standings, UI, SUB, setAIReal: v => { AI_REAL = v; } };
+window.__sgp = { Rec, Lib, Ghost, W, T, PHYS, Input, FX, Records, completeLapX: b => completeLap(b), drawWorldX: () => drawWorld(), setupSession, simStep, standings, UI, SUB, setAIReal: v => { AI_REAL = v; } };
 if (document.fonts && document.fonts.ready) { Promise.race([document.fonts.ready, new Promise(r => setTimeout(r, 1500))]).then(boot).catch(e => { console.error("boot failed", e && e.stack); }); } else boot();

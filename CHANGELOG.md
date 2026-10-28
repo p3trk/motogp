@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.8.0 (2026-10-28)
+- Every session is recorded (10 Hz positions plus laps, race start and finish) and kept when it has a timed lap or a race start.
+- New menu panel **Recordings & ghosts**: list, export to JSON, import JSON files, delete, and pick up to 4 recordings as ghost opponents.
+- `saved_tracks/` folder: Chrome/Edge link it once with **Open saved_tracks folder…**, then **Reload saved_tracks** re-reads it and new sessions are saved into it automatically. Safari/Firefox read it with a folder picker. Over http(s), `saved_tracks/index.json` (made by `tools/index_saved_tracks.py`) loads automatically.
+- **Export session** in the pause menu and on the results screen.
+- Ghosts: translucent bikes with a GHOST tag and hollow minimap dots, no collisions. In Practice they replay their best lap from the start of each of your timed laps. In races each ghost takes the place of one of the slowest AI riders and counts in positions, gaps, the timing tower and results.
+
 ## v1.7.2 (2026-10-28)
 - The start-light countdown begins immediately when a race starts or restarts, with no 2.5 s grid wait. The first light is on at once.
 

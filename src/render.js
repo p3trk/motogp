@@ -437,6 +437,7 @@ function drawWorldLayer(Ly, sx, sy) {
   drawBuildings(vis, false);
   // bikes
   const list = W.bikes.slice().sort((a, b) => (a.isPlayer ? 1 : 0) - (b.isPlayer ? 1 : 0));
+  ctx.globalAlpha = 0.42; for (const g of W.ghosts) if (g.show) drawBike(g, vis); ctx.globalAlpha = 1;
   for (const b of list) if (!b.dnf || b.crash) drawBikeShadow(b, vis);
   for (const b of list) drawBike(b, vis);
   drawParticles(vis);

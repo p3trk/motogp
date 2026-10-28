@@ -24,7 +24,7 @@ const FX = {
 // World / session
 // ---------------------------------------------------------------------------
 const W = {
-  bikes: [], player: null, mode: 'practice', kind: 'practice', totalLaps: 0, time: 0, phase: 'run', flag: false, rand: mulberry(7),
+  bikes: [], ghosts: [], player: null, mode: 'practice', kind: 'practice', totalLaps: 0, time: 0, phase: 'run', flag: false, rand: mulberry(7),
   infiniteFuel: false, fx: FX, passT: null, lights: 0, lightsOutAt: 0, raceStartT: 0, msgs: [], opts: null, qualiAI: null, qualiGrid: null,
   finishOrder: [], paused: false, resultsShown: false, endTimer: 0, bestTrace: null, curTrace: null,
   event(b, type, info) {
@@ -61,7 +61,7 @@ const AI_LEVEL = { rookie: 0.905, pro: 0.955, legend: 0.99 };
 function setupSession(kind, opts) {
   W.opts = opts; W.kind = kind; W.mode = kind === 'practice' ? 'practice' : kind === 'quali' ? 'quali' : 'race';
   W.totalLaps = kind === 'sprint' ? 10 : kind === 'gp' ? 20 : 0;
-  W.time = 0; W.flag = false; W.finishOrder = []; W.resultsShown = false; W.endTimer = 0; W.msgs = []; W.paused = false;
+  W.time = 0; W.raceStartT = 0; W.flag = false; W.finishOrder = []; W.resultsShown = false; W.endTimer = 0; W.msgs = []; W.paused = false;
   W.rand = mulberry((Math.random() * 1e9) | 0); FX.rand = W.rand; FX.clear();
   W.infiniteFuel = false;
   W.bikes = [];
@@ -82,6 +82,9 @@ function setupSession(kind, opts) {
       W.bikes.push(b);
     });
   }
+  // ghost opponents (GDD 11c): in a race each one takes the place of one of the slowest AI riders
+  Ghost.setup(opts.ghosts || []);
+  if (W.mode === 'race') for (const b of W.bikes.filter(b => !b.isPlayer).sort((a, b) => a.ai.pace - b.ai.pace).slice(0, W.ghosts.length)) W.bikes.splice(W.bikes.indexOf(b), 1);
   // box assignment: teammates share neighbouring boxes in team order
   const order = W.bikes.slice().sort((a, b) => a.team - b.team || a.id - b.id); order.forEach((b, k) => b.box = k);
   const N = T.N;
@@ -177,6 +180,7 @@ function simStep(dt) {
     timing(b);
     effects(b, dt);
   }
+  Ghost.step(); Rec.sample();
   collide(bikes);
   FX.step(dt);
   for (const b of bikes) if (b.crashed) { b.prevS = b.s; }
@@ -286,6 +290,7 @@ function completeLap(b) {
   const lt = W.time - b.lapStartT; const t3 = W.time - b.secStart; b.lastSec[2] = t3;
   if (b.isPlayer) HUD.sector(2, t3, b.bestSec[2]);
   if (!b.bestSec[2] || t3 < b.bestSec[2]) b.bestSec[2] = t3;
+  if (b.isPlayer) Rec.lap(W.time - lt, W.time, lt, b.autopilot);
   b.lastLap = lt; b.laps.push(lt); const pb = !b.bestLap || lt < b.bestLap; if (pb) b.bestLap = lt;
   b.lap++; b.lapStartT = W.time; b.secStart = W.time; b.cp = 0;
   const used = b.fuelLapStart - b.fuel; if (!b.pittedThisLap && used > 0.8 && used < 6) b.fuelPerLap = lerp(b.fuelPerLap, used, b.laps.length > 1 ? 0.5 : 0.8);
@@ -359,7 +364,7 @@ function collide(bikes) {
 }
 
 function standings() {
-  const bikes = W.bikes.slice();
+  const bikes = W.mode === 'race' ? W.bikes.concat(W.ghosts) : W.bikes.slice();
   if (W.mode === 'race') {
     return bikes.sort((a, b) => {
       if (a.dnf !== b.dnf) return a.dnf ? 1 : -1;

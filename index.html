@@ -1893,11 +1893,13 @@ function projectTilted() {
   const sky = g.createLinearGradient(0, 0, 0, VH - uTop + 2); sky.addColorStop(0, '#6fa3d2'); sky.addColorStop(1, '#c9d8de');
   g.fillStyle = sky; g.fillRect(0, 0, VW, VH - uTop + 2);
   const near = LAYERS[1], far = LAYERS[0], hN = near.h;
-  for (let u0 = 0; u0 < uTop; u0 += 3) {
-    const u1 = Math.min(uTop, u0 + 3.5), h0 = hOf(u0), h1 = hOf(u1), Ly = h1 <= hN ? near : far;
-    const sc = P / (P + (h0 + h1) / 2 * sa), d = Ly.dpr;
-    const sy0 = (RH - h1 - Ly.y0) * d, sh = (h1 - h0) * d; if (sy0 < 0 || sh <= 0) continue;
-    g.drawImage(Ly.c, 0, sy0, Ly.w * d, Math.min(sh, Ly.h * d - sy0), VW / 2 - Ly.w * sc / 2, VH - u1, Ly.w * sc, u1 - u0);
+  // one strip per screen row: the horizontal scale changes from row to row, so taller strips drew straight lines
+  // as small steps, worst where the near and far bands join (GDD 1.11.5)
+  for (let u0 = 0; u0 < uTop; u0 += 1) {
+    const u1 = Math.min(uTop, u0 + 1), h0 = hOf(u0), h1 = hOf(u1), Ly = (h0 + h1) / 2 <= hN ? near : far;
+    const sc = P / (P + (h0 + h1) / 2 * sa), d = Ly.dpr, cw = Ly.c.width;
+    const sy0 = Math.max(0, (RH - h1 - Ly.y0) * d), sh = Math.min(Ly.c.height, (RH - h0 - Ly.y0) * d) - sy0; if (sh <= 0) continue;
+    g.drawImage(Ly.c, 0, sy0, cw, sh, VW / 2 + (Ly.x0 - RW / 2) * sc, VH - u1, cw / d * sc, u1 - u0 + 0.5);
   }
 }
 function drawWorldLayer(Ly, sx, sy) {
@@ -2802,7 +2804,7 @@ function boot() {
   requestAnimationFrame(t => { last = t; requestAnimationFrame(frame); });
   setInterval(() => { if (UI.state === 'menu') { for (let k = 0; k < 4; k++) simStep(SUB); } }, 1000 / 30);
 }
-window.__sgp = { worldToScreenX: (x, y) => worldToScreen(x, y), frameX: t => frame(t), setCamModeX: m => setCamMode(m), CAM, RP, Rec, Lib, Ghost, W, T, PHYS, Input, FX, Records, completeLapX: b => completeLap(b), drawWorldX: () => drawWorld(), setupSession, simStep, standings, UI, SUB, setAIReal: v => { AI_REAL = v; } };
+window.__sgp = { tiltProjectX: draw => { for (const Ly of LAYERS) { const g = Ly.g; g.setTransform(Ly.dpr, 0, 0, Ly.dpr, 0, 0); g.translate(-Ly.x0, -Ly.y0); draw(g, RW, RH); } projectTilted(); return { VW, VH, RW, RH }; }, worldToScreenX: (x, y) => worldToScreen(x, y), frameX: t => frame(t), setCamModeX: m => setCamMode(m), CAM, RP, Rec, Lib, Ghost, W, T, PHYS, Input, FX, Records, completeLapX: b => completeLap(b), drawWorldX: () => drawWorld(), setupSession, simStep, standings, UI, SUB, setAIReal: v => { AI_REAL = v; } };
 if (document.fonts && document.fonts.ready) { Promise.race([document.fonts.ready, new Promise(r => setTimeout(r, 1500))]).then(boot).catch(e => { console.error("boot failed", e && e.stack); }); } else boot();
 
 })();

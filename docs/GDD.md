@@ -1,6 +1,6 @@
 # Silverstone GP — Game Design Document
 
-**Version:** 1.7.0 · **Last updated:** 2026-10-28 · **Owner:** Petr
+**Version:** 1.7.1 · **Last updated:** 2026-10-28 · **Owner:** Petr
 
 This document is the source of truth for how the game should work. Every
 change starts here: update the GDD on a feature branch first, then change the
@@ -146,8 +146,8 @@ Two cameras, switched with **C** or in the menu.
 - A chase view from behind and slightly above the bike. The flat 2D world is tilted back in true perspective (see Tuning below).
 - Near track is big, which keeps the feel of speed. Far track shrinks towards the horizon, so corners coming up are visible much earlier than top-down.
 - The bike sits ~20 % above the bottom edge. The view rotates with the bike's heading, smoothed. Bikes are drawn at least ~40 px long so they stay readable when zoomed out (visual only).
-- Zoom eases out with speed: `ppm = min(20, min(VW, 1.25·VH) / (30 + 1.45·v))`.
-  - At 300 km/h roughly 250–300 m of track ahead is on screen.
+- Zoom eases out with speed: `ppm = min(20, min(VW, 1.25·VH) / (30 + 1.0·v))`. Since 1.7.1 it is closer at speed (it was `1.45·v`), because the far view made the game feel slow.
+  - At 300 km/h roughly 200 m of track ahead is on screen, about the Stowe braking distance.
   - In a slow corner it stays close.
 - HUD, name tags and panels are drawn flat on a separate layer on top. Name tags are projected through the same perspective.
 - **Implementation:** the ground plane is rendered top-down into two offscreen canvases.
@@ -230,4 +230,4 @@ The repository is local only (no remote push).
 
 ## 16. Version history
 
-See `CHANGELOG.md`. Current: **1.7.0**.
+See `CHANGELOG.md`. Current: **1.7.1**.

@@ -22,6 +22,7 @@ const LIMITS = { pos: 0.02, rot: 0.08, dir: 0.08, scr: 2.0 }, WIN0 = 12;
   });
   await page.goto(FILE);
   await page.waitForFunction(() => window.__sgp && document.getElementById('loading').hidden);
+  await page.evaluate(() => { window.__sgp.UI.opts.blur = 'off'; }); // Speed blur Off (since 1.17.0), so the measurements stay as before
   // frame helper inside the page: run n frames of ~60 fps with a little timing jitter, record the camera
   await page.evaluate(() => {
     let t = 1000, seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;

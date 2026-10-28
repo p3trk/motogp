@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.17.0 (2026-10-28)
+- Speed blur: close to top speed the surroundings (grass, gravel, run-off, pit lane, walls, boards, trees, grandstands, buildings, smoke and dust) smear into zoom streaks running outward from the horizon point straight ahead, in the Behind and CLOSE cameras only. Strength fades in from 260 km/h and is full from 330 km/h, so braking zones and corners stay sharp. The road stays sharp with its borders (asphalt, white lines, kerbs, grid boxes, painted names, tyre marks, up to 0.3 m beyond the kerb), and so do the bike, ghosts and other riders, also off the road. Top-down is never blurred.
+- In replay the blur follows the followed bike's recorded speed, also paused and in slow motion.
+- Built cheaply on a 1/4 resolution copy of the screen (three zoomed copies, road and bikes cut out, drawn back with the strength as alpha); no `ctx.filter`. Switched off for the session when the slow-machine quality drop lowers the tilted image quality.
+- Speed blur On / Off on the start screen (default On, saved in `sgp_opts`). Camera tuning has three more sliders per camera: Blur start speed (260), Blur full speed (330, kept at least 10 km/h above the start) and Blur strength (Behind 20 px, CLOSE 24 px; 0 turns it off for that camera). Older saved camera values get these defaults.
+- Tests: new `tests/speed_blur.test.js` (in `npm test`); `tilt_seam` and `camera_shake` run with Speed blur Off; `camera_tuning` expects 15 sliders and checks the blur sliders per camera, their 10 km/h link and Reset.
+
 ## v1.16.0 (2026-10-28)
 - Practice starts on the grid: with Curve training Off the bike stands on the slot chosen with Starting position (Pole / Front row / Mid-pack / Back, one setting shared with the 10 lap race, shown for Practice only with Curve training Off), exactly where it stands in the race. No start lights; the bike is held until the first W, S, A or D press, and lap 1 is a timed standing-start lap from that moment (saved like any lap). The pit box still works for refuelling. Qualifying still starts from the box.
 - R works in all practice: back to the grid slot, or to the training spot with Curve training On; Restart session does the same.

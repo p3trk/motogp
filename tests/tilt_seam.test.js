@@ -5,7 +5,8 @@
 // Draws a test pattern of straight lines through the real projection, in live riding and in replay, and
 // measures how far each line bends sharply from one screen row to the next, and whether the lines get
 // suddenly blurrier at some row (where the sharper near image hands over to the far one).
-// Runs with the Behind camera at three screen sizes and with the CLOSE camera at 1470x830 @2x.
+// Runs with the Behind camera at three screen sizes and with the CLOSE camera at 1470x830 @2x, with Speed blur Off
+// (since 1.17.0), so the measurements stay as before.
 // Usage: node tests/tilt_seam.test.js [path/to/index.html]   (needs Playwright + Chromium)
 const path = require('path');
 const { chromium } = require('playwright');
@@ -62,7 +63,7 @@ const SIZES = [[1280, 800, 1, 'behind'], [1470, 830, 2, 'behind'], [1024, 700, 1
     });
     // live riding (Behind or CLOSE camera), then replay of the recorded lap
     await page.evaluate(cam => {
-      const S = window.__sgp; S.UI.opts.cam = 'behind'; S.UI.opts.train = 'off'; S.UI.launch('practice', {}); S.setCamModeX(cam);
+      const S = window.__sgp; S.UI.opts.cam = 'behind'; S.UI.opts.train = 'off'; S.UI.opts.blur = 'off'; S.UI.launch('practice', {}); S.setCamModeX(cam);
       const W = S.W, b = W.player; b.autopilot = true; b.trainHold = false; W.paused = true; let g = 0;
       while (b.laps.length < 1 && g < 120 * 900) { S.simStep(S.SUB); g++; }
       W.paused = false; S.drawWorldX();

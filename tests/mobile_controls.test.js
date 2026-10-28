@@ -92,7 +92,7 @@ const FILE = 'file://' + path.resolve(process.argv[2] || path.join(__dirname, '.
   await step(5);
   t = await page.evaluate(() => window.__sgp.Touch.tilt);
   c = await ctl();
-  check('tilt: 30 degrees right leans right', t > 0.7 && c.lean > 0, { tilt: t, leanT: c.lean });
+  check('tilt: 30 degrees right leans right', t > 0.5 && c.lean > 0, { tilt: t, leanT: c.lean }); // Low: (30 - 8) / (45 - 8)
   await page.evaluate(() => window.__sgp.Touch.recentre());
   await motion(-4.92, 8.49); await step(5);
   t = await page.evaluate(() => window.__sgp.Touch.tilt);

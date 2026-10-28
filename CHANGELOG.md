@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.18.0 (2026-10-28)
+- Mobile controls (GDD 3a): on a phone or tablet with a touch screen, the left half of the screen brakes and the right half throttles. If both are pressed, brake wins. Lean follows the phone's roll angle in landscape: turning the phone like a steering wheel leans the bike the same way. A 3 degree dead zone, and the zero point is set at each start.
+- Phones always use the automatic gearbox; the Transmission option is hidden there.
+- Options on the start screen: Controls (Auto / Touch / Keyboard), Left side of the screen (Brake / Throttle), Tilt sensitivity (Low 45 / Normal 35 / High 25 degrees). Re-centre tilt in the pause menu.
+- Pause button at the bottom centre during play; in replay the left and right thirds seek 5 s and the middle third plays or pauses.
+- Portrait: the game shows "Turn your phone sideways" and pauses until the phone is turned.
+- Keyboard play is unchanged. Motion access on iPhone is asked for at the Go tap.
+- Tests: new `tests/mobile_controls.test.js` (in `npm test`) checks the phone menu, automatic gearbox, both halves, brake wins, swapped sides, tilt dead zone and lean, re-centre, portrait prompt, and the desktop menu.
+- Not yet checked on a real phone: the tilt direction and the landscape angle mapping, iPhone motion permission, and HTTPS access. The test fakes motion events.
+
 ## v1.17.0 (2026-10-28)
 - Speed blur: close to top speed the surroundings (grass, gravel, run-off, pit lane, walls, boards, trees, grandstands, buildings, smoke and dust) smear into zoom streaks running outward from the horizon point straight ahead, in the Behind and CLOSE cameras only. Strength fades in from 260 km/h and is full from 330 km/h, so braking zones and corners stay sharp. The road stays sharp with its borders (asphalt, white lines, kerbs, grid boxes, painted names, tyre marks, up to 0.3 m beyond the kerb), and so do the bike, ghosts and other riders, also off the road. Top-down is never blurred.
 - In replay the blur follows the followed bike's recorded speed, also paused and in slow motion.

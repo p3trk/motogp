@@ -193,7 +193,7 @@ function simStep(dt) {
   for (const b of bikes) { if (b.isPlayer && !b.autopilot) playerControl(b, dt); else aiControl(b, dt, W); }
   for (const b of bikes) {
     const pd = b.d;
-    if (b.trainHold) { const K = Input.k; if (K.KeyW || K.KeyS || K.KeyA || K.KeyD || K.ArrowUp || K.ArrowDown || K.ArrowLeft || K.ArrowRight) b.trainHold = false; else continue; }
+    if (b.trainHold) { const K = Input.k; if (K.KeyW || K.KeyS || K.KeyA || K.KeyD || K.ArrowUp || K.ArrowDown || K.ArrowLeft || K.ArrowRight || Touch.gas || Touch.brk || Touch.tilt !== 0) b.trainHold = false; else continue; }
     if (b.isPlayer && W.startT < 0 && W.mode === 'practice') startMoment(b);
     stepBike(b, dt, W);
     if (b.crashed || b.dnf) continue;
@@ -220,11 +220,13 @@ function startMoment(b) {
 
 function playerControl(b, dt) {
   const K = Input.k, c = b.ctl;
-  const gas = K.KeyW || K.ArrowUp, brk = K.KeyS || K.ArrowDown;
+  const brk = K.KeyS || K.ArrowDown || Touch.brk;
+  const gas = K.KeyW || K.ArrowUp || (Touch.gas && !Touch.brk); // on touch the brake wins (GDD 3a)
   const left = K.KeyA || K.ArrowLeft, right = K.KeyD || K.ArrowRight;
   c.thr = clamp(c.thr + (gas ? 7 : -9) * dt, 0, 1);
   c.brk = clamp(c.brk + (brk ? 8 : -12) * dt, 0, 1);
-  const st = (right ? 1 : 0) - (left ? 1 : 0);
+  let st = (right ? 1 : 0) - (left ? 1 : 0);
+  if (Touch.on && !left && !right) st = Touch.tilt; // phone tilt (GDD 3a)
   c.steer = st; c.leanT = st * PHYS.maxLean;
   if (W.phase !== 'run' && W.mode === 'race') { c.brk = 1; }
   if (b.limiter && b.v > PHYS.pitLimit - 0.3) { c.thr = Math.min(c.thr, 0.0); if (b.v > PHYS.pitLimit + 0.5) c.brk = Math.max(c.brk, clamp((b.v - PHYS.pitLimit) * 0.25, 0, 1)); }

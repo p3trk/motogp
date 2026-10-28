@@ -1,6 +1,6 @@
 # Silverstone GP — Game Design Document
 
-**Version:** 1.17.0 · **Last updated:** 2026-10-28 · **Owner:** Petr
+**Version:** 1.18.0 · **Last updated:** 2026-10-28 · **Owner:** Petr
 
 This document is the source of truth for how the game should work. Every
 change starts here: update the GDD on a feature branch first, then change the
@@ -13,7 +13,7 @@ code to match (see [§14 Change process](#14-change-process)).
 | | |
 |---|---|
 | Genre | 2D top-down motorcycle racing sim |
-| Platform | Desktop browser, single self-contained HTML file (`index.html`), keyboard only |
+| Platform | Desktop browser, single self-contained HTML file (`index.html`), keyboard. Since 1.18.0 also phones in landscape (touch and tilt, §3a) |
 | Track | Silverstone Grand Prix circuit, 5.89 km, 18 turns |
 | Player fantasy | Ride a MotoGP prototype around a realistic Silverstone against a full grid, manage fuel and damage, and chase lap records |
 | Pillars | Believable physics · readable top-down racing · full race weekend feel · fast to start, nothing to install |
@@ -63,13 +63,43 @@ Before 1.16.0 normal practice started in the pit box, and the player had to ride
 | Space, ←/→, ↓/↑, [ ], Tab | Replay viewer only: play/pause, jump 5 s, speed, lap, followed bike (§11e) |
 | Esc | Pause menu (resume, restart, end qualifying, quit). In Practice it also shows the Curve training map (§11d) |
 
+Keyboard controls stay the same on phones with a keyboard. Touch and tilt controls for phones are in §3a.
+
+## 3a. Mobile controls (since 1.18.0)
+
+Used when the game runs on a phone or tablet (touch screen, no keyboard). The desktop keys in §3 keep working on any device with a keyboard.
+
+| Control | Action |
+|---|---|
+| Left half of the screen | Brake (default) |
+| Right half of the screen | Throttle (default) |
+| Rotate the phone | Lean. Tilting it left leans the bike left, right leans right |
+| Pause button (bottom centre, between the two bottom panels) | Opens the pause menu (§11, Esc) |
+
+- **Automatic only:** on phones the gearbox is always automatic (§4). There are no shift buttons.
+- **Always on:** the brake and throttle halves and the tilt lean are always active on phones. They are not switched on in the menu.
+- **Swap sides:** an option (§4) puts Throttle on the left and Brake on the right, for riders who want their hands the other way round.
+- **Both halves pressed:** Brake wins, so the bike never accelerates and brakes at once.
+- **Lean by tilt:**
+  - The lean target follows the phone's roll angle in landscape. Rolling it through about 35° reaches full lean, which the rider aids (§4) still limit as on keyboard.
+  - A dead zone of 3° around the straight-up position stops small hand movements from leaning the bike.
+  - The zero point is the phone's angle when the race or session starts. Pause and resume keep the same zero. The pause menu has **Re-centre** to set a new zero.
+  - Tilt sensitivity can be Low (full lean at 45°), Normal (35°) or High (25°).
+- **Landscape only:** in portrait the game shows a "Turn your phone sideways" screen and pauses. Landscape is needed because the tilt is read from the roll angle.
+- **Permission:** iPhone Safari asks for motion access the first time the player taps Start. If access is refused, lean is off and the message says so; brake and throttle still work.
+- **Layout:** the brake and throttle areas have a faint tint so the player can see where to press. The HUD sits at the same places as on desktop, and the bottom controls are kept clear of the speedometer and fuel.
+- **Replay:** on phones, tapping the left or right third of the replay steps back or forward 5 s, and tapping the middle third plays or pauses. The keyboard keys in §3 still work.
+
 ## 4. Options (menu)
 
 Stored in `localStorage` key `sgp_opts`. The camera choice is remembered for all three cameras (before 1.14.0 only Top-down was kept; a saved Behind was dropped and fell back to the default, which was also Behind).
 
 | Option | Values | Default |
 |---|---|---|
-| Transmission | Manual / Automatic | Manual |
+| Transmission | Manual / Automatic. On phones always Automatic and not shown (since 1.18.0) | Manual |
+| Controls (since 1.18.0) | Auto (touch on phones, keyboard elsewhere) / Touch / Keyboard. Touch shows the on-screen halves (§3a) | Auto |
+| Left side is (since 1.18.0, touch only) | Brake / Throttle | Brake |
+| Tilt sensitivity (since 1.18.0, phones) | Low (full lean at 45°) / Normal (35°) / High (25°) | Normal |
 | Rider aids (lean limiter + traction control) | On / Off | On |
 | AI level | Rookie (0.905) / Pro (0.955) / Legend (0.99) of ideal pace | Pro |
 | Camera | Behind (tilted) / CLOSE (tilted, low and close, since 1.14.0) / Top-down | Behind |
@@ -161,6 +191,7 @@ Stored in `localStorage` key `sgp_records`, format `{v:1, laps, best, trace, tra
   - The player's own pit box is marked by a ring in the team's main colour that blinks every 0.3 s.
 - Centre messages for start, pit, flags and session events.
 - Screens: menu, loading, pause, results.
+- **Touch (phones, since 1.18.0):** a faint brake or throttle tint on each half of the screen, a pause button at the bottom centre between the two bottom panels, and a "Turn your phone sideways" screen in portrait (§3a). The minimap, timing tower and speed guide keep their places; the speedometer and fuel stay at the bottom and are not covered by the touch halves' tint.
 
 ## 11a. Camera
 
@@ -497,7 +528,19 @@ After tagging, push `main`, the tag and the feature branch to GitHub (`p3trk/mot
 
 ## 16. Version history
 
-See `CHANGELOG.md`. Current: **1.17.0** (speed blur: at top speed the surroundings blur in the Behind and CLOSE cameras while the road, kerbs and bikes stay sharp; option on the start screen, tuning sliders per camera).
+See `CHANGELOG.md`. Current: **1.18.0** (mobile controls: touch brake on the left half and throttle on the right, lean by rotating the phone, automatic gearbox only, in landscape; §3a).
+
+### Open questions for 1.18.0 (recommended answer in bold; the design above uses it)
+
+1. Which hand is brake? Petr said left half brake, right half gas. **Brake left by default, with a "Left side is" option to swap.**
+2. Landscape only, or portrait too? **Landscape only**, because the tilt reads the roll angle; portrait shows a rotate prompt.
+3. Tilt as lean only, or also a touch lean fallback? **Tilt only**, as Petr asked. No on-screen lean buttons.
+4. Keep the Transmission option on phones? **No:** phones are always automatic and the option is hidden.
+5. Zero point for tilt: fixed or set at start? **Set at the start of each session**, with Re-centre in the pause menu.
+6. Brake and throttle together? **Brake wins.**
+7. Desktop behaviour: unchanged. **Yes**, the touch layout only appears on touch devices or when Controls is set to Touch.
+8. Replay on phones: tap sides to seek? **Yes**, as in §3a; a fuller replay touch UI is a later step.
+9. How the phone gets the game: an `index.html` opened from disk does not give motion or orientation data in iPhone Safari. **Needs a decision (see reply):** a secure address (HTTPS) is needed, such as GitHub Pages, which requires a push and so your approval, or a local HTTPS server on the Mac.
 
 ### Open questions for 1.17.0 (recommended answer in bold; the design above uses it)
 

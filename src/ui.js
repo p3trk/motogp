@@ -424,19 +424,82 @@ function camCycle() {
   HUD.msg('CAMERA', CAM_NAME[CAM.mode], '#4cc3ff', 1.2);
 }
 window.addEventListener('keyup', e => { Input.k[e.code] = false; });
-window.addEventListener('blur', () => { Input.k = {}; if (UI.state === 'play' && !W.paused) UI.togglePause(); });
+window.addEventListener('blur', () => { Input.k = {}; Touch.reset(); if (UI.state === 'play' && !W.paused) UI.togglePause(); });
 
 // ---------------------------------------------------------------------------
 // Menus / flow
 // ---------------------------------------------------------------------------
+// Touch and tilt controls for phones (GDD 3a, since 1.18.0): brake and throttle halves of the screen, lean from the
+// phone's roll angle. Keyboard input is unchanged; world.js reads Touch.on, Touch.gas, Touch.brk and Touch.tilt.
+const coarseMQ = matchMedia('(pointer: coarse)'), portraitMQ = matchMedia('(orientation: portrait)');
+const Touch = {
+  on: false, gas: false, brk: false, tilt: 0, tiltOk: false, listening: false,
+  pts: new Map(), roll: 0, roll0: 0, rollSeen: false,
+  want() { return UI.opts.controls === 'touch' || (UI.opts.controls !== 'keys' && coarseMQ.matches); },
+  // the screen half that drives a control: brake on the left unless the option swaps the sides
+  zone(x) { return (x < innerWidth / 2) === (UI.opts.side !== 'gas') ? 'brk' : 'gas'; },
+  sens() { return { low: 45, normal: 35, high: 25 }[UI.opts.tilt] || 35; },
+  angle() { return screen.orientation ? screen.orientation.angle : 0; },
+  press(e) {
+    e.preventDefault();
+    if (UI.state === 'replay') { const f = e.clientX / innerWidth; if (f < 1 / 3) RP.seek(RP.t - 5); else if (f > 2 / 3) RP.seek(RP.t + 5); else RP.toggle(); return; }
+    if (UI.state !== 'play' || W.paused) return;
+    this.pts.set(e.pointerId, this.zone(e.clientX)); this.refresh();
+  },
+  release(e) { if (this.pts.delete(e.pointerId)) this.refresh(); },
+  refresh() { const v = [...this.pts.values()]; this.gas = v.includes('gas'); this.brk = v.includes('brk'); },
+  reset() { this.pts.clear(); this.refresh(); },
+  // roll angle of the phone in the screen plane: 0 when the screen is upright, positive when the right side is lower
+  motion(e) {
+    const g = e.accelerationIncludingGravity; if (!g || g.x == null) return;
+    const a = this.angle();
+    const [sx, sy] = a === 90 ? [g.y, -g.x] : a === 270 ? [-g.y, g.x] : a === 180 ? [-g.x, -g.y] : [g.x, g.y];
+    const r = -Math.atan2(sx, sy);
+    if (!this.rollSeen) { this.roll = this.roll0 = r; this.rollSeen = true; }
+    this.roll += (r - this.roll) * 0.25;
+    const d = (this.roll - this.roll0) * 180 / Math.PI;
+    this.tilt = Math.sign(d) * clamp((Math.abs(d) - 3) / (this.sens() - 3), 0, 1); // 3 degree dead zone, full lean at the sensitivity angle
+  },
+  // iPhone asks for motion access once, from a tap; the zero point is set again at each start
+  enable() {
+    this.tiltOk = false;
+    if (typeof DeviceMotionEvent === 'undefined') return Promise.resolve(false);
+    const ask = DeviceMotionEvent.requestPermission ? DeviceMotionEvent.requestPermission() : Promise.resolve('granted');
+    return ask.then(r => {
+      if (r !== 'granted') return false;
+      if (!this.listening) { addEventListener('devicemotion', e => this.motion(e)); this.listening = true; }
+      this.rollSeen = false; this.tilt = 0; this.tiltOk = true; return true;
+    }, () => false);
+  },
+  recentre() { this.roll0 = this.roll; this.tilt = 0; },
+  // option rows, labels for the two halves (GDD 4, 3a)
+  opts() {
+    const t = this.want(), brkLeft = UI.opts.side !== 'gas', z = $('touch').children;
+    $('optTrans').closest('.opt').hidden = t; // phones are always automatic
+    $('optSideWrap').hidden = !t; $('optTiltWrap').hidden = !t;
+    z[0].dataset.z = brkLeft ? 'brk' : 'gas'; z[1].dataset.z = brkLeft ? 'gas' : 'brk';
+    z[0].firstElementChild.textContent = brkLeft ? 'Brake' : 'Gas'; z[1].firstElementChild.textContent = brkLeft ? 'Gas' : 'Brake';
+  },
+  // every frame: show the layer for play and replay, the pause button in play, the turn prompt in portrait
+  sync() {
+    this.on = this.want();
+    const st = UI.state, show = this.on && (st === 'play' || st === 'replay'), turn = show && portraitMQ.matches;
+    const set = (el, hide) => { if (el.hidden !== hide) el.hidden = hide; };
+    set($('touch'), !show); set($('touchPause'), !(show && st === 'play')); set($('turn'), !turn);
+    set($('btnCentre'), !(this.on && this.tiltOk));
+    for (const s of $('touch').querySelectorAll('span')) set(s, st !== 'play');
+    if (turn && st === 'play' && !W.paused) UI.togglePause();
+    if (!show) this.reset();
+  },
+};
 const $ = id => document.getElementById(id);
 const UI = {
-  state: 'menu', opts: { mode: 'sprint', trans: 'manual', aids: 'on', ai: 'pro', cam: 'behind', guide: 'on', blur: 'on', train: 'on', trainS: -1, trainV: -1, fuel: 100, grid: 'mid', name: 'Petr', num: 25, team: 2 },
+  state: 'menu', opts: { mode: 'sprint', trans: 'manual', controls: 'auto', side: 'brk', tilt: 'normal', aids: 'on', ai: 'pro', cam: 'behind', guide: 'on', blur: 'on', train: 'on', trainS: -1, trainV: -1, fuel: 100, grid: 'mid', name: 'Petr', num: 25, team: 2 },
   init() {
     try { const s = JSON.parse(localStorage.getItem('sgp_opts') || 'null'); if (s) { if (!CAM_ORDER.includes(s.cam)) delete s.cam; if (!s.trainDef) delete s.train; Object.assign(this.opts, s); } this.opts.trainDef = 1; } catch (e) { }
     const sel = $('optTeam'); TEAMS.forEach((t, k) => { const o = document.createElement('option'); o.value = k; o.textContent = t.name; sel.appendChild(o); });
     document.querySelectorAll('.mode').forEach(m => m.addEventListener('click', () => { this.opts.mode = m.dataset.mode; this.sync(); }));
-    for (const [id, key] of [['optTrans', 'trans'], ['optAids', 'aids'], ['optAI', 'ai'], ['optCam', 'cam'], ['optGuide', 'guide'], ['optBlur', 'blur'], ['optTrain', 'train']]) $(id).querySelectorAll('button').forEach(bt => bt.addEventListener('click', () => { this.opts[key] = bt.dataset.v; this.sync(); }));
+    for (const [id, key] of [['optTrans', 'trans'], ['optAids', 'aids'], ['optAI', 'ai'], ['optCam', 'cam'], ['optGuide', 'guide'], ['optBlur', 'blur'], ['optTrain', 'train'], ['optCtl', 'controls'], ['optSide', 'side'], ['optTilt', 'tilt']]) $(id).querySelectorAll('button').forEach(bt => bt.addEventListener('click', () => { this.opts[key] = bt.dataset.v; this.sync(); }));
     $('optFuel').addEventListener('input', e => { this.opts.fuel = +e.target.value; this.sync(); });
     $('optGrid').addEventListener('change', e => { this.opts.grid = e.target.value; });
     $('optTeam').addEventListener('change', e => { this.opts.team = +e.target.value; });
@@ -445,6 +508,10 @@ const UI = {
     $('btnStart').addEventListener('click', () => this.start());
     $('btnClearRec').addEventListener('click', e => { const bt = e.currentTarget; if (bt.dataset.armed) { Records.clear(); delete bt.dataset.armed; this.renderRecords(); } else { bt.dataset.armed = '1'; bt.textContent = 'Click again to delete all saved laps'; setTimeout(() => { delete bt.dataset.armed; this.renderRecords(); }, 3500); } });
     $('btnResume').addEventListener('click', () => this.togglePause());
+    $('btnCentre').addEventListener('click', () => Touch.recentre());
+    $('touch').addEventListener('pointerdown', e => Touch.press(e));
+    addEventListener('pointerup', e => Touch.release(e)); addEventListener('pointercancel', e => Touch.release(e));
+    $('touchPause').addEventListener('click', () => this.togglePause());
     $('btnRestart').addEventListener('click', () => { this.hideAll(); this.launch(W.kind === 'quali' ? 'quali' : this.opts.mode, W.kind === 'gp' ? { qualiGrid: W.opts.qualiGrid } : {}); });
     $('btnQuit').addEventListener('click', () => this.toMenu());
     $('btnEndQ').addEventListener('click', () => { this.hideAll(); this.finishQuali(); });
@@ -473,12 +540,13 @@ const UI = {
   sync() {
     const o = this.opts;
     document.querySelectorAll('.mode').forEach(m => m.setAttribute('aria-pressed', String(m.dataset.mode === o.mode)));
-    for (const [id, key] of [['optTrans', 'trans'], ['optAids', 'aids'], ['optAI', 'ai'], ['optCam', 'cam'], ['optGuide', 'guide'], ['optBlur', 'blur'], ['optTrain', 'train']]) $(id).querySelectorAll('button').forEach(bt => bt.setAttribute('aria-pressed', String(bt.dataset.v === o[key])));
+    for (const [id, key] of [['optTrans', 'trans'], ['optAids', 'aids'], ['optAI', 'ai'], ['optCam', 'cam'], ['optGuide', 'guide'], ['optBlur', 'blur'], ['optTrain', 'train'], ['optCtl', 'controls'], ['optSide', 'side'], ['optTilt', 'tilt']]) $(id).querySelectorAll('button').forEach(bt => bt.setAttribute('aria-pressed', String(bt.dataset.v === o[key])));
     $('optFuel').value = o.fuel; $('optGrid').value = o.grid; $('optTeam').value = o.team; $('optName').value = o.name; $('optNum').value = o.num;
     const laps = o.mode === 'gp' ? 20 : 10; const L = PHYS.tank * o.fuel / 100; const range = L / 2.65;
     $('optFuelV').textContent = L.toFixed(1) + ' L';
     const stops = Math.max(0, Math.ceil(laps * 2.65 / PHYS.tank - 0.001) - 1); $('optFuelHint').textContent = o.mode === 'practice' ? 'Practice starts with a full tank.' : `About ${range.toFixed(1)} laps on this load. A ${laps} lap race needs at least ${stops} stop${stops === 1 ? '' : 's'} on a full tank. Less fuel is lighter and faster but means more stops.`;
     $('optFuelWrap').hidden = o.mode === 'practice'; $('optGuideWrap').hidden = o.mode !== 'practice'; $('optTrainWrap').hidden = o.mode !== 'practice'; $('trainBox').hidden = o.train !== 'on'; this.renderTraining(); this.renderRecords(); $('optGridWrap').hidden = !(o.mode === 'sprint' || (o.mode === 'practice' && o.train !== 'on')); // one setting for the race and the practice grid start (GDD 2a)
+    Touch.opts();
     try { localStorage.setItem('sgp_opts', JSON.stringify(o)); } catch (e) { }
   },
   renderRecords() {
@@ -648,11 +716,16 @@ const UI = {
     if (P) { P.hidden = !show; if (show) this.camSync(); }
   },
   toMenu() { Rec.stop(); this.hideAll(); this.state = 'menu'; W.paused = false; $('menu').hidden = false; this.renderRecords(); },
-  start() { Sound.start(); this.launch(this.opts.mode === 'gp' ? 'quali' : this.opts.mode, {}); },
+  start() {
+    Sound.start();
+    const tilt = Touch.want() ? Touch.enable() : Promise.resolve(true); // the motion request must come from this tap
+    this.launch(this.opts.mode === 'gp' ? 'quali' : this.opts.mode, {});
+    tilt.then(ok => { if (!ok && Touch.want()) HUD.msg('LEAN OFF', 'Motion access refused: allow it in the browser settings', '#ffcf1f', 4); });
+  },
   sessionOpts(extra) {
     const o = this.opts;
     const train = o.mode === 'practice' && o.train === 'on' ? { s: o.trainS, v: o.trainV / 3.6 } : null;
-    return Object.assign({ train, syncId: Lib.syncId(), name: o.name, num: o.num, team: o.team, aids: o.aids === 'on', auto: o.trans === 'auto', level: o.ai, fuelPct: o.fuel / 100, gridPos: o.grid, guide: o.guide === 'on' }, extra);
+    return Object.assign({ train, syncId: Lib.syncId(), name: o.name, num: o.num, team: o.team, aids: o.aids === 'on', auto: o.trans === 'auto' || Touch.want(), level: o.ai, fuelPct: o.fuel / 100, gridPos: o.grid, guide: o.guide === 'on' }, extra);
   },
   launch(kind, extra) {
     Rec.stop(); this.hideAll(); this.state = 'play'; setCamMode(this.opts.cam); CAM.init = false;
@@ -711,6 +784,7 @@ function teamForId(id, playerTeam) { const seats = []; for (let t = 0; t < TEAMS
 // ---------------------------------------------------------------------------
 let last = performance.now(), acc = 0, perfAvg = 1 / 60, perfN = 0;
 function frame(now) {
+  Touch.sync();
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
   // adaptive resolution: drop to 1x pixels if the machine can't keep up
   perfAvg = perfAvg * 0.97 + dt * 0.03; perfN++;
@@ -750,5 +824,5 @@ function boot() {
   requestAnimationFrame(t => { last = t; requestAnimationFrame(frame); });
   setInterval(() => { if (UI.state === 'menu') { for (let k = 0; k < 4; k++) simStep(SUB); } }, 1000 / 30);
 }
-window.__sgp = { tiltProjectX: draw => { for (const Ly of LAYERS) { const g = Ly.g; g.setTransform(Ly.dpr, 0, 0, Ly.dpr, 0, 0); g.translate(-Ly.x0, -Ly.y0); draw(g, RW, RH); } projectTilted(); return { VW, VH, RW, RH }; }, worldToScreenX: (x, y) => worldToScreen(x, y), worldToCanvasX: (x, y) => worldToCanvas(x, y), frameX: t => frame(t), setCamModeX: m => setCamMode(m), CAM, RP, Rec, Lib, Ghost, W, T, PHYS, Input, FX, Records, completeLapX: b => completeLap(b), drawWorldX: () => drawWorld(), speedBlurX: () => speedBlur(), camNameX: () => TILT_CAM, setupSession, simStep, standings, UI, SUB, TILT, setAIReal: v => { AI_REAL = v; } };
+window.__sgp = { Touch, tiltProjectX: draw => { for (const Ly of LAYERS) { const g = Ly.g; g.setTransform(Ly.dpr, 0, 0, Ly.dpr, 0, 0); g.translate(-Ly.x0, -Ly.y0); draw(g, RW, RH); } projectTilted(); return { VW, VH, RW, RH }; }, worldToScreenX: (x, y) => worldToScreen(x, y), worldToCanvasX: (x, y) => worldToCanvas(x, y), frameX: t => frame(t), setCamModeX: m => setCamMode(m), CAM, RP, Rec, Lib, Ghost, W, T, PHYS, Input, FX, Records, completeLapX: b => completeLap(b), drawWorldX: () => drawWorld(), speedBlurX: () => speedBlur(), camNameX: () => TILT_CAM, setupSession, simStep, standings, UI, SUB, TILT, setAIReal: v => { AI_REAL = v; } };
 if (document.fonts && document.fonts.ready) { Promise.race([document.fonts.ready, new Promise(r => setTimeout(r, 1500))]).then(boot).catch(e => { console.error("boot failed", e && e.stack); }); } else boot();

@@ -74,7 +74,7 @@ Used when the game runs on a phone or tablet (touch screen, no keyboard). The de
 | Left half of the screen | Brake (default) |
 | Right half of the screen | Throttle (default) |
 | Rotate the phone | Lean. Tilting it left leans the bike left, right leans right |
-| Pause button (top centre, under the lap timer) | Opens the pause menu (§11, Esc) |
+| Pause button (bottom centre, between the two bottom panels) | Opens the pause menu (§11, Esc) |
 
 - **Automatic only:** on phones the gearbox is always automatic (§4). There are no shift buttons.
 - **Always on:** the brake and throttle halves and the tilt lean are always active on phones. They are not switched on in the menu.
@@ -88,7 +88,7 @@ Used when the game runs on a phone or tablet (touch screen, no keyboard). The de
 - **Landscape only:** in portrait the game shows a "Turn your phone sideways" screen and pauses. Landscape is needed because the tilt is read from the roll angle.
 - **Permission:** iPhone Safari asks for motion access the first time the player taps Start. If access is refused, lean is off and the message says so; brake and throttle still work.
 - **Layout:** the brake and throttle areas have a faint tint so the player can see where to press. The HUD sits at the same places as on desktop, and the bottom controls are kept clear of the speedometer and fuel.
-- **Replay:** on phones, tapping the left or right half of the replay steps back or forward 5 s, and tapping the centre plays or pauses. The keyboard keys in §3 still work.
+- **Replay:** on phones, tapping the left or right third of the replay steps back or forward 5 s, and tapping the middle third plays or pauses. The keyboard keys in §3 still work.
 
 ## 4. Options (menu)
 
@@ -191,7 +191,7 @@ Stored in `localStorage` key `sgp_records`, format `{v:1, laps, best, trace, tra
   - The player's own pit box is marked by a ring in the team's main colour that blinks every 0.3 s.
 - Centre messages for start, pit, flags and session events.
 - Screens: menu, loading, pause, results.
-- **Touch (phones, since 1.18.0):** a faint brake or throttle tint on each half of the screen, a pause button top centre under the lap timer, and a "Turn your phone sideways" screen in portrait (§3a). The minimap, timing tower and speed guide keep their places; the speedometer and fuel stay at the bottom and are not covered by the touch halves' tint.
+- **Touch (phones, since 1.18.0):** a faint brake or throttle tint on each half of the screen, a pause button at the bottom centre between the two bottom panels, and a "Turn your phone sideways" screen in portrait (§3a). The minimap, timing tower and speed guide keep their places; the speedometer and fuel stay at the bottom and are not covered by the touch halves' tint.
 
 ## 11a. Camera
 

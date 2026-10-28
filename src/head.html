@@ -87,9 +87,18 @@ tr.me td.pos{color:var(--accent)}
 .note{border-left:3px solid var(--accent);padding:6px 12px;color:#c9d2d8;font-size:14px;background:rgba(255,255,255,.03)}
 #loading{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;font-family:var(--disp);font-size:22px;letter-spacing:.1em;color:var(--mute);background:var(--ink);z-index:9}
 @media (max-width:520px){.btn{font-size:19px;padding:11px 18px}}
+#touch{position:fixed;inset:0;z-index:3;display:flex;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.tz{flex:1;position:relative}
+.tz[data-z=brk]{background:rgba(227,49,42,.09);box-shadow:inset 0 0 0 1px rgba(227,49,42,.18)}
+.tz[data-z=gas]{background:rgba(58,209,122,.08);box-shadow:inset 0 0 0 1px rgba(58,209,122,.16)}
+.tz span{position:absolute;left:0;right:0;bottom:18px;text-align:center;font-family:var(--disp);font-weight:800;font-style:italic;text-transform:uppercase;font-size:22px;letter-spacing:.08em;color:rgba(255,255,255,.5)}
+.tpause{position:fixed;z-index:4;left:50%;bottom:12px;transform:translateX(-50%);width:44px;height:44px;border-radius:50%;border:1px solid rgba(255,255,255,.3);background:rgba(8,11,14,.6);color:var(--fg);font-family:var(--disp);font-weight:800;font-size:16px;cursor:pointer}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 <canvas id="game" aria-label="Race view"></canvas>
+<div id="touch" hidden><div class="tz"><span></span></div><div class="tz"><span></span></div></div>
+<button id="touchPause" class="tpause" hidden aria-label="Pause">II</button>
+<div id="turn" class="overlay" hidden><div class="center"><div class="wrap" style="max-width:520px;text-align:center"><div class="eyebrow">Phone</div><h2>Turn your phone sideways</h2><p class="hint" style="font-size:17px">Lean is read from how far you turn the phone, so the game plays in landscape. The race stays paused until you do.</p></div></div></div>
 <div id="loading">BUILDING SILVERSTONE…</div>
 
 <div id="menu" class="overlay" hidden>
@@ -106,6 +115,9 @@ tr.me td.pos{color:var(--accent)}
     </div>
     <div class="opts">
       <div class="opt"><span class="lbl">Transmission</span><div class="seg" id="optTrans"><button data-v="manual" aria-pressed="true">Manual</button><button data-v="auto" aria-pressed="false">Automatic</button></div></div>
+      <div class="opt"><span class="lbl">Controls (phones and tablets)</span><div class="seg" id="optCtl"><button data-v="auto" aria-pressed="true">Auto</button><button data-v="touch" aria-pressed="false">Touch</button><button data-v="keys" aria-pressed="false">Keyboard</button></div><span class="hint">Auto uses the touch screen and tilt on phones and tablets, the keyboard elsewhere. Phones always use the automatic gearbox.</span></div>
+      <div class="opt" id="optSideWrap"><span class="lbl">Left side of the screen</span><div class="seg" id="optSide"><button data-v="brk" aria-pressed="true">Brake</button><button data-v="gas" aria-pressed="false">Throttle</button></div></div>
+      <div class="opt" id="optTiltWrap"><span class="lbl">Tilt sensitivity</span><div class="seg" id="optTilt"><button data-v="low" aria-pressed="false">Low</button><button data-v="normal" aria-pressed="true">Normal</button><button data-v="high" aria-pressed="false">High</button></div><span class="hint">Turn the phone this far for full lean: Low 45&deg;, Normal 35&deg;, High 25&deg;.</span></div>
       <div class="opt"><span class="lbl">Rider aids (traction &amp; lean control)</span><div class="seg" id="optAids"><button data-v="on" aria-pressed="true">On</button><button data-v="off" aria-pressed="false">Off</button></div></div>
       <div class="opt"><span class="lbl">Opponents</span><div class="seg" id="optAI"><button data-v="rookie" aria-pressed="false">Rookie</button><button data-v="pro" aria-pressed="true">Pro</button><button data-v="legend" aria-pressed="false">Legend</button></div></div>
       <div class="opt"><span class="lbl">Camera</span><div class="seg" id="optCam"><button data-v="behind" aria-pressed="true">Behind</button><button data-v="close" aria-pressed="false">CLOSE</button><button data-v="chase" aria-pressed="false">Top-down</button></div></div>
@@ -124,14 +136,14 @@ tr.me td.pos{color:var(--accent)}
       <span><kbd>W</kbd>Gas</span><span><kbd>S</kbd>Brake</span><span><kbd>A</kbd><kbd>D</kbd>Lean left / right</span><span><kbd>O</kbd>Shift up</span><span><kbd>L</kbd>Shift down</span><span><kbd>Esc</kbd>Pause</span><span><kbd>C</kbd>Camera</span><span><kbd>R</kbd>Back to training spot</span><span><kbd>M</kbd>Sound</span>
     </div>
     <div class="note">Pit lane is on the right after Club. Ride into your box (marked in your team colour, flashing on the map), stop, and the crew refuels and repairs. Press <b>W</b> to leave. Pit lane limiter is 60 km/h and engages on its own.</div>
-    <div class="actions"><button class="btn" id="btnStart">Go to track</button><span class="hint">Keyboard required. Sound starts when you press Go.</span></div>
+    <div class="actions"><button class="btn" id="btnStart">Go to track</button><span class="hint">Keyboard or touch screen. Sound starts when you press Go.</span></div>
   </div>
 </div>
 
 <div id="pause" class="overlay" hidden>
   <div class="center"><div class="wrap" style="max-width:680px">
     <div class="eyebrow" id="pauseSub">Session paused</div><h2 style="font-size:44px">Paused</h2>
-    <div class="actions"><button class="btn" id="btnResume">Resume</button><button class="btn ghost" id="btnRestart">Restart session</button><button class="btn ghost" id="btnEndQ" hidden>End qualifying</button><button class="btn ghost" id="btnExport">Export session</button><button class="btn ghost" id="btnWatch">Watch replay</button><button class="btn ghost" id="btnQuit">Quit to menu</button></div>
+    <div class="actions"><button class="btn" id="btnResume">Resume</button><button class="btn ghost" id="btnCentre" hidden>Re-centre tilt</button><button class="btn ghost" id="btnRestart">Restart session</button><button class="btn ghost" id="btnEndQ" hidden>End qualifying</button><button class="btn ghost" id="btnExport">Export session</button><button class="btn ghost" id="btnWatch">Watch replay</button><button class="btn ghost" id="btnQuit">Quit to menu</button></div>
     <div class="opts" id="pauseTrain" hidden></div>
   </div></div>
 </div>

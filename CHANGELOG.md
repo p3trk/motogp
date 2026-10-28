@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.5.0 (2026-10-28)
+- New default **Look-ahead camera**: the bike sits low on screen, the zoom is based on stopping distance (up to 220 m ahead at top speed), and the view turns towards the track ahead so corners show up early.
+- C now cycles through Look-ahead, Rotating and North up. Saved options switch once to the new camera.
+- Rotating camera: the bike no longer drops off the bottom of the screen at top speed.
+- Bikes are drawn larger when zoomed out. Coarser world tiles keep the zoomed-out view at 60 fps.
+
 ## v1.4.0 (2026-10-28)
 - Game design document (`docs/GDD.md`), source split into `src/`, `tools/build.py`.
 - Speed guide panel moved directly under the lap stopwatch.

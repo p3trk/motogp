@@ -1,5 +1,31 @@
 # Changelog
 
+## v1.19.3 (2026-10-29)
+- Phones: the browser no longer zooms the page when you press the throttle or brake halves. Pinch zoom and double-tap zoom are off (viewport setting in the build, touch rules on the game and the menus, and a block on the iPhone pinch gesture). Menus still scroll with a finger.
+- Tests: tests/mobile_controls.test.js checks the viewport setting and the touch rule on the game.
+
+## v1.19.2 (2026-10-28)
+- Tilt lean on phones (GDD 3a): the dead zone is 12 degrees (was 8).
+- Tilt sensitivity: Very low (full lean at 75 degrees), Low (60 degrees, default), High (35 degrees). The Normal option is removed.
+- Tests: the tilt check in tests/mobile_controls.test.js uses 45 degrees with the Low setting.
+
+## v1.19.1 (2026-10-28)
+- Tilt lean on phones (GDD 3a): the dead zone is 8 degrees (was 3), so the bike stays straight until the phone is turned past 8 degrees, and then leans smoothly.
+- Tilt sensitivity has a new Very low option (full lean at 60 degrees). The default is Low (45 degrees) instead of Normal (35 degrees). Settings saved before this version keep their saved choice.
+- Tests: the tilt check in tests/mobile_controls.test.js uses the Low setting.
+
+## v1.19.0 (2026-10-28)
+- Phone HUD (GDD 11g): on phones (touch controls on) the HUD is compacted. The fuel, engine, aero and chassis panel at the bottom right is removed; the status tags (pit limiter, slipstream, cold tyres, no fuel, over-rev) move to the right above it.
+- Speedometer at the bottom left is smaller: speed, gear, rpm bar, and a lean bar with the angle. The brake and gas bars are removed.
+- Lap stopwatch moved to the top left and made compact: position and lap, the lap time with the delta to the best lap, last and best lap. Sectors are not shown on phones.
+- Next corner countdown moved to the top centre, with the corner name and the race gaps under it.
+- Speed guide panel removed on phones. The coloured line on the track stays.
+- The "Your laps" list is removed from the HUD in practice on phones. Qualifying keeps its timing list.
+- Race timing tower sits under the stopwatch with shorter rows; the minimap is about 140 px on phones.
+- Fuel warning on phones: centre message "3 LAPS LEFT" and "1 LAP LEFT".
+- Desktop HUD is unchanged.
+- Tests: `npm test` passes. The phone layout was checked on screenshots, not on a real phone.
+
 ## v1.18.0 (2026-10-28)
 - Mobile controls (GDD 3a): on a phone or tablet with a touch screen, the left half of the screen brakes and the right half throttles. If both are pressed, brake wins. Lean follows the phone's roll angle in landscape: turning the phone like a steering wheel leans the bike the same way. A 3 degree dead zone, and the zero point is set at each start.
 - Phones always use the automatic gearbox; the Transmission option is hidden there.

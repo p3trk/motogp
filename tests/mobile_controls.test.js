@@ -32,6 +32,9 @@ const FILE = 'file://' + path.resolve(process.argv[2] || path.join(__dirname, '.
   check('phone: manual gearbox row hidden', menu.transHidden);
   check('phone: side and tilt rows shown', menu.sideShown && menu.tiltShown);
 
+  const zoom = await page.evaluate(() => ({ meta: document.querySelector('meta[name=viewport]').content, game: getComputedStyle(document.getElementById('game')).touchAction }));
+  check('phone: pinch and double-tap zoom off', /user-scalable=no/.test(zoom.meta) && zoom.game === 'none', zoom);
+
   // practice, no curve training: the bike waits on the grid until the first input
   await page.evaluate(() => {
     document.querySelector('.mode[data-mode="practice"]').click();
@@ -88,11 +91,11 @@ const FILE = 'file://' + path.resolve(process.argv[2] || path.join(__dirname, '.
   for (let k = 0; k < 40; k++) await motion(-0.4, 9.8); // about 2.3 degrees: dead zone
   let t = await page.evaluate(() => window.__sgp.Touch.tilt);
   check('tilt: dead zone holds the bike straight', Math.abs(t) < 0.001, t);
-  for (let k = 0; k < 60; k++) await motion(-4.92, 8.49); // 30 degrees, right side low
+  for (let k = 0; k < 60; k++) await motion(-6.93, 6.93); // 45 degrees, right side low
   await step(5);
   t = await page.evaluate(() => window.__sgp.Touch.tilt);
   c = await ctl();
-  check('tilt: 30 degrees right leans right', t > 0.7 && c.lean > 0, { tilt: t, leanT: c.lean });
+  check('tilt: 45 degrees right leans right', t > 0.5 && c.lean > 0, { tilt: t, leanT: c.lean }); // Low: (45 - 12) / (60 - 12)
   await page.evaluate(() => window.__sgp.Touch.recentre());
   await motion(-4.92, 8.49); await step(5);
   t = await page.evaluate(() => window.__sgp.Touch.tilt);

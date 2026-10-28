@@ -30,12 +30,72 @@ function buildMinimap() {
   const [sx, sy] = tf(T.X[0], T.Y[0]); g.fillStyle = '#111'; g.fillRect(sx - 4, sy - 4, 8, 8); g.fillStyle = '#fff'; g.fillRect(sx - 4, sy - 4, 4, 4); g.fillRect(sx, sy, 4, 4);
   HUD.mini = { c, S, tf };
 }
+// status tags: pit limiter, slipstream, cold tyres, no fuel, over-rev (GDD 11)
+function drawTags(b, rx, ry, rw) {
+  const tags = []; if (b.limiter) tags.push(['PIT LIMITER', '#ffcf1f']); if (b.draft > 0.25) tags.push(['SLIPSTREAM', '#4cc3ff']); if (b.dist < 2500 && W.phase === 'run') tags.push(['COLD TYRES', '#4cc3ff']); if (b.fuel <= 0) tags.push(['NO FUEL', '#e3312a']); if (b.overrev > 0) tags.push(['OVER-REV BLOCKED', '#e3312a']);
+  tags.forEach(([t, c], k) => { ctx.font = `800 13px ${FD}`; const tw = ctx.measureText(t).width + 14; const x = rx + rw - tw - 0 - k * 0; const y = ry - 26 - k * 24; ctx.fillStyle = c; ctx.fillRect(rx + rw - tw, y, tw, 20); txt(t, rx + rw - 7, y + 15, 13, '#111', 800, 'right'); });
+}
+// fuel warning on phones, where the fuel panel is gone (GDD 11g): a centre message at 3 laps and at 1 lap left
+function fuelWarn(b) {
+  const left = b.fuel / Math.max(1, b.fuelPerLap), w = b.fuelWarned || (b.fuelWarned = {});
+  if (left > 3.5) { w.three = false; w.one = false; return; } // refuelled
+  if (left < 1 && !w.one) { w.one = true; HUD.msg('FUEL', left.toFixed(1) + ' LAP LEFT', '#e3312a', 3); }
+  else if (left < 3 && !w.three) { w.three = true; HUD.msg('FUEL', '3 LAPS LEFT', '#ffcf1f', 3); }
+}
+// phone HUD (GDD 11g, since 1.19.0): compact speedometer with an rpm bar and a lean bar
+function drawPhoneDash(b) {
+  const PAD = 16, dw = 190, dh = 84, dx = PAD, dy = VH - dh - PAD;
+  panel(dx, dy, dw, dh);
+  const rpm = b.rpmVis, segs = 26, sw = (dw - 20) / segs;
+  const shiftNow = rpm > 17300;
+  for (let k = 0; k < segs; k++) {
+    const th = 4000 + k * (14000 / segs); const on = rpm >= th;
+    let col = k < segs * 0.6 ? '#3ad17a' : k < segs * 0.82 ? '#ffcf1f' : '#e3312a';
+    if (shiftNow && (performance.now() / 70 | 0) % 2) col = '#4cc3ff';
+    ctx.fillStyle = on ? col : 'rgba(255,255,255,.08)'; ctx.fillRect(dx + 10 + k * sw, dy + 8, sw - 2, 6);
+  }
+  txt(String(Math.round(b.v * 3.6)), dx + 10, dy + 50, 34, '#fff', 800, 'left', true);
+  txt('KM/H', dx + 12, dy + 62, 10, '#8d9aa4', 600);
+  const gx = dx + dw - 46;
+  ctx.fillStyle = 'rgba(255,255,255,.06)'; ctx.fillRect(gx, dy + 20, 36, 34);
+  txt(String(b.gear), gx + 18, dy + 46, 30, b.overrev > 0 ? '#e3312a' : (b.shiftFlash > 0 ? '#ffffff' : '#ffcf1f'), 800, 'center', true);
+  // lean bar: the middle is upright, the bar fills towards the side the bike leans to
+  const lx = dx + 10, lw = dw - 20, ly = dy + 68, mid = lx + lw / 2, f = clamp(b.lean / PHYS.maxLean, -1, 1);
+  ctx.fillStyle = 'rgba(255,255,255,.08)'; ctx.fillRect(lx, ly, lw, 6);
+  ctx.fillStyle = b.slip > 0.05 ? '#e3312a' : Math.abs(b.lean) / DEG > 55 ? '#ffcf1f' : '#e9edf0';
+  ctx.fillRect(Math.min(mid, mid + f * lw / 2), ly, Math.abs(f) * lw / 2, 6);
+  ctx.fillStyle = '#8d9aa4'; ctx.fillRect(mid - 0.5, ly - 2, 1, 10);
+  txt(Math.round(Math.abs(b.lean) / DEG) + '°', mid, ly - 6, 11, '#c9d2d8', 700, 'center');
+  if (b.slip > 0.08) txt('SLIDE', dx + dw - 10, dy + 80, 10, '#e3312a', 800, 'right');
+}
+// phone HUD (GDD 11g): stopwatch top left, next corner top centre with the gaps under it
+function drawPhoneTop(b, st, pos) {
+  const PAD = 16, x = PAD, w = 168, race = W.mode === 'race';
+  panel(x, PAD, w, 58);
+  txt(race ? 'P' + pos + '  LAP ' + Math.min(W.totalLaps, b.lap + 1) + '/' + W.totalLaps : b.outLap ? 'OUT LAP' : 'LAP ' + (b.laps.length + 1) + (W.mode === 'quali' ? '/3' : ''), x + 8, PAD + 15, 12, '#ffcf1f', 800, 'left', true);
+  const cur = (b.outLap || b.trainHold || (race && W.phase !== 'run')) ? 0 : W.time - b.lapStartT;
+  txt(b.outLap ? '–:––.–––' : fmtTime(cur), x + 8, PAD + 38, 20, '#fff', 700, 'left');
+  if (W.bestTrace && !b.outLap) { const bin = Math.floor(b.s / 10); const bt = W.bestTrace[bin], ct = W.curTrace[bin]; if (bt > 0 && ct > 0) { const dlt = ct - bt; txt((dlt >= 0 ? '+' : '−') + Math.abs(dlt).toFixed(2), x + w - 8, PAD + 38, 13, dlt <= 0 ? '#3ad17a' : '#e3312a', 800, 'right'); } }
+  txt('B ' + (b.bestLap ? fmtTime(b.bestLap) : '–') + '   L ' + (b.lastLap ? fmtTime(b.lastLap) : '–'), x + 8, PAD + 52, 10, '#8d9aa4', 600);
+  const cz = !b.crashed && !b.inPitLane ? cornerAhead(b) : null;
+  if (cz) drawCountdown(b, cz, VW / 2 - 100, PAD, 200);
+  txt(T.cornerAt(b.s).toUpperCase(), VW / 2, PAD + 58, 12, 'rgba(255,255,255,.75)', 700, 'center', true);
+  if (race && W.phase === 'run') {
+    const ahead = st[pos - 2], behind = st[pos], g0 = gapOf(b);
+    if (ahead && !ahead.dnf) txt('▲ ' + ahead.short + ' ' + Math.max(0, g0 - gapOf(ahead)).toFixed(3), VW / 2 - 60, PAD + 74, 11, '#c9d2d8', 600, 'center');
+    if (behind && !behind.dnf && !b.finished) txt('▼ ' + behind.short + ' ' + Math.max(0, gapOf(behind) - g0).toFixed(3), VW / 2 + 60, PAD + 74, 11, '#c9d2d8', 600, 'center');
+  }
+  if (HUD.lapFlash) { const f = HUD.lapFlash; ctx.globalAlpha = Math.max(0, Math.min(1, (5 - f.age) * 2)); txt((f.rec ? 'NEW ALL-TIME BEST  ' : f.pb ? 'SESSION BEST  ' : 'LAP  ') + fmtTime(f.t), VW / 2, PAD + 96, 20, f.pb ? '#b46bff' : '#fff', 800, 'center', true); ctx.globalAlpha = 1; }
+}
 function drawHUD(dt) {
   const b = W.player; if (!b) return;
   const L = Math.max(16, 0) + 0, PAD = 16;
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   ctx.textBaseline = 'alphabetic';
   const small = VW < 760;
+  const ph = Touch.on, st = standings(), pos = st.indexOf(b) + 1, tiny = VW < 640, cy = PAD;
+  if (ph) fuelWarn(b);
+  if (ph) drawPhoneDash(b); else {
   // ---- dashboard (bottom-left)
   const dw = small ? 270 : 330, dh = 138, dx = PAD, dy = VH - dh - PAD;
   panel(dx, dy, dw, dh);
@@ -66,8 +126,9 @@ function drawHUD(dt) {
   txt(ld + '°', lx, ly + 2 - 30 - 4, 15, '#e9edf0', 700, 'center');
   txt('LEAN', lx + lr + 8, ly, 11, '#8d9aa4', 600);
   if (b.slip > 0.08) txt('SLIDE', lx, ly + 18, 13, '#e3312a', 800, 'center');
-  // ---- right status panel: fuel / damage / aids
-  const tiny = VW < 640;
+  }
+  // ---- right status panel: fuel / damage / aids (not on phones)
+  if (!ph) {
   const rw = small ? 200 : 236, rh = 138, rx = tiny ? PAD : VW - rw - PAD, ry = tiny ? dy - rh - 8 : VH - rh - PAD;
   panel(rx, ry, rw, rh);
   txt('FUEL', rx + 14, ry + 24, 13, '#8d9aa4', 600);
@@ -80,12 +141,13 @@ function drawHUD(dt) {
   txt('≈ ' + lapsLeft.toFixed(1) + ' laps' + (W.mode === 'race' ? ' · need ' + need.toFixed(1) : ''), rx + 14, ry + 58, 13, '#c9d2d8', 600);
   const dm = [['ENGINE', b.dmg.e], ['AERO', b.dmg.a], ['CHASSIS', b.dmg.c]];
   dm.forEach(([n, v], k) => { const y = ry + 80 + k * 17; txt(n, rx + 14, y + 4, 11, '#8d9aa4', 600); const x0 = rx + 76, ww = rw - 90; ctx.fillStyle = 'rgba(255,255,255,.08)'; ctx.fillRect(x0, y - 4, ww, 7); ctx.fillStyle = v > 0.6 ? '#e3312a' : v > 0.25 ? '#ffcf1f' : '#3ad17a'; ctx.fillRect(x0, y - 4, ww * Math.max(0.02, 1 - v), 7); });
-  const tags = []; if (b.limiter) tags.push(['PIT LIMITER', '#ffcf1f']); if (b.draft > 0.25) tags.push(['SLIPSTREAM', '#4cc3ff']); if (b.dist < 2500 && W.phase === 'run') tags.push(['COLD TYRES', '#4cc3ff']); if (b.fuel <= 0) tags.push(['NO FUEL', '#e3312a']); if (b.overrev > 0) tags.push(['OVER-REV BLOCKED', '#e3312a']);
-  tags.forEach(([t, c], k) => { ctx.font = `800 13px ${FD}`; const tw = ctx.measureText(t).width + 14; const x = rx + rw - tw - 0 - k * 0; const y = ry - 26 - k * 24; ctx.fillStyle = c; ctx.fillRect(rx + rw - tw, y, tw, 20); txt(t, rx + rw - 7, y + 15, 13, '#111', 800, 'right'); });
+  drawTags(b, rx, ry, rw);
+  }
+  if (ph) drawTags(b, VW - PAD - 170, VH - 100, 170);
   // ---- top centre: lap / position / timing
-  const cw = small ? 300 : 380, cx = VW / 2 - cw / 2, cy = PAD;
+  if (ph) drawPhoneTop(b, st, pos); else {
+  const cw = small ? 300 : 380, cx = VW / 2 - cw / 2;
   panel(cx, cy, cw, 80);
-  const st = standings(); const pos = st.indexOf(b) + 1;
   if (W.mode === 'race') {
     txt('P' + pos, cx + 16, cy + 50, 46, '#ffcf1f', 800, 'left', true);
     txt('/' + st.length, cx + 16 + ctx.measureText('P' + pos).width + 4, cy + 50, 18, '#8d9aa4', 700);
@@ -104,7 +166,7 @@ function drawHUD(dt) {
   // sector strip
   for (let k = 0; k < 3; k++) { const f = HUD.secFlash[k]; const sx = cx + 8 + k * (cw - 16) / 3; ctx.fillStyle = f && (b.cp > k || HUD.lapFlash) ? (f.pb ? '#b46bff' : '#ffcf1f') : 'rgba(255,255,255,.1)'; if (f && f.pb && f.best && f.t < f.best) ctx.fillStyle = '#b46bff'; else if (f && f.best && f.t >= f.best) ctx.fillStyle = '#ffcf1f'; else if (f && !f.best) ctx.fillStyle = '#3ad17a'; if (!f || (b.cp <= k && !(k === 2 && HUD.lapFlash))) ctx.fillStyle = 'rgba(255,255,255,.1)'; ctx.fillRect(sx, cy + 84, (cw - 16) / 3 - 4, 4); }
   // corner name
-  const showGuide = W.guide && !b.crashed && !b.inPitLane; let gOff = showGuide ? 62 : 0;
+  const showGuide = W.guide && !b.crashed && !b.inPitLane && !ph; let gOff = showGuide ? 62 : 0; // no speed guide panel on phones (GDD 9, 11g)
   if (showGuide) drawGuide(b, cx, cy + 96, cw);
   const cz = !b.crashed && !b.inPitLane ? cornerAhead(b) : null;
   if (cz) { drawCountdown(b, cz, VW / 2 - 125, cy + 96 + gOff, 250); gOff += 52; }
@@ -115,6 +177,8 @@ function drawHUD(dt) {
     const g0 = gapOf(b);
     if (ahead && !ahead.dnf) txt('▲ ' + ahead.short + ' ' + Math.max(0, g0 - gapOf(ahead)).toFixed(3), VW / 2 - 70, cy + 128 + gOff, 13, '#c9d2d8', 600, 'center');
     if (behind && !behind.dnf && !b.finished) txt('▼ ' + behind.short + ' ' + Math.max(0, gapOf(behind) - g0).toFixed(3), VW / 2 + 70, cy + 128 + gOff, 13, '#c9d2d8', 600, 'center');
+  }
+  if (HUD.lapFlash) { const f = HUD.lapFlash; ctx.globalAlpha = Math.max(0, Math.min(1, (5 - f.age) * 2)); txt((f.rec ? 'NEW ALL-TIME BEST  ' : f.pb ? 'SESSION BEST  ' : 'LAP  ') + fmtTime(f.t), VW / 2, cy + 152 + gOff, 20, f.pb ? '#b46bff' : '#fff', 800, 'center', true); ctx.globalAlpha = 1; }
   }
   // ---- timing tower (left)
   if (!tiny) { drawTower(st, b); drawMinimap(b); }
@@ -143,7 +207,6 @@ function drawHUD(dt) {
     if (m.sub) txt(m.sub, VW / 2, VH * 0.36 + 30, 17, '#e9edf0', 600, 'center');
     ctx.globalAlpha = 1;
   }
-  if (HUD.lapFlash) { const f = HUD.lapFlash; ctx.globalAlpha = Math.max(0, Math.min(1, (5 - f.age) * 2)); txt((f.rec ? 'NEW ALL-TIME BEST  ' : f.pb ? 'SESSION BEST  ' : 'LAP  ') + fmtTime(f.t), VW / 2, cy + 152 + gOff, 20, f.pb ? '#b46bff' : '#fff', 800, 'center', true); ctx.globalAlpha = 1; }
   HUD.tick.forEach((q, k) => { ctx.globalAlpha = Math.min(1, (6 - q.age) * 2); txt(q.t, VW / 2, VH - 172 - PAD - k * 20, 14, '#e9edf0', 600, 'center'); }); ctx.globalAlpha = 1;
   // wrong way
   const hd = Math.abs(angWrap(b.h - T.H[b.i]));
@@ -298,13 +361,13 @@ function drawGuide(b, dx, dy, dw) {
   } else txt('Full throttle', gx + gw - 14, gy + 32, 14, '#3ad17a', 700, 'right');
 }
 function drawTower(st, me) {
-  const PAD = 16, rowH = 19; const show = W.mode === 'race' ? st : null;
-  const x = PAD, y = PAD;
+  const PAD = 16, rowH = Touch.on ? 15 : 19; const show = W.mode === 'race' ? st : null;
+  const x = PAD, y = PAD + (Touch.on ? 66 : 0); // phones: under the stopwatch
   if (W.mode === 'race') {
     const maxRows = Math.max(6, Math.floor((VH - 200 - y - 40) / rowH));
     let rows = st; let start = 0;
     if (rows.length > maxRows) { const mi = st.indexOf(me); start = clamp(mi - Math.floor(maxRows / 2), 0, st.length - maxRows); rows = st.slice(start, start + maxRows); }
-    const w = VW < 760 ? 150 : 190; panel(x, y, w, rows.length * rowH + 30, 0.78);
+    const w = VW < 760 || Touch.on ? 150 : 190; panel(x, y, w, rows.length * rowH + 30, 0.78);
     txt(W.flag ? 'CHEQUERED' : 'LAP ' + Math.min(W.totalLaps, (st[0].lap + 1)) + '/' + W.totalLaps, x + 10, y + 18, 13, W.flag ? '#fff' : '#ffcf1f', 800, 'left', true);
     const lead = gapOf(st[0]) || 0;
     rows.forEach((o, k) => {
@@ -319,13 +382,14 @@ function drawTower(st, me) {
       txt(g, x + w - 10, yy + 14, 13, g === 'PIT' ? '#ffcf1f' : (g === 'OUT' || g === 'CRASH') ? '#e3312a' : '#c9d2d8', 600, 'right');
     });
   } else {
+    if (Touch.on && W.mode !== 'quali') return; // no lap list on phones (GDD 11g)
     let rows;
     if (W.mode === 'quali') rows = W.qualiAI.map(q => ({ short: q.name.split(' ').slice(-1)[0].toUpperCase().slice(0, 3), t: q.best, me: false, c: '#8d9aa4' })).concat([{ short: me.short, t: me.bestLap || 1e9, me: true }]).sort((a, c) => a.t - c.t);
     else { rows = me.laps.slice(-12).map((t, k, arr) => ({ short: 'LAP ' + (me.laps.length - arr.length + k + 1), t, me: t === me.bestLap })); if (Records.d.traceT) rows.unshift({ short: 'ALL-TIME', t: Records.d.traceT, me: false, rec: true }); const gr = []; for (const g of W.ghosts) { gr.push({ short: 'GHOST ' + g.short, t: g.recBest || 1e9, me: false, gh: true }); if (g.sync === 'rec') g.laps.forEach((t, j) => gr.push({ short: g.short + ' LAP ' + (j + 1), t, me: false, gh: true })); } rows.splice(Records.d.traceT ? 1 : 0, 0, ...gr); }
     const maxRows = Math.max(6, Math.floor((VH - 200 - 56) / rowH)); let start = 0;
     if (rows.length > maxRows) { const mi = rows.findIndex(r => r.me); start = clamp(mi - Math.floor(maxRows / 2), 0, rows.length - maxRows); }
     const vis = rows.slice(start, start + maxRows);
-    const w = VW < 760 ? 150 : 190; panel(x, y, w, Math.max(1, vis.length) * rowH + 30, 0.78);
+    const w = VW < 760 || Touch.on ? 150 : 190; panel(x, y, w, Math.max(1, vis.length) * rowH + 30, 0.78);
     txt(W.mode === 'quali' ? 'QUALIFYING' : 'YOUR LAPS', x + 10, y + 18, 13, '#ffcf1f', 800, 'left', true);
     vis.forEach((r, k) => {
       const yy = y + 26 + k * rowH;
@@ -338,7 +402,7 @@ function drawTower(st, me) {
   }
 }
 function drawMinimap(me) {
-  const M = HUD.mini; if (!M) return; const S = VW < 760 ? 140 : M.S; const x = VW - S - 16, y = 16;
+  const M = HUD.mini; if (!M) return; const S = VW < 760 || Touch.on ? 140 : M.S; const x = VW - S - 16, y = 16;
   panel(x, y, S, S, 0.7); ctx.drawImage(M.c, x, y, S, S); const k = S / M.S;
   const by = T.PIT.boxS(me.box); const [bx0, by0] = M.tf(...T.pt(T.idx(by), T.PIT.boxD * 0.6));
   if ((performance.now() / 300 | 0) % 2) { ctx.strokeStyle = TEAMS[me.team].c1; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x + bx0 * k, y + by0 * k, 5, 0, TAU); ctx.stroke(); }
@@ -424,6 +488,8 @@ function camCycle() {
   HUD.msg('CAMERA', CAM_NAME[CAM.mode], '#4cc3ff', 1.2);
 }
 window.addEventListener('keyup', e => { Input.k[e.code] = false; });
+// iPhone pinch gestures zoom the page; the game never needs them (GDD 3a)
+for (const t of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(t, e => e.preventDefault());
 window.addEventListener('blur', () => { Input.k = {}; Touch.reset(); if (UI.state === 'play' && !W.paused) UI.togglePause(); });
 
 // ---------------------------------------------------------------------------
@@ -438,7 +504,7 @@ const Touch = {
   want() { return UI.opts.controls === 'touch' || (UI.opts.controls !== 'keys' && coarseMQ.matches); },
   // the screen half that drives a control: brake on the left unless the option swaps the sides
   zone(x) { return (x < innerWidth / 2) === (UI.opts.side !== 'gas') ? 'brk' : 'gas'; },
-  sens() { return { low: 45, normal: 35, high: 25 }[UI.opts.tilt] || 35; },
+  sens() { return { verylow: 75, low: 60, high: 35 }[UI.opts.tilt] || 60; },
   angle() { return screen.orientation ? screen.orientation.angle : 0; },
   press(e) {
     e.preventDefault();
@@ -458,7 +524,7 @@ const Touch = {
     if (!this.rollSeen) { this.roll = this.roll0 = r; this.rollSeen = true; }
     this.roll += (r - this.roll) * 0.25;
     const d = (this.roll - this.roll0) * 180 / Math.PI;
-    this.tilt = Math.sign(d) * clamp((Math.abs(d) - 3) / (this.sens() - 3), 0, 1); // 3 degree dead zone, full lean at the sensitivity angle
+    this.tilt = Math.sign(d) * clamp((Math.abs(d) - 12) / (this.sens() - 12), 0, 1); // 12 degree dead zone, full lean at the sensitivity angle
   },
   // iPhone asks for motion access once, from a tap; the zero point is set again at each start
   enable() {
@@ -494,7 +560,7 @@ const Touch = {
 };
 const $ = id => document.getElementById(id);
 const UI = {
-  state: 'menu', opts: { mode: 'sprint', trans: 'manual', controls: 'auto', side: 'brk', tilt: 'normal', aids: 'on', ai: 'pro', cam: 'behind', guide: 'on', blur: 'on', train: 'on', trainS: -1, trainV: -1, fuel: 100, grid: 'mid', name: 'Petr', num: 25, team: 2 },
+  state: 'menu', opts: { mode: 'sprint', trans: 'manual', controls: 'auto', side: 'brk', tilt: 'low', aids: 'on', ai: 'pro', cam: 'behind', guide: 'on', blur: 'on', train: 'on', trainS: -1, trainV: -1, fuel: 100, grid: 'mid', name: 'Petr', num: 25, team: 2 },
   init() {
     try { const s = JSON.parse(localStorage.getItem('sgp_opts') || 'null'); if (s) { if (!CAM_ORDER.includes(s.cam)) delete s.cam; if (!s.trainDef) delete s.train; Object.assign(this.opts, s); } this.opts.trainDef = 1; } catch (e) { }
     const sel = $('optTeam'); TEAMS.forEach((t, k) => { const o = document.createElement('option'); o.value = k; o.textContent = t.name; sel.appendChild(o); });

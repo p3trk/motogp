@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.11.1 (2026-10-28)
+- Replay: the Play/Pause button works reliably (the labels are no longer rewritten every frame, which could swallow clicks in Safari).
+- Replay: new **1×** button, and clicking the speed readout, return to normal speed.
+- Replay: after using the Align list, Space and the arrow keys control the replay again.
+
 ## v1.11.0 (2026-10-28)
 - **Session replay**: a Replay button on every recording, plus Watch replay on the results screen and in the pause menu.
 - Timeline along the bottom: drag to jump, lap marks (best lap in purple), play/pause, rewind 1–8×, slow motion 0.25× / 0.5×, fast forward 2–8×, previous / next lap, camera switch.

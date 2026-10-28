@@ -1,6 +1,6 @@
 # Silverstone GP — Game Design Document
 
-**Version:** 1.7.2 · **Last updated:** 2026-10-28 · **Owner:** Petr
+**Version:** 1.8.0 · **Last updated:** 2026-10-28 · **Owner:** Petr
 
 This document is the source of truth for how the game should work. Every
 change starts here: update the GDD on a feature branch first, then change the
@@ -192,7 +192,60 @@ where the ideal speed drops by more than 80 km/h.
   - A thin bar under the tiles counts down the distance.
 - **Pictogram:** a small diagram of the corner's shape, about 250 m of track from just before the 50 board to the exit. It is turned so the approach points up, with an arrow at the exit and a dot for the player's position. It is drawn next to the tiles with the corner name.
 
-## 12. Track and graphics## 12. Track and graphics
+## 11c. Session recordings and ghost opponents
+
+**Recording**
+- Every practice, qualifying and race session the player rides is recorded automatically.
+  - Recording starts when the session starts and stops when it ends (results, restart, or quit to menu).
+  - Laps ridden on autopilot are still recorded, but only the player's own completed laps count as "best lap".
+- What is recorded:
+  - Samples at 10 Hz: x, y, heading, speed, lean, track distance `s`, and race progress `p` (laps × track length + `s`).
+  - Events: lap start and end times, the race start (lights out) time, and the finish.
+- A session is kept when the player completed at least one timed lap, or started a race.
+
+**Recording file (JSON, `format: "silverstone-gp-session"`, `version: 1`)**
+```
+{ format, version, game, track: "silverstone", id, date,
+  kind: "practice|quali|sprint|gp", mode: "practice|quali|race", totalLaps,
+  rider: { name, num, team, short }, aids, auto,
+  laps: [ { start, end, time } ], bestLap, raceStart, finishT, position,
+  samples: { dt: 0.1, x: [], y: [], h: [], v: [], lean: [], s: [], p: [] } }
+```
+- Numbers are rounded to keep files small. A 20-lap race is about 1 MB.
+- File name: `silverstone_<mode>_<rider>_<best lap>_<yyyy-mm-dd_hhmm>.json`.
+
+**Library (menu panel "Recordings")**
+- **Storage:** sessions are kept in the browser (IndexedDB). The newest 30 auto-recorded sessions are kept, and imported files are kept until deleted.
+- **Each row shows:** rider, session type, best lap, laps and date, plus three actions:
+  - **Ghost** toggle: race against this recording.
+  - **Export:** save the JSON file.
+  - **Delete.**
+- **Import file…** imports one or more `.json` files.
+- **Open saved_tracks folder…** reads every `.json` in the `saved_tracks/` folder next to `index.html`.
+  - A web page opened from disk cannot list a folder by itself, so the player picks the folder once.
+  - Chrome and Edge use the folder picker and remember the folder. Next time, one click on **Reload saved_tracks** re-reads it.
+  - Since the folder is linked with write access, every new session is also saved into it automatically.
+  - Safari and Firefox use a folder-upload picker (read only). Exports go to Downloads and are moved into `saved_tracks/` by hand.
+  - When the game is served over http(s), `saved_tracks/index.json` (a list of file names) is also read automatically if present.
+    - `python3 tools/index_saved_tracks.py` writes that list. `saved_tracks/README.md` explains the folder.
+- **Export:**
+  - In the pause menu and the results screen, **Export session** exports the current session.
+  - With a linked folder, files are written straight into `saved_tracks/`. Otherwise they are downloaded.
+
+**Ghost opponents** (up to 4 selected recordings)
+- Ghosts are drawn translucent with a "GHOST" name tag. They appear on the minimap as hollow dots.
+- They have no collisions and AI riders ignore them. They never pit, crash or use fuel; they replay positions only.
+- **Practice:** each ghost replays the best lap of its recording. It starts together with the player each time the player starts a timed lap (crossing the line after the out lap, or completing a lap), and disappears at the end of its lap. The timing tower lists each ghost's best lap.
+- **Race (10 laps and Grand Prix):**
+  - Each ghost replaces one of the slowest AI riders, so the grid stays at 22.
+  - A race recording replays from its own lights out, aligned to this race's lights out. It follows its recorded line including its grid slot, start and pit stops.
+  - A practice or qualifying recording replays its completed laps in order from the start line at lights out, looping them if the race is longer.
+  - Ghosts count in the race order, gaps, timing tower and results (marked "GHOST").
+    - A ghost finishes when its progress reaches the race distance.
+    - It retires (shown "OUT") if its recording ends before that.
+- **Qualifying:** no ghosts (the AI field is simulated).
+
+## 12. Track and graphics
 
 - Centreline from the TUMFTM racetrack-database (LGPL-3.0), resampled every ~2 m (5 888 m, 2 944 points); start line at the real finish line.
 - Racing line from curvature relaxation; ideal speed profile from forward/backward acceleration passes (ideal lap ≈ 2:08).
@@ -205,7 +258,7 @@ where the ideal speed drops by more than 80 km/h.
 ## 13. Technical design
 
 - Single HTML file; no external code, only Google Fonts (Saira Condensed, Barlow). The built file is ASCII-only so it opens correctly from disk.
-- Source in `src/` (`head.html`, `core.js`, `world.js`, `render.js`, `ui.js`, `track.txt`), joined by `tools/build.py` into `index.html`.
+- Source in `src/` (`head.html`, `core.js`, `world.js`, `replay.js`, `render.js`, `ui.js`, `track.txt`), joined by `tools/build.py` into `index.html`.
 - Performance:
   - static world baked into 512 px tiles of 40 m (LRU cache of 160);
   - device pixel ratio capped at 1.5, dropping to 1 when frames are slow;
@@ -223,7 +276,7 @@ where the ideal speed drops by more than 80 km/h.
    - PATCH for fixes.
    - MAJOR for big redesigns.
 
-The repository is local only (no remote push).
+After tagging, push `main`, the tag and the feature branch to GitHub (`p3trk/motogp`).
 
 ## 15. Deviations from real MotoGP (intentional)
 
@@ -235,4 +288,4 @@ The repository is local only (no remote push).
 
 ## 16. Version history
 
-See `CHANGELOG.md`. Current: **1.7.2**.
+See `CHANGELOG.md`. Current: **1.8.0**.

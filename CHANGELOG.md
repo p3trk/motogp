@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.9.1 (2026-10-28)
+- Recordings are kept in `localStorage` (key `sgp_sessions`): the last 10 sessions, the oldest dropped automatically. A compact encoding makes a 20-lap race about 0.4 MB.
+- Sessions from the old IndexedDB library are moved over once (newest 10).
+- Imported and `saved_tracks/` files are loaded for the current visit only. Every row in the list keeps its own Export button.
+
 ## v1.9.0 (2026-10-28)
 - **Curve training** (Practice only): pick a start spot on a clickable track map or from the corner list (350 m before the braking zone), and a start speed of 0–300 km/h (or the guide speed).
 - The bike starts in the centre of the road at that speed in the right gear, with warm tyres, and waits until you press W, S, A or D.

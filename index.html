@@ -1137,50 +1137,101 @@ function recMeta(R, src) {
   return { id: R.id, src, date: R.date, kind: R.kind, mode: R.mode, totalLaps: R.totalLaps, rider: R.rider, bestLap: R.bestLap, laps: R.laps.length, raceStart: R.raceStart, finishT: R.finishT, position: R.position, aids: R.aids, auto: R.auto, file: recFileName(R) };
 }
 
-// library: IndexedDB (meta + data stores), memory fallback when storage is blocked
+// compact storage form: channels delta-encoded as Int16 in base64; s is rebuilt from p (GDD 11c, 1.9.1)
+const PACK = { x: 100, y: 100, h: 1000, v: 100, lean: 1000, p: 10 }, LS_KEY = 'sgp_sessions', LS_MAX = 10;
+function b64(u8) { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); }
+function unb64(str) { const s = atob(str), u = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return u; }
+function packCh(a, k) {
+  const o = []; let prev = 0;
+  for (const x of a) { const q = Math.round(x * k), d = q - prev; prev = q; if (d > -32768 && d < 32768) o.push(d); else o.push(-32768, q >> 16, q & 0xFFFF); }
+  return b64(new Uint8Array(Int16Array.from(o).buffer));
+}
+function unpackCh(str, k) {
+  const u = unb64(str), a = new Int16Array(u.buffer, 0, u.length >> 1), o = []; let q = 0;
+  for (let i = 0; i < a.length; i++) { if (a[i] === -32768) { q = a[i + 1] * 65536 + (a[i + 2] & 0xFFFF); i += 2; } else q += a[i]; o.push(q / k); }
+  return o;
+}
+function packRec(R) { const S = R.samples, P = { dt: S.dt, enc: 'd16' }; for (const k in PACK) P[k] = packCh(S[k], PACK[k]); return Object.assign({}, R, { samples: P }); }
+function unpackRec(R) {
+  const S = R.samples, U = { dt: S.dt }; for (const k in PACK) U[k] = unpackCh(S[k], PACK[k]);
+  U.s = U.p.map(p => Math.round((((p % T.L) + T.L) % T.L) * 10) / 10);
+  return Object.assign({}, R, { samples: U });
+}
+
+// library: the last 10 own sessions in localStorage; imports and saved_tracks files only for this visit.
+// IndexedDB keeps just the linked saved_tracks folder handle (and the pre-1.9.1 library, moved once).
 const Lib = {
-  db: null, meta: [], data: {}, ghosts: [], dir: null, dirOK: false, status: '', onChange: null,
+  db: null, meta: [], data: {}, ghosts: [], dir: null, dirOK: false, status: '', onChange: null, stored: true,
   init() {
     try { this.ghosts = JSON.parse(localStorage.getItem('sgp_ghosts') || '[]').slice(0, GHOST_MAX); } catch (e) { this.ghosts = []; }
+    let had = false;
+    try { const raw = localStorage.getItem(LS_KEY); had = raw !== null; for (const P of JSON.parse(raw || '[]')) { try { const R = unpackRec(P); if (recValid(R)) { this.data[R.id] = R; this.meta.push(recMeta(R, 'auto')); } } catch (e) { } } }
+    catch (e) { this.stored = false; }
+    this.sort(); this.loadGhosts(); this.changed();
     return new Promise(res => {
       let rq; try { rq = indexedDB.open('sgp_sessions', 1); } catch (e) { return res(); }
       rq.onupgradeneeded = () => { const db = rq.result; db.createObjectStore('meta', { keyPath: 'id' }); db.createObjectStore('data'); db.createObjectStore('kv'); };
       rq.onerror = () => res();
       rq.onsuccess = () => {
         this.db = rq.result;
-        this.tx('meta').getAll().onsuccess = e => { this.meta = e.target.result || []; this.sort(); this.loadGhosts().then(res); };
         this.tx('kv').get('dir').onsuccess = e => { this.dir = e.target.result || null; this.changed(); };
+        if (had || !this.stored) return res();
+        this.migrate().then(res, res);
       };
     }).then(() => { this.changed(); this.fetchIndex(); });
+  },
+  migrate() { // one-time move of the newest 10 sessions from the 1.8.0/1.9.0 IndexedDB library
+    return new Promise(res => {
+      this.tx('meta').getAll().onsuccess = e => {
+        const old = (e.target.result || []).sort((a, b) => (b.date > a.date ? 1 : -1)).slice(0, LS_MAX);
+        if (!old.length) { this.persist(); return res(); }
+        Promise.all(old.map(m => new Promise(r => { const q = this.tx('data').get(m.id); q.onsuccess = () => r(q.result); q.onerror = () => r(null); }))).then(list => {
+          for (const R of list.reverse()) if (R && recValid(R) && !this.data[R.id]) { this.data[R.id] = R; this.meta.push(recMeta(R, 'auto')); }
+          this.sort(); this.persist(); this.loadGhosts();
+          try { this.tx('meta', 1).clear(); this.tx('data', 1).clear(); } catch (e) { }
+          res();
+        });
+      };
+    });
   },
   tx(store, rw) { return this.db.transaction(store, rw ? 'readwrite' : 'readonly').objectStore(store); },
   sort() { this.meta.sort((a, b) => (b.date > a.date ? 1 : -1)); },
   changed() { if (this.onChange) this.onChange(); },
-  get(id) { // full recording, cached in memory
-    if (this.data[id]) return Promise.resolve(this.data[id]);
-    if (!this.db) return Promise.resolve(null);
-    return new Promise(res => { const r = this.tx('data').get(id); r.onsuccess = () => { if (r.result) this.data[id] = r.result; res(r.result || null); }; r.onerror = () => res(null); });
+  get(id) { return Promise.resolve(this.data[id] || null); },
+  loadGhosts() { this.ghosts = this.ghosts.filter(id => this.meta.some(m => m.id === id)); this.saveGhosts(); },
+  persist() { // newest 10 own sessions; drop the oldest while the browser reports the storage full
+    if (!this.stored) return;
+    let own = this.meta.filter(m => m.src === 'auto');
+    for (const m of own.slice(LS_MAX)) this.del(m.id, true, true);
+    own = own.slice(0, LS_MAX);
+    let packed = own.map(m => packRec(this.data[m.id]));
+    while (true) {
+      try { localStorage.setItem(LS_KEY, JSON.stringify(packed)); break; }
+      catch (e) {
+        if (packed.length <= 1) { this.status = 'Browser storage is full, this session could not be kept. Export it to keep it.'; break; }
+        packed.pop(); this.del(own.pop().id, true, true);
+        this.status = `Browser storage is full, keeping the last ${packed.length} sessions.`;
+      }
+    }
   },
-  loadGhosts() { this.ghosts = this.ghosts.filter(id => this.meta.some(m => m.id === id)); return Promise.all(this.ghosts.map(id => this.get(id))); },
   add(R, src) {
     if (!recValid(R)) return false;
     const m = recMeta(R, src), old = this.meta.findIndex(x => x.id === R.id);
-    if (old >= 0) { if (src === 'auto') return true; m.src = this.meta[old].src; this.meta.splice(old, 1); }
+    if (old >= 0) { if (src === 'auto' || this.meta[old].src === 'auto') return true; this.meta.splice(old, 1); }
     this.meta.push(m); this.sort(); this.data[R.id] = R;
-    if (this.db) try { this.tx('meta', 1).put(m); this.tx('data', 1).put(R, R.id); } catch (e) { }
-    if (src === 'auto') { this.prune(); this.writeDir(R); }
+    if (src === 'auto') { this.persist(); this.writeDir(R); }
     this.changed(); return true;
   },
-  prune() { const auto = this.meta.filter(m => m.src === 'auto'); for (const m of auto.slice(30)) this.del(m.id, true); },
-  del(id, quiet) {
-    this.meta = this.meta.filter(m => m.id !== id); delete this.data[id]; this.ghosts = this.ghosts.filter(g => g !== id); this.saveGhosts();
-    if (this.db) try { this.tx('meta', 1).delete(id); this.tx('data', 1).delete(id); } catch (e) { }
+  del(id, quiet, noSave) {
+    const m = this.meta.find(x => x.id === id);
+    this.meta = this.meta.filter(x => x.id !== id); delete this.data[id]; this.ghosts = this.ghosts.filter(g => g !== id); this.saveGhosts();
+    if (m && m.src === 'auto' && !noSave) this.persist();
     if (!quiet) this.changed();
   },
   saveGhosts() { try { localStorage.setItem('sgp_ghosts', JSON.stringify(this.ghosts)); } catch (e) { } },
   toggleGhost(id) {
     const k = this.ghosts.indexOf(id);
-    if (k >= 0) this.ghosts.splice(k, 1); else { if (this.ghosts.length >= GHOST_MAX) { this.status = `Up to ${GHOST_MAX} ghosts at once. Switch one off first.`; this.changed(); return; } this.ghosts.push(id); this.get(id).then(() => this.changed()); }
+    if (k >= 0) this.ghosts.splice(k, 1); else { if (this.ghosts.length >= GHOST_MAX) { this.status = `Up to ${GHOST_MAX} ghosts at once. Switch one off first.`; this.changed(); return; } this.ghosts.push(id); }
     this.saveGhosts(); this.changed();
   },
   ghostRecs() { return this.ghosts.map(id => this.data[id]).filter(Boolean); },
@@ -2378,7 +2429,7 @@ const UI = {
     const el = $('recList'); if (!el) return;
     const lbl = { practice: 'Practice', quali: 'Qualifying', sprint: '10 lap race', gp: 'Grand Prix' };
     const src = { auto: '', import: 'imported', folder: 'saved_tracks' };
-    $('recStatus').textContent = Lib.status || (Lib.db ? '' : 'Browser storage is blocked here, recordings are kept until the page closes.');
+    $('recStatus').textContent = Lib.status || (Lib.stored ? 'Your last 10 sessions are kept in this browser. Imported and saved_tracks files are loaded for this visit only.' : 'Browser storage is blocked here, recordings are kept until the page closes.');
     $('btnReloadDir').hidden = !Lib.dir; if (Lib.dir) $('btnReloadDir').textContent = 'Reload ' + Lib.dir.name;
     $('recGhostHint').textContent = Lib.ghosts.length ? `${Lib.ghosts.length} ghost${Lib.ghosts.length === 1 ? '' : 's'} selected. They ride with you in Practice and in races (each one replaces a slow AI rider).` : 'Switch on Ghost to ride against a recording in Practice or a race (up to 4).';
     if (!Lib.meta.length) { el.innerHTML = '<span class="small">No recordings yet. Every session with a completed lap or a race start is recorded automatically.</span>'; return; }

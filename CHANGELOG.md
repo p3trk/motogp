@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.19.4 (2026-10-29)
+- Fix: the race result table lists riders a lap down below every rider on the lead lap. Before, a lapped rider who crossed the line after the chequered flag could be listed above a lead-lap rider still on the last lap, so a "+1 lap" row came before a "+NN.MMM" row (GDD 11, §16). Finishers are now ranked by laps completed first, then by the order they crossed the line.
+- Tests: tests/race_result_order.test.js checks the ranking with a lapped rider crossing first; it is in `npm test`.
+
 ## v1.19.3 (2026-10-29)
 - Phones: the browser no longer zooms the page when you press the throttle or brake halves. Pinch zoom and double-tap zoom are off (viewport setting in the build, touch rules on the game and the menus, and a block on the iPhone pinch gesture). Menus still scroll with a finger.
 - Tests: tests/mobile_controls.test.js checks the viewport setting and the touch rule on the game.

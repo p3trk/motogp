@@ -1,6 +1,6 @@
 # Silverstone GP — Game Design Document
 
-**Version:** 1.9.1 · **Last updated:** 2026-10-28 · **Owner:** Petr
+**Version:** 1.10.0 · **Last updated:** 2026-10-28 · **Owner:** Petr
 
 This document is the source of truth for how the game should work. Every
 change starts here: update the GDD on a feature branch first, then change the
@@ -47,7 +47,7 @@ chequered flag → results table (positions, gaps, best laps, DNFs).
 | M | Mute / unmute sound |
 | C | Switch camera: Behind ↔ Top-down (§11a) |
 | R | Curve training only: back to the training spot at once (§11d) |
-| Esc | Pause menu (resume, restart, end qualifying, quit) |
+| Esc | Pause menu (resume, restart, end qualifying, quit). In Practice it also shows the Curve training map (§11d) |
 
 ## 4. Options (menu)
 
@@ -60,7 +60,7 @@ Stored in `localStorage` key `sgp_opts`.
 | AI level | Rookie (0.905) / Pro (0.955) / Legend (0.99) of ideal pace | Pro |
 | Camera | Behind (tilted) / Top-down | Behind |
 | Speed guide (practice only) | On / Off | On |
-| Curve training (practice only) | Off / On, plus spot on track and start speed 0–300 km/h | Off, spot 350 m before Abbey, guide speed |
+| Curve training (practice only) | Off / On toggle, plus spot on track and start speed 0–300 km/h | **On** (since 1.10.0), spot 350 m before Abbey, guide speed |
 | Starting fuel (races) | 25–100 % of tank, step 5 | 100 % |
 | Starting position (10 lap race) | Pole / Front row / Mid-pack / Back | Mid-pack |
 | Rider name, number, team | up to 14 chars / 1–99 / 11 teams | Petr, 25, Arancia Tech |
@@ -264,6 +264,13 @@ Practise one corner again and again without riding the whole lap.
   - **Start speed** slider, 0–300 km/h in steps of 5, plus a **Guide speed** button that sets the recommended speed for the spot.
   - A line naming the spot: the corner it is in, and the distance to the next corner.
 - Spot and speed are saved with the other options.
+- Since 1.10.0 Curve training is **On by default**. Saved options from older versions switch to On once; after that the player's choice is kept.
+
+**Pause menu in Practice (Esc, since 1.10.0)**
+- The pause menu shows the same Curve training block as the main menu: the **On / Off toggle**, the track map, the corner list and the start speed slider with **Guide speed**.
+- **Go to spot** puts the bike on the chosen spot at the chosen speed at once (a fresh curve-training session, as with Restart). It turns Curve training On if it was Off.
+- **Resume** carries on riding where the bike is. Changes to the toggle, spot or speed are saved and apply from the next restart or R.
+- Turning the toggle Off and pressing **Restart session** starts normal practice from the pit box.
 
 **Session**
 - The bike starts on the spot, always in the **centre of the road** (lateral offset 0), pointing along the track, at the chosen speed and in the matching gear. The tank is full and the tyres are warm.
@@ -315,4 +322,4 @@ After tagging, push `main`, the tag and the feature branch to GitHub (`p3trk/mot
 
 ## 16. Version history
 
-See `CHANGELOG.md`. Current: **1.9.1**.
+See `CHANGELOG.md`. Current: **1.10.0**.

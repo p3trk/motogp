@@ -1,6 +1,6 @@
 # Silverstone GP — Game Design Document
 
-**Version:** 1.19.2 · **Last updated:** 2026-10-28 · **Owner:** Petr
+**Version:** 1.19.3 · **Last updated:** 2026-10-28 · **Owner:** Petr
 
 This document is the source of truth for how the game should work. Every
 change starts here: update the GDD on a feature branch first, then change the
@@ -85,6 +85,7 @@ Used when the game runs on a phone or tablet (touch screen, no keyboard). The de
   - A dead zone of 12° around the straight-up position (was 8°) stops small hand movements from leaning the bike. The bike starts to lean only past it, and the lean then grows smoothly up to full lean.
   - The zero point is the phone's angle when the race or session starts. Pause and resume keep the same zero. The pause menu has **Re-centre** to set a new zero.
   - Tilt sensitivity can be Very low (full lean at 75°), Low (60°, default) or High (35°).
+- **No zoom:** on phones the browser must not zoom or scroll the page while playing. Pinch zoom, double-tap zoom and drag-to-scroll are off for the whole game. Pressing the throttle or brake halves never zooms the page. Menus still scroll with a finger, but do not zoom.
 - **Landscape only:** in portrait the game shows a "Turn your phone sideways" screen and pauses. Landscape is needed because the tilt is read from the roll angle.
 - **Permission:** iPhone Safari asks for motion access the first time the player taps Start. If access is refused, lean is off and the message says so; brake and throttle still work.
 - **Layout:** the brake and throttle areas have a faint tint so the player can see where to press. The HUD sits at the same places as on desktop, and the bottom controls are kept clear of the speedometer and fuel.

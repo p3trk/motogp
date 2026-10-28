@@ -1,6 +1,6 @@
 # Silverstone GP — Game Design Document
 
-**Version:** 1.11.0 · **Last updated:** 2026-10-28 · **Owner:** Petr
+**Version:** 1.11.1 · **Last updated:** 2026-10-28 · **Owner:** Petr
 
 This document is the source of truth for how the game should work. Every
 change starts here: update the GDD on a feature branch first, then change the
@@ -308,7 +308,8 @@ Watch one recording, or several together for comparison. Any recording in the li
 
 **Timeline (bottom of the screen)**
 - A full-width scrubber from session start to end. Click or drag to jump anywhere. Lap starts are marked with ticks and lap numbers; the best lap is purple.
-- Buttons: **Play / Pause**, **Rewind** and **Fast forward**, **Slow motion**, **Previous / next lap**, **Exit**.
+- Buttons: **Play / Pause**, **Rewind** and **Fast forward**, **Slow motion**, **1×** (back to normal speed, also by clicking the speed readout), **Previous / next lap**, **Exit**.
+- The buttons, the keys and the timeline work whatever has focus (after using the Align list, focus goes back to the replay so Space and the arrows keep working).
 - Playback speeds: −8×, −4×, −2×, −1× (rewind), 0.25×, 0.5× (slow motion), 1×, 2×, 4×, 8× (fast forward). The current speed and time are shown next to the scrubber.
 - Keys: **Space** play/pause, **←/→** jump 5 s, **↓/↑** slower/faster (through the list above, through 0 into rewind), **[ / ]** previous/next lap (Session start alignment), **Tab** followed bike, **C** camera, **Esc** exit to the menu (or back to the results screen).
 - At the end of the recording playback pauses; rewinding to the start pauses there too.
@@ -356,4 +357,4 @@ After tagging, push `main`, the tag and the feature branch to GitHub (`p3trk/mot
 
 ## 16. Version history
 
-See `CHANGELOG.md`. Current: **1.11.0**.
+See `CHANGELOG.md`. Current: **1.11.1**.

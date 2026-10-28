@@ -1,6 +1,6 @@
 # Silverstone GP — Game Design Document
 
-**Version:** 1.5.0 · **Last updated:** 2026-10-28 · **Owner:** Petr
+**Version:** 1.6.0 · **Last updated:** 2026-10-28 · **Owner:** Petr
 
 This document is the source of truth for how the game should work. Every
 change starts here: update the GDD on a feature branch first, then change the
@@ -39,7 +39,6 @@ chequered flag → results table (positions, gaps, best laps, DNFs).
 | S | Brake |
 | A / D | Lean left / right |
 | O / L | Shift up / down (ignored in automatic) |
-| C | Cycle camera: Look-ahead → Rotating → North up (§11a) |
 | M | Mute / unmute sound |
 | Esc | Pause menu (resume, restart, end qualifying, quit) |
 
@@ -52,7 +51,6 @@ Stored in `localStorage` key `sgp_opts`.
 | Transmission | Manual / Automatic | Manual |
 | Rider aids (lean limiter + traction control) | On / Off | On |
 | AI level | Rookie (0.905) / Pro (0.955) / Legend (0.99) of ideal pace | Pro |
-| Camera | Look-ahead / Rotating / North up (§11a) | Look-ahead |
 | Speed guide (practice only) | On / Off | On |
 | Starting fuel (races) | 25–100 % of tank, step 5 | 100 % |
 | Starting position (10 lap race) | Pole / Front row / Mid-pack / Back | Mid-pack |
@@ -140,39 +138,33 @@ Stored in `localStorage` key `sgp_records`, format `{v:1, laps, best, trace, tra
 
 ## 11a. Camera
 
-The player must see a corner early enough to brake for it. At 300 km/h the
-braking zone for Stowe starts ~190 m before the corner. The camera has to show
-at least that much track ahead.
+There is one camera, **Rotating (chase)**. It rotates with the bike's heading,
+zooms out with speed and looks ahead along the heading, so the feel of speed is kept.
+- Look-ahead is limited so the bike always stays on screen at top speed.
+- There is no camera key and no camera option.
 
-**Look-ahead (default)**
-- **Framing:** the player's bike is fixed at 80 % of the screen height, horizontally centred. Almost the whole screen is track ahead.
-- **Zoom by stopping distance:** the view shows `D = clamp(v²/30 + 0.8·v + 30, 60, 220)` metres ahead of the bike (v in m/s) between the bike and the bottom of the timing panels (~22 % from the top). Examples:
+Removed in 1.6.0:
+- **Look-ahead camera:** its far zoom took away the feel of speed.
+- **North-up camera.**
 
-  | Speed | Distance shown ahead |
-  |---|---|
-  | 100 km/h | ~80 m |
-  | 200 km/h | ~180 m |
-  | 250 km/h and above | 220 m |
+Corners are read early through the corner countdown (§11b) instead.
 
-  Zoom changes are smoothed so the view breathes, not jumps.
-- **Corner-seeking:** the view is rotated so "up" points from the bike to a point on the racing line ~55 % of `D` ahead, not along the bike's heading. Before a corner the view turns towards it, so the corner's shape is visible on approach. It falls back to the bike's heading when:
-  - the bike is slower than ~30 km/h;
-  - the bike is in the pit lane;
-  - the bike is far off track;
-  - the bike is pointing away from the track direction.
-- **Bike size:** when zoomed out, bike sprites are drawn larger (at least ~20 px long) so riders stay readable. This is visual only; collisions use the real size.
-- **Crash:** the camera follows the sliding rider, using the heading.
+## 11b. Corner countdown (HUD)
 
-**Rotating (chase)**
-- The old camera. It rotates with the bike's heading and looks ahead by speed.
-- Look-ahead is limited so the bike stays on screen at top speed (before 1.5.0 the bike could drop off the bottom edge above ~250 km/h).
+The corner countdown appears in every mode when the player approaches a braking
+corner. It uses the same corners that have braking boards on track: any corner
+where the ideal speed drops by more than 80 km/h.
 
-**North up**
-- Fixed orientation (north up), lighter look-ahead.
+- **When:** it appears ~400 m before the corner's braking reference point. It disappears just after the corner entry. It is hidden in the pit lane and while crashed.
+- **Where:** top centre, directly under the lap stopwatch (under the speed guide when that is shown). The section name moves below it.
+- **Marks:** four board tiles **300 · 200 · 100 · 50**, measured to the same point as the trackside boards.
+  - Upcoming tiles are drawn as white boards.
+  - The next tile to pass is highlighted and grows as it gets closer.
+  - Passed tiles turn dark.
+  - A thin bar under the tiles counts down the distance.
+- **Pictogram:** a small diagram of the corner's shape, about 250 m of track from just before the 50 board to the exit. It is turned so the approach points up, with an arrow at the exit and a dot for the player's position. It is drawn next to the tiles with the corner name.
 
-**Rendering at low zoom:** below ~5 device pixels per metre, the static world is drawn from coarse 120 m tiles (512 px). This keeps the zoomed-out view fast. Close up, the detailed 40 m tiles are used.
-
-## 12. Track and graphics
+## 12. Track and graphics## 12. Track and graphics
 
 - Centreline from the TUMFTM racetrack-database (LGPL-3.0), resampled every ~2 m (5 888 m, 2 944 points); start line at the real finish line.
 - Racing line from curvature relaxation; ideal speed profile from forward/backward acceleration passes (ideal lap ≈ 2:08).
@@ -187,7 +179,7 @@ at least that much track ahead.
 - Single HTML file; no external code, only Google Fonts (Saira Condensed, Barlow). The built file is ASCII-only so it opens correctly from disk.
 - Source in `src/` (`head.html`, `core.js`, `world.js`, `render.js`, `ui.js`, `track.txt`), joined by `tools/build.py` into `motogp.html`.
 - Performance:
-  - static world baked into 512 px tiles of 40 m (LRU cache of 160), plus coarse 120 m tiles for zoomed-out views (§11a);
+  - static world baked into 512 px tiles of 40 m (LRU cache of 160);
   - device pixel ratio capped at 1.5, dropping to 1 when frames are slow;
   - only dynamic things are drawn each frame;
   - target 60 fps.
@@ -215,4 +207,4 @@ The repository is local only (no remote push).
 
 ## 16. Version history
 
-See `CHANGELOG.md`. Current: **1.5.0**.
+See `CHANGELOG.md`. Current: **1.6.0**.

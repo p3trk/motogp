@@ -403,7 +403,8 @@ function standings() {
   if (W.mode === 'race') {
     return bikes.sort((a, b) => {
       if (a.dnf !== b.dnf) return a.dnf ? 1 : -1;
-      if (a.finished && b.finished) return W.finishOrder.indexOf(a) - W.finishOrder.indexOf(b);
+      // laps first, so a rider a lap down is always below the lead-lap riders (GDD 11, since 1.19.4)
+      if (a.finished && b.finished) return (b.lap - a.lap) || (W.finishOrder.indexOf(a) - W.finishOrder.indexOf(b));
       if (a.finished !== b.finished) return a.finished ? -1 : 1;
       return b.progress - a.progress;
     });

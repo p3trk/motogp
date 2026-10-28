@@ -1,6 +1,6 @@
 # Silverstone GP — Game Design Document
 
-**Version:** 1.6.1 · **Last updated:** 2026-10-28 · **Owner:** Petr
+**Version:** 1.7.0 · **Last updated:** 2026-10-28 · **Owner:** Petr
 
 This document is the source of truth for how the game should work. Every
 change starts here: update the GDD on a feature branch first, then change the
@@ -40,6 +40,7 @@ chequered flag → results table (positions, gaps, best laps, DNFs).
 | A / D | Lean left / right |
 | O / L | Shift up / down (ignored in automatic) |
 | M | Mute / unmute sound |
+| C | Switch camera: Behind ↔ Top-down (§11a) |
 | Esc | Pause menu (resume, restart, end qualifying, quit) |
 
 ## 4. Options (menu)
@@ -51,6 +52,7 @@ Stored in `localStorage` key `sgp_opts`.
 | Transmission | Manual / Automatic | Manual |
 | Rider aids (lean limiter + traction control) | On / Off | On |
 | AI level | Rookie (0.905) / Pro (0.955) / Legend (0.99) of ideal pace | Pro |
+| Camera | Behind (tilted) / Top-down | Behind |
 | Speed guide (practice only) | On / Off | On |
 | Starting fuel (races) | 25–100 % of tank, step 5 | 100 % |
 | Starting position (10 lap race) | Pole / Front row / Mid-pack / Back | Mid-pack |
@@ -138,16 +140,33 @@ Stored in `localStorage` key `sgp_records`, format `{v:1, laps, best, trace, tra
 
 ## 11a. Camera
 
-There is one camera, **Rotating (chase)**. It rotates with the bike's heading,
-zooms out with speed and looks ahead along the heading, so the feel of speed is kept.
+Two cameras, switched with **C** or in the menu.
+
+**Behind (default, since 1.7.0)**
+- A chase view from behind and slightly above the bike. The flat 2D world is tilted back in true perspective (see Tuning below).
+- Near track is big, which keeps the feel of speed. Far track shrinks towards the horizon, so corners coming up are visible much earlier than top-down.
+- The bike sits ~20 % above the bottom edge. The view rotates with the bike's heading, smoothed. Bikes are drawn at least ~40 px long so they stay readable when zoomed out (visual only).
+- Zoom eases out with speed: `ppm = min(20, min(VW, 1.25·VH) / (30 + 1.45·v))`.
+  - At 300 km/h roughly 250–300 m of track ahead is on screen.
+  - In a slow corner it stays close.
+- HUD, name tags and panels are drawn flat on a separate layer on top. Name tags are projected through the same perspective.
+- **Implementation:** the ground plane is rendered top-down into two offscreen canvases.
+  - Near band: the first screen-height of plane at 0.75 × resolution.
+  - Far band: the rest, up to ~2.6 screen heights, at 0.4 × resolution.
+  - Both are projected onto the screen in 3 px horizontal strips, each scaled by the perspective factor.
+  - A sky gradient fills the space above the far edge, and haze fades the far ground into it.
+  - On slow machines the resolution of both bands drops by a further 20 %.
+- **Tuning:** the tilt is **40°** with a camera distance of 1.3 × screen height. The plane is 2.3 × screen width and 2.6 × screen height.
+
+**Top-down (Rotating)**
+- The pre-1.7 camera. Top-down, rotates with the bike's heading, zooms out with speed and looks ahead along the heading.
 - Look-ahead is limited so the bike always stays on screen at top speed.
-- There is no camera key and no camera option.
 
-Removed in 1.6.0:
-- **Look-ahead camera:** its far zoom took away the feel of speed.
-- **North-up camera.**
+**Removed in 1.6.0**
+- Look-ahead camera: its far zoom took away the feel of speed.
+- North-up camera.
 
-Corners are read early through the corner countdown (§11b) instead.
+The corner countdown (§11b) works with both cameras.
 
 ## 11b. Corner countdown (HUD)
 
@@ -211,4 +230,4 @@ The repository is local only (no remote push).
 
 ## 16. Version history
 
-See `CHANGELOG.md`. Current: **1.6.1**.
+See `CHANGELOG.md`. Current: **1.7.0**.

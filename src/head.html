@@ -102,7 +102,7 @@ tr.me td.pos{color:var(--accent)}
       <div class="opt" id="optFuelWrap"><label for="optFuel">Starting fuel <span id="optFuelV" style="color:var(--fg)"></span></label><input id="optFuel" type="range" min="25" max="100" step="5" value="100"><span class="hint" id="optFuelHint"></span></div>
       <div class="opt" id="optGuideWrap"><span class="lbl">Speed guide (practice)</span><div class="seg" id="optGuide"><button data-v="on" aria-pressed="true">On</button><button data-v="off" aria-pressed="false">Off</button></div><span class="hint">Shows the recommended speed, the next braking point and a coloured line on track.</span></div>
       <div class="opt" id="optTrainWrap" style="grid-column:1/-1"><span class="lbl">Curve training (practice)</span><div class="seg" id="optTrain" style="max-width:240px"><button data-v="off" aria-pressed="true">Off</button><button data-v="on" aria-pressed="false">On</button></div><span class="hint">Start from any spot on the track at a chosen speed, in the centre of the road. Restart or R puts you back on the spot.</span>
-        <div id="trainBox" class="trainbox" hidden><canvas id="trainMap" aria-label="Track map: click or drag to pick the start spot"></canvas><div class="trainside"><label for="optTrainCorner">Corner</label><select id="optTrainCorner"></select><label for="optTrainV">Start speed <span id="optTrainVV" style="color:var(--fg)"></span></label><input id="optTrainV" type="range" min="0" max="300" step="5"><div><button class="chip" id="btnTrainGuide">Guide speed</button></div><span class="hint" id="trainInfo"></span></div></div></div>
+        <div id="trainBox" class="trainbox" hidden><canvas id="trainMap" aria-label="Track map: click or drag to pick the start spot"></canvas><div class="trainside"><label for="optTrainCorner">Corner</label><select id="optTrainCorner"></select><label for="optTrainV">Start speed <span id="optTrainVV" style="color:var(--fg)"></span></label><input id="optTrainV" type="range" min="0" max="300" step="5"><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="chip" id="btnTrainGuide">Guide speed</button><button class="btn" id="btnTrainGo" style="font-size:17px;padding:6px 16px" hidden>Go to spot</button></div><span class="hint" id="trainInfo"></span></div></div></div>
       <div class="opt" id="optGridWrap"><label for="optGrid">Starting position</label><select id="optGrid"><option value="back">Back of the grid (P22)</option><option value="mid" selected>Midfield (P12)</option><option value="front">Front row (P3)</option><option value="pole">Pole position</option></select></div>
     </div>
     <div class="panel" style="display:flex;flex-direction:column;gap:12px"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><h2 style="font-size:22px">Your laps</h2><button class="btn ghost" id="btnClearRec" style="font-size:15px;padding:6px 12px" hidden>Clear saved laps</button></div><div id="records"></div></div>
@@ -116,9 +116,10 @@ tr.me td.pos{color:var(--accent)}
 </div>
 
 <div id="pause" class="overlay" hidden>
-  <div class="center"><div class="wrap" style="max-width:520px">
+  <div class="center"><div class="wrap" style="max-width:680px">
     <div class="eyebrow" id="pauseSub">Session paused</div><h2 style="font-size:44px">Paused</h2>
     <div class="actions"><button class="btn" id="btnResume">Resume</button><button class="btn ghost" id="btnRestart">Restart session</button><button class="btn ghost" id="btnEndQ" hidden>End qualifying</button><button class="btn ghost" id="btnExport">Export session</button><button class="btn ghost" id="btnQuit">Quit to menu</button></div>
+    <div class="opts" id="pauseTrain" hidden></div>
   </div></div>
 </div>
 

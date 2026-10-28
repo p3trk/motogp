@@ -375,9 +375,9 @@ window.addEventListener('blur', () => { Input.k = {}; if (UI.state === 'play' &&
 // ---------------------------------------------------------------------------
 const $ = id => document.getElementById(id);
 const UI = {
-  state: 'menu', opts: { mode: 'sprint', trans: 'manual', aids: 'on', ai: 'pro', cam: 'behind', guide: 'on', train: 'off', trainS: -1, trainV: -1, fuel: 100, grid: 'mid', name: 'Petr', num: 25, team: 2 },
+  state: 'menu', opts: { mode: 'sprint', trans: 'manual', aids: 'on', ai: 'pro', cam: 'behind', guide: 'on', train: 'on', trainS: -1, trainV: -1, fuel: 100, grid: 'mid', name: 'Petr', num: 25, team: 2 },
   init() {
-    try { const s = JSON.parse(localStorage.getItem('sgp_opts') || 'null'); if (s) { if (s.cam !== 'chase') delete s.cam; Object.assign(this.opts, s); } } catch (e) { }
+    try { const s = JSON.parse(localStorage.getItem('sgp_opts') || 'null'); if (s) { if (s.cam !== 'chase') delete s.cam; if (!s.trainDef) delete s.train; Object.assign(this.opts, s); } this.opts.trainDef = 1; } catch (e) { }
     const sel = $('optTeam'); TEAMS.forEach((t, k) => { const o = document.createElement('option'); o.value = k; o.textContent = t.name; sel.appendChild(o); });
     document.querySelectorAll('.mode').forEach(m => m.addEventListener('click', () => { this.opts.mode = m.dataset.mode; this.sync(); }));
     for (const [id, key] of [['optTrans', 'trans'], ['optAids', 'aids'], ['optAI', 'ai'], ['optCam', 'cam'], ['optGuide', 'guide'], ['optTrain', 'train']]) $(id).querySelectorAll('button').forEach(bt => bt.addEventListener('click', () => { this.opts[key] = bt.dataset.v; this.sync(); }));
@@ -439,6 +439,7 @@ const UI = {
     if (!(o.trainS >= 0)) o.trainS = this.trainSpot(T.zones[0]);
     if (!(o.trainV >= 0)) o.trainV = clamp(guideV(o.trainS), 0, 300);
     sel.addEventListener('change', () => { if (sel.value === 'x') return; o.trainS = this.trainSpot(T.zones[+sel.value]); o.trainV = clamp(guideV(o.trainS), 0, 300); this.sync(); });
+    $('btnTrainGo').addEventListener('click', () => { o.train = 'on'; this.sync(); this.launch('practice', {}); });
     $('optTrainV').addEventListener('input', e => { o.trainV = +e.target.value; this.sync(); });
     $('btnTrainGuide').addEventListener('click', () => { o.trainV = clamp(guideV(o.trainS), 0, 300); this.sync(); });
     // map: fit the centreline, pick the nearest point on click / drag
@@ -489,7 +490,12 @@ const UI = {
       return `<tr><td><button class="chip" data-act="ghost" data-id="${esc(m.id)}" aria-pressed="${on}">${on ? 'Ghost on' : 'Ghost'}</button></td><td>${sw(clamp(m.rider.team | 0, 0, TEAMS.length - 1))}#${m.rider.num | 0} ${esc(m.rider.name)}</td><td>${lbl[m.kind] || esc(m.mode)}${src[m.src] ? ' <span class="small">· ' + src[m.src] + '</span>' : ''}</td><td>${m.bestLap ? fmtTime(m.bestLap) : '–'}</td><td>${m.laps | 0}</td><td>${res}</td><td class="small">${new Date(m.date).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</td><td><button class="chip" data-act="export" data-id="${esc(m.id)}">Export</button> <button class="chip" data-act="del" data-id="${esc(m.id)}">Delete</button></td></tr>`;
     }).join('') + '</tbody></table>';
   },
-  hideAll() { for (const id of ['menu', 'pause', 'results']) $(id).hidden = true; },
+  hideAll() { for (const id of ['menu', 'pause', 'results']) $(id).hidden = true; this.trainIn(false); },
+  trainIn(pause) { // the curve-training block moves between the main menu and the practice pause menu (GDD 11d)
+    const el = $('optTrainWrap'), P = $('pauseTrain');
+    if (pause) { P.appendChild(el); P.hidden = false; } else if (el.parentNode === P) { $('optGridWrap').before(el); P.hidden = true; }
+    $('btnTrainGo').hidden = !pause;
+  },
   toMenu() { Rec.stop(); this.hideAll(); this.state = 'menu'; W.paused = false; $('menu').hidden = false; this.renderRecords(); },
   start() { Sound.start(); this.launch(this.opts.mode === 'gp' ? 'quali' : this.opts.mode, {}); },
   sessionOpts(extra) {
@@ -508,6 +514,7 @@ const UI = {
     if (this.state !== 'play') return;
     W.paused = !W.paused; $('pause').hidden = !W.paused;
     $('pauseSub').textContent = W.mode === 'race' ? `Lap ${Math.min(W.totalLaps, W.player.lap + 1)} of ${W.totalLaps}` : W.mode === 'quali' ? 'Qualifying' : W.train ? 'Curve training · restart puts you back on the spot' : 'Free practice';
+    this.trainIn(W.paused && W.mode === 'practice');
     if (W.paused) $('btnResume').focus();
   },
   finishQuali() {

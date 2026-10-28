@@ -306,6 +306,7 @@ const RP = {
     recs = recs.filter(Boolean).slice(0, RP_MAX); if (!recs.length) return;
     this.saved = back === 'pause' ? { bikes: W.bikes, ghosts: W.ghosts, player: W.player, guide: W.guide, train: W.train } : null;
     this.back = back || 'menu';
+    if (this.back === 'menu') setCamMode(UI.opts.cam); // the start-screen camera; from pause or results the one in use (GDD 11e)
     this.items = recs.map((R, k) => ({ R, cum: rpDist(R), best: rpBestLap(R), g: { id: 'rp' + k, team: R.rider.team, num: R.rider.num, short: R.rider.short, name: R.rider.name, isPlayer: k === 0, x: 0, y: 0, h: 0, v: 0, vs: 0, lean: 0, wheelie: 0, s: 0, i: 0, ctl: { thr: 0, brk: 0 }, show: true, crashed: false, dnf: false } }));
     this.align = recs.length > 1 && this.items.every(it => it.best) ? 'best' : 'start'; this.lapN = 1; this.follow = 0;
     UI.hideAll(); UI.state = 'replay'; W.paused = false; FX.clear(); W.guide = false; W.train = null;
@@ -374,7 +375,7 @@ const RP = {
   cycle() { const vis = this.items.map((it, k) => k).filter(k => this.items[k].on); const j = vis.indexOf(this.follow); this.follow = vis[(j + 1) % vis.length]; this.place(); CAM.init = false; },
   close() {
     UI.rbarClose(); FX.clear();
-    if (this.back === 'pause' && this.saved) { Object.assign(W, { bikes: this.saved.bikes, ghosts: this.saved.ghosts, player: this.saved.player, guide: this.saved.guide, train: this.saved.train }); this.saved = null; UI.state = 'play'; W.paused = true; $('pause').hidden = false; UI.trainIn(W.mode === 'practice'); UI.camIn(CAM.mode === 'behind'); CAM.init = false; return; }
+    if (this.back === 'pause' && this.saved) { Object.assign(W, { bikes: this.saved.bikes, ghosts: this.saved.ghosts, player: this.saved.player, guide: this.saved.guide, train: this.saved.train }); this.saved = null; UI.state = 'play'; W.paused = true; $('pause').hidden = false; UI.trainIn(W.mode === 'practice'); UI.camIn(camTilted()); CAM.init = false; return; }
     if (this.back === 'results') { attractSession(); UI.state = 'results'; $('results').hidden = false; return; }
     attractSession(); UI.toMenu();
   }

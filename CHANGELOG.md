@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.14.0 (2026-10-28)
+- CLOSE is its own camera: the start screen Camera option has Behind / CLOSE / Top-down, and the choice is remembered after a reload for all three (before, only Top-down was kept). C switches Behind → CLOSE → Top-down → Behind in a session and in replay (also the replay Camera button) and updates the start-screen option. A replay opened from the start screen starts with the start-screen camera; from the pause menu or results it keeps the camera in use.
+- Camera tuning per camera: the pause-menu panel is titled "Camera tuning (Behind)" or "Camera tuning (CLOSE)" and edits only that camera; C in the pause menu switches the panel (hidden for Top-down). Behind is saved in `sgp_cam`, CLOSE in `sgp_cam_close`; Reset to defaults resets only the current camera. CLOSE starts with the 1.13.1 Close values.
+- The Profile list (Standard / Close / Custom) is gone. An old `sgp_cam` saved with the Close profile unchanged gives Behind its defaults; other saved values stay with Behind. The slow-machine quality drop applies to both tilted cameras.
+- Tests: `camera_shake` also runs with CLOSE (12 cases), `tilt_seam` uses the CLOSE camera at 1470×830 @2x, `camera_tuning` checks CLOSE instead of the profiles.
+
 ## v1.13.1 (2026-10-28)
 - Close camera sees further with much less sky: tilt 55° (was 60°), distance 1.8 × screen height (was 1.6), ground depth 6 × screen (was 5.5), far image 0.7 (was 0.6, keeps the near-to-far hand-over smooth at the lower tilt). Sky goes from about 31 % to about 8 % of the screen at 1470×830, the ground reaches about 10 % further ahead and the bike is about 20 % longer on screen (same zoom). `tests/camera_tuning.test.js` also checks that the Close sky is at most 12 % of the screen on a straight (16 checks).
 

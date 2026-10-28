@@ -28,7 +28,8 @@ function resize() {
   const layer = (c, x0, y0, w, h, dpr) => { if (c !== cv) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); } return { c, g: c === cv ? mainCtx : c.getContext('2d', { alpha: false }), x0, y0, w, h, dpr }; };
   if (tilt) {
     const P = TILT.p * VH, hN = Math.round(VH), wN = Math.min(RW, Math.ceil(VW * (P + hN * Math.sin(TILT.a)) / P) + 8);
-    LAYERS = [layer(farCv, 0, 0, RW, RH - hN + 4, 0.4 * TILT.q), layer(nearCv, (RW - wN) / 2, RH - hN, wN, hN, 0.75 * TILT.q)];
+    const hB = Math.round(hN * 0.3); // far band reaches this far into the near band, where the two cross-fade (GDD 1.11.6)
+    LAYERS = [layer(farCv, 0, 0, RW, RH - hN + hB + 4, 0.45 * TILT.q), layer(nearCv, (RW - wN) / 2, RH - hN, wN, hN, 0.75 * TILT.q)]; LAYERS[0].hB = hB;
   } else LAYERS = [layer(cv, 0, 0, VW, VH, DPR)];
 }
 
@@ -379,11 +380,18 @@ function projectTilted() {
   const near = LAYERS[1], far = LAYERS[0], hN = near.h;
   // one strip per screen row: the horizontal scale changes from row to row, so taller strips drew straight lines
   // as small steps, worst where the near and far bands join (GDD 1.11.5)
-  for (let u0 = 0; u0 < uTop; u0 += 1) {
-    const u1 = Math.min(uTop, u0 + 1), h0 = hOf(u0), h1 = hOf(u1), Ly = (h0 + h1) / 2 <= hN ? near : far;
-    const sc = P / (P + (h0 + h1) / 2 * sa), d = Ly.dpr, cw = Ly.c.width;
-    const sy0 = Math.max(0, (RH - h1 - Ly.y0) * d), sh = Math.min(Ly.c.height, (RH - h0 - Ly.y0) * d) - sy0; if (sh <= 0) continue;
+  // the sharper near band fades into the far band over the last hB of the near band, so the picture does not
+  // get blurrier in one step where they join (GDD 1.11.6)
+  const hB = far.hB, hF = hN - hB;
+  const row = (Ly, u0, u1, h0, h1, sc) => {
+    const d = Ly.dpr, cw = Ly.c.width;
+    const sy0 = Math.max(0, (RH - h1 - Ly.y0) * d), sh = Math.min(Ly.c.height, (RH - h0 - Ly.y0) * d) - sy0; if (sh <= 0) return;
     g.drawImage(Ly.c, 0, sy0, cw, sh, VW / 2 + (Ly.x0 - RW / 2) * sc, VH - u1, cw / d * sc, u1 - u0 + 0.5);
+  };
+  for (let u0 = 0; u0 < uTop; u0 += 1) {
+    const u1 = Math.min(uTop, u0 + 1), h0 = hOf(u0), h1 = hOf(u1), hm = (h0 + h1) / 2, sc = P / (P + hm * sa);
+    if (hm < hN) row(near, u0, u1, h0, h1, sc);
+    if (hm > hF) { const a = hm >= hN ? 1 : (hm - hF) / hB; if (a < 1) g.globalAlpha = a; row(far, u0, u1, h0, h1, sc); g.globalAlpha = 1; }
   }
 }
 function drawWorldLayer(Ly, sx, sy) {

@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.11.4 (2026-10-28)
+- No more horizontal cut at the pit exit before Abbey (live and replay): the pit lane entry and exit merge into the track edge over 20 m, run-off areas narrow gradually at their ends, and walls no longer step by up to 4 m at the pit zone.
+- `tests/kerb_ends.test.js` became `tests/track_edges.test.js`: it now also checks run-off, walls and the pit lane ends. v1.11.3 fails it; v1.11.4 passes.
+
 ## v1.11.3 (2026-10-28)
 - Kerbs narrow to nothing over their first and last 8 m instead of ending square, so kerb ends (and the gravel and run-off edges next to them) no longer look like a horizontal cut across the screen.
 - New automated test `tests/kerb_ends.test.js`: fails if any kerb ends square (v1.11.2 had 68 such ends).

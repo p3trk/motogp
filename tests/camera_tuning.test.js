@@ -141,7 +141,7 @@ const UNIT = { a: DEG, bike: 0.01, fade: 0.01 }; // display unit -> TILT value
   // k) replay: starts with the start-screen camera, C cycles all three
   await page.evaluate(() => {
     const S = window.__sgp; S.UI.opts.cam = 'behind'; S.UI.opts.train = 'off'; S.UI.launch('practice', {});
-    const W = S.W, b = W.player; b.autopilot = true; W.paused = true; let g = 0;
+    const W = S.W, b = W.player; b.autopilot = true; b.trainHold = false; W.paused = true; let g = 0;
     while (b.laps.length < 1 && g < 120 * 900) { S.simStep(S.SUB); g++; }
     W.paused = false; S.UI.toMenu(); S.UI.opts.cam = 'close'; S.RP.open([S.Lib.data[S.Lib.meta[0].id]], 'menu');
   });
@@ -174,7 +174,7 @@ const UNIT = { a: DEG, bike: 0.01, fade: 0.01 }; // display unit -> TILT value
   const v0 = await p2.evaluate(() => {
     const S = window.__sgp; try { localStorage.removeItem('sgp_cam'); localStorage.removeItem('sgp_cam_close'); } catch (e) { }
     S.UI.opts.cam = 'close'; S.UI.opts.train = 'off'; S.UI.launch('practice', {});
-    const W = S.W, b = W.player; b.autopilot = true; W.paused = true; let g = 0, hp = b.h, ok = 0;
+    const W = S.W, b = W.player; b.autopilot = true; b.trainHold = false; W.paused = true; let g = 0, hp = b.h, ok = 0;
     while (g < 120 * 300) { // drive until 0.5 s on a straight above 270 km/h
       S.simStep(S.SUB); g++; const yaw = Math.abs(((b.h - hp + 9 * Math.PI) % (2 * Math.PI)) - Math.PI) * 120; hp = b.h;
       ok = b.v > 75 && yaw < 0.02 ? ok + 1 : 0; if (ok > 60) break;

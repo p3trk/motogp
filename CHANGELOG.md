@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.16.0 (2026-10-28)
+- Practice starts on the grid: with Curve training Off the bike stands on the slot chosen with Starting position (Pole / Front row / Mid-pack / Back, one setting shared with the 10 lap race, shown for Practice only with Curve training Off), exactly where it stands in the race. No start lights; the bike is held until the first W, S, A or D press, and lap 1 is a timed standing-start lap from that moment (saved like any lap). The pit box still works for refuelling. Qualifying still starts from the box.
+- R works in all practice: back to the grid slot, or to the training spot with Curve training On; Restart session does the same.
+- Ghosts start with the player. A standing-start recording (a race, or a 1.16.0 practice grid start) stands on its own grid slot and launches at the first input, with the lights and reaction time cut, then plays the whole recording (its laps shown in the timing tower) and disappears at its end. Other recordings wait for the first line crossing on a grid start.
+- Curve training: the reference ghost stands on the spot with the player and both start at the first input; other ghosts are placed by lap time relative to it. The start message names the reference ghost's speed at the spot. This replaces the 1.15.0 rule (no ghost before the line).
+- Choosing the reference: Sync button on Ghost rows in Recordings (saved in `sgp_ghost_sync`) and a Sync ghosts to list in the practice pause menu with 2 or more ghosts. R, Restart and Go to spot re-sync all ghosts.
+- Recordings have an optional `start` field (`grid` / `spot` / `box`, start moment, slot or spot); files without it still load (a race with lights out reads as a grid start, anything else as a box start).
+- Tests: new `tests/practice_start.test.js` (25 checks, in `npm test`); `practice_ghosts` now checks a ghost without a standing start from the first line crossing on a grid start; tests that recorded a lap from the pit box now use qualifying (still box start).
+
 ## v1.15.0 (2026-10-28)
 - Ghosts in curve training: selected ghosts now ride with you once you cross the line and start a normal timed lap, starting with that lap as in practice. They are not shown while riding from the training spot to the line, and R hides them again until the next timed lap. The Recordings panel hint says so.
 - GDD: the minimap ring that marks your own pit box (team colour, blinks every 0.3 s) is now documented.

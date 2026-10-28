@@ -63,7 +63,7 @@ const SIZES = [[1280, 800, 1, 'behind'], [1470, 830, 2, 'behind'], [1024, 700, 1
     // live riding (Behind or CLOSE camera), then replay of the recorded lap
     await page.evaluate(cam => {
       const S = window.__sgp; S.UI.opts.cam = 'behind'; S.UI.opts.train = 'off'; S.UI.launch('practice', {}); S.setCamModeX(cam);
-      const W = S.W, b = W.player; b.autopilot = true; W.paused = true; let g = 0;
+      const W = S.W, b = W.player; b.autopilot = true; b.trainHold = false; W.paused = true; let g = 0;
       while (b.laps.length < 1 && g < 120 * 900) { S.simStep(S.SUB); g++; }
       W.paused = false; S.drawWorldX();
     }, cam);

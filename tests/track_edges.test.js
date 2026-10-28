@@ -39,8 +39,9 @@ const LIMITS = { kerb: 0.45, runoff: 2.0, wall: 1.5, pit: 1.5 };
     return out;
   }, LIMITS);
   // both modes draw this geometry: make sure the pit exit renders in live riding and in replay without errors
+  // (qualifying starts in the pit box; practice starts on the grid since 1.16.0)
   await page.evaluate(() => {
-    const S = window.__sgp; S.UI.opts.cam = 'behind'; S.UI.opts.train = 'off'; S.UI.launch('practice', {});
+    const S = window.__sgp; S.UI.opts.cam = 'behind'; S.UI.launch('quali', {});
     const W = S.W, b = W.player; b.autopilot = true; W.paused = true; let g = 0;
     while (b.laps.length < 1 && g < 120 * 900) { S.simStep(S.SUB); g++; }
     W.paused = false; S.drawWorldX();

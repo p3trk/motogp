@@ -15,7 +15,7 @@ const Rec = {
       id: 'r' + Date.now().toString(36) + ((Math.random() * 1296) | 0).toString(36), date: new Date().toISOString(),
       kind: W.kind, mode: W.mode, totalLaps: W.totalLaps,
       rider: { name: b.name, num: b.num, team: b.team, short: b.short }, aids: !!o.aids, auto: !!o.auto,
-      laps: [], bestLap: 0, raceStart: 0, finishT: 0, position: 0, pits: 0,
+      laps: [], bestLap: 0, raceStart: 0, finishT: 0, position: 0, pits: 0, start: recStartOf(),
       samples: { dt: REC_DT, x: [], y: [], h: [], v: [], lean: [], s: [], p: [] }
     };
   },
@@ -33,7 +33,7 @@ const Rec = {
     const R = this.cur; if (!R) return null; const b = W.player;
     const own = R.laps.filter(l => !l.ap), pool = own.length ? own : R.laps;
     R.bestLap = pool.length ? Math.min(...pool.map(l => l.time)) : 0;
-    if (W.mode === 'race') { R.raceStart = W.raceStartT > 0 ? r2(W.raceStartT, 1000) : 0; R.finishT = b.finished ? r2(b.finishT, 1000) : 0; R.position = b.dnf ? 0 : standings().indexOf(b) + 1; }
+    if (W.mode === 'race') { R.raceStart = W.raceStartT > 0 ? r2(W.raceStartT, 1000) : 0; R.start.t = R.raceStart; R.finishT = b.finished ? r2(b.finishT, 1000) : 0; R.position = b.dnf ? 0 : standings().indexOf(b) + 1; }
     R.pits = b.pits;
     return JSON.parse(JSON.stringify(R));
   },
@@ -43,6 +43,38 @@ const Rec = {
     this.last = R; Lib.add(R, 'auto'); return R;
   }
 };
+
+// how this session starts (GDD 10, since 1.16.0); t is set at lights out (race) or the first input (practice)
+function recStartOf() {
+  const b = W.player;
+  if (W.mode === 'race') return { kind: 'grid', t: 0, slot: b.grid || 0 };
+  if (W.train) return { kind: 'spot', t: 0, s: r2(T.wrapS(W.train.s), 10), v: r2(W.train.v, 100) };
+  if (W.gridStart) return { kind: 'grid', t: 0, slot: W.gridSlot + 1 };
+  return { kind: 'box', t: 0 };
+}
+// start of a recording; files without one (before 1.16.0): a race with lights out is a grid start, anything else the box
+function recStart(R) {
+  const st = R.start;
+  if (st && typeof st === 'object' && ['grid', 'spot', 'box'].includes(st.kind) && isFinite(st.t) && st.t >= 0) return st;
+  return R.mode === 'race' && R.raceStart > 0 ? { kind: 'grid', t: R.raceStart } : { kind: 'box', t: 0 };
+}
+// launch moment of a standing start: the last standing sample before the first one above 0.5 m/s, from the start on (GDD 11c)
+function recLaunch(R, t0) {
+  const S = R.samples, n = S.v.length;
+  for (let k = Math.max(0, Math.ceil(t0 / S.dt - 1e-6)); k < n; k++) if (S.v[k] > 0.5) return Math.max(t0, (k - 1) * S.dt);
+  return t0;
+}
+// recording time where the track distance passes s0 within lap l (line to line), between two samples (GDD 11c)
+function recTimeAt(R, l, s0) {
+  const S = R.samples, cum = rpDist(R), dt = S.dt, n = cum.length;
+  const k0 = clamp(Math.floor(l.start / dt), 0, n - 1), f0 = clamp(l.start / dt - k0, 0, 1), k1 = Math.min(n - 1, k0 + 1);
+  const c0 = cum[k0] + (cum[k1] - cum[k0]) * f0, sStart = recAt(R, l.start).p;
+  const need = T.wrapS(s0 - T.wrapS(sStart)); // metres from the lap start to the spot
+  for (let k = k0 + 1; k < n && k * dt <= l.end + dt; k++) {
+    if (cum[k] - c0 >= need) { const a = cum[k - 1] - c0, b = cum[k] - c0, f = b > a ? clamp((need - a) / (b - a), 0, 1) : 0; return clamp((k - 1 + f) * dt, l.start, l.end); }
+  }
+  return l.end;
+}
 
 function recFileName(R) {
   const d = new Date(R.date), z = n => String(n).padStart(2, '0');
@@ -87,9 +119,10 @@ function unpackRec(R) {
 // library: the last 10 own sessions in localStorage; imports and saved_tracks files only for this visit.
 // IndexedDB keeps just the linked saved_tracks folder handle (and the pre-1.9.1 library, moved once).
 const Lib = {
-  db: null, meta: [], data: {}, ghosts: [], cmp: [], dir: null, dirOK: false, status: '', onChange: null, stored: true,
+  db: null, meta: [], data: {}, ghosts: [], sync: '', cmp: [], dir: null, dirOK: false, status: '', onChange: null, stored: true,
   init() {
     try { this.ghosts = JSON.parse(localStorage.getItem('sgp_ghosts') || '[]').slice(0, GHOST_MAX); } catch (e) { this.ghosts = []; }
+    try { this.sync = localStorage.getItem('sgp_ghost_sync') || ''; } catch (e) { this.sync = ''; }
     let had = false;
     try { const raw = localStorage.getItem(LS_KEY); had = raw !== null; for (const P of JSON.parse(raw || '[]')) { try { const R = unpackRec(P); if (recValid(R)) { this.data[R.id] = R; this.meta.push(recMeta(R, 'auto')); } } catch (e) { } } }
     catch (e) { this.stored = false; }
@@ -154,10 +187,13 @@ const Lib = {
     if (m && m.src === 'auto' && !noSave) this.persist();
     if (!quiet) this.changed();
   },
-  saveGhosts() { try { localStorage.setItem('sgp_ghosts', JSON.stringify(this.ghosts)); } catch (e) { } },
+  saveGhosts() { try { localStorage.setItem('sgp_ghosts', JSON.stringify(this.ghosts)); localStorage.setItem('sgp_ghost_sync', this.sync); } catch (e) { } },
+  // sync reference for spot starts (GDD 11c): the marked ghost, else the first selected one
+  syncId() { return this.ghosts.includes(this.sync) ? this.sync : this.ghosts[0] || ''; },
+  setSync(id) { if (!this.ghosts.includes(id)) return; this.sync = id; this.saveGhosts(); this.changed(); },
   toggleGhost(id) {
     const k = this.ghosts.indexOf(id);
-    if (k >= 0) this.ghosts.splice(k, 1); else { if (this.ghosts.length >= GHOST_MAX) { this.status = `Up to ${GHOST_MAX} ghosts at once. Switch one off first.`; this.changed(); return; } this.ghosts.push(id); }
+    if (k >= 0) { this.ghosts.splice(k, 1); if (this.sync === id) this.sync = this.ghosts[0] || ''; } else { if (this.ghosts.length >= GHOST_MAX) { this.status = `Up to ${GHOST_MAX} ghosts at once. Switch one off first.`; this.changed(); return; } this.ghosts.push(id); }
     this.saveGhosts(); this.changed();
   },
   ghostRecs() { return this.ghosts.map(id => this.data[id]).filter(Boolean); },
@@ -237,13 +273,26 @@ function makeGhost(R) {
   };
 }
 const Ghost = {
-  setup(recs) { // called from setupSession
-    W.ghosts = [];
+  setup(recs, syncId) { // called from setupSession
+    W.ghosts = []; W.syncRef = null;
     if (W.mode === 'quali') return;
     for (const R of recs.slice(0, GHOST_MAX)) {
       const g = makeGhost(R);
-      if (W.mode === 'practice' ? g.best : (g.isRace || g.chainT > 0)) W.ghosts.push(g);
+      if (W.mode !== 'practice') { if (g.isRace || g.chainT > 0) W.ghosts.push(g); continue; }
+      // practice (GDD 11c, 1.16.0): 'rec' plays a standing-start recording from its launch (grid start),
+      // 'spot' starts on its best lap synced to the spot, 'line' waits for the player's first line crossing
+      const st = recStart(R);
+      if (W.gridStart && st.kind === 'grid') { g.sync = 'rec'; g.launch = recLaunch(R, st.t); g.end = (R.samples.x.length - 1) * REC_DT; }
+      else if (g.best) g.sync = W.train ? 'spot' : 'line';
+      else continue;
+      W.ghosts.push(g);
     }
+    const spot = W.ghosts.filter(g => g.sync === 'spot'); if (!spot.length) return;
+    // spot start: the reference stands on the spot; the others are placed by lap time relative to it
+    const s0 = T.wrapS(W.train.s), ref = spot.find(g => g.rec.id === syncId) || spot[0];
+    const tSpot = recTimeAt(ref.rec, ref.best, s0), tau = tSpot - ref.best.start;
+    for (const g of spot) g.t0 = g === ref ? tSpot : g.best.start + tau;
+    ref.vSpot = recAt(ref.rec, tSpot).v; W.syncRef = ref;
   },
   place(g, q) { g.x = q.x; g.y = q.y; g.h = q.h; g.v = q.v; g.lean = q.lean; g.ctl.brk = q.dv < -0.6 ? 1 : 0; },
   step() {
@@ -251,13 +300,18 @@ const Ghost = {
     if (W.mode === 'practice') return this.stepPractice();
     for (const g of W.ghosts) this.stepRace(g);
   },
-  stepPractice() { // replay the best lap from each of the player's timed-lap starts
-    const b = W.player;
+  stepPractice() { // ghosts start with the player, then ride the best lap from each of the player's line crossings (GDD 11c)
+    const run = W.startT >= 0, el = run ? W.time - W.startT : 0;
     for (const g of W.ghosts) {
-      if (!b.outLap && b.lapStartT !== g.t0) g.t0 = b.lapStartT;
-      const tau = W.time - g.t0;
-      g.show = g.t0 >= 0 && !b.outLap && tau <= g.best.time;
-      if (g.show) { const q = recAt(g.rec, g.best.start + tau); this.place(g, q); g.s = ((q.p % T.L) + T.L) % T.L; }
+      let t = -1;
+      if (g.sync === 'rec') { t = g.launch + el; if (t > g.end) t = -1; } // standing start: the whole recording, then gone
+      else if (W.lineT >= 0) { const tau = W.time - W.lineT; if (tau <= g.best.time) t = g.best.start + tau; }
+      else if (g.sync === 'spot' && g.t0 + el <= g.best.end) t = g.t0 + el; // sync lap from the spot
+      g.show = t >= 0;
+      if (!g.show) continue;
+      const q = recAt(g.rec, t); this.place(g, q); g.s = ((q.p % T.L) + T.L) % T.L;
+      if (!run) { g.v = 0; g.ctl.brk = 0; } // standing at its sync position until the first input
+      if (g.sync === 'rec') { g.laps = []; for (const l of g.rec.laps) if (l.end <= t) g.laps.push(l.time); }
     }
   },
   stepRace(g) {

@@ -120,7 +120,7 @@ tr.me td.pos{color:var(--accent)}
       <div class="opt"><label for="optTeam">Team livery</label><select id="optTeam"></select></div>
       <div class="opt" id="optFuelWrap"><label for="optFuel">Starting fuel <span id="optFuelV" style="color:var(--fg)"></span></label><input id="optFuel" type="range" min="25" max="100" step="5" value="100"><span class="hint" id="optFuelHint"></span></div>
       <div class="opt" id="optGuideWrap"><span class="lbl">Speed guide (practice)</span><div class="seg" id="optGuide"><button data-v="on" aria-pressed="true">On</button><button data-v="off" aria-pressed="false">Off</button></div><span class="hint">Shows the recommended speed, the next braking point and a coloured line on track.</span></div>
-      <div class="opt" id="optTrainWrap" style="grid-column:1/-1"><span class="lbl">Curve training (practice)</span><div class="seg" id="optTrain" style="max-width:240px"><button data-v="off" aria-pressed="true">Off</button><button data-v="on" aria-pressed="false">On</button></div><span class="hint">Start from any spot on the track at a chosen speed, in the centre of the road. Restart or R puts you back on the spot.</span>
+      <div class="opt" id="optTrainWrap" style="grid-column:1/-1"><span class="lbl">Curve training (practice)</span><div class="seg" id="optTrain" style="max-width:240px"><button data-v="off" aria-pressed="true">Off</button><button data-v="on" aria-pressed="false">On</button></div><span class="hint">Start from any spot on the track at a chosen speed, in the centre of the road. Restart or R puts you back on the spot. Off: practice starts on the grid slot chosen under Starting position, no start lights.</span>
         <div id="trainBox" class="trainbox" hidden><canvas id="trainMap" aria-label="Track map: click or drag to pick the start spot"></canvas><div class="trainside"><label for="optTrainCorner">Corner</label><select id="optTrainCorner"></select><label for="optTrainV">Start speed <span id="optTrainVV" style="color:var(--fg)"></span></label><input id="optTrainV" type="range" min="0" max="300" step="5"><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="chip" id="btnTrainGuide">Guide speed</button><button class="btn" id="btnTrainGo" style="font-size:17px;padding:6px 16px" hidden>Go to spot</button></div><span class="hint" id="trainInfo"></span></div></div></div>
       <div class="opt" id="optGridWrap"><label for="optGrid">Starting position</label><select id="optGrid"><option value="back">Back of the grid (P22)</option><option value="mid" selected>Midfield (P12)</option><option value="front">Front row (P3)</option><option value="pole">Pole position</option></select></div>
     </div>
@@ -820,9 +820,11 @@ function setupSession(kind, opts) {
     });
   }
   // ghost opponents (GDD 11c): in a race each one takes the place of one of the slowest AI riders;
-  // in practice, also curve training (GDD 11d), they only ride with the player's timed laps
+  // in practice they start with the player on the grid or on the curve-training spot (GDD 1.16.0)
   W.train = W.mode === 'practice' && opts.train ? opts.train : null;
-  Ghost.setup(opts.ghosts || []);
+  W.gridStart = W.mode === 'practice' && !W.train; W.startT = -1; W.lineT = -1;
+  W.gridSlot = W.gridStart ? GRID_SLOT[opts.gridPos] ?? 11 : -1;
+  Ghost.setup(opts.ghosts || [], opts.syncId);
   if (W.mode === 'race') for (const b of W.bikes.filter(b => !b.isPlayer).sort((a, b) => a.ai.pace - b.ai.pace).slice(0, W.ghosts.length)) W.bikes.splice(W.bikes.indexOf(b), 1);
   // box assignment: teammates share neighbouring boxes in team order
   const order = W.bikes.slice().sort((a, b) => a.team - b.team || a.id - b.id); order.forEach((b, k) => b.box = k);
@@ -833,26 +835,25 @@ function setupSession(kind, opts) {
     if (opts.qualiGrid) grid = opts.qualiGrid.map(id => W.bikes.find(b => b.id === id)).filter(Boolean);
     else {
       const ais = W.bikes.filter(b => !b.isPlayer).sort((a, b) => b.ai.pace - a.ai.pace + (W.rand() - 0.5) * 0.012);
-      const slot = { pole: 0, front: 2, mid: 11, back: 21 }[opts.gridPos] ?? 11;
+      const slot = GRID_SLOT[opts.gridPos] ?? 11;
       ais.splice(slot, 0, pBike); grid = ais;
     }
     grid.forEach((b, k) => {
-      const r = Math.floor(k / 3), c = k % 3;
-      const sr = -8 - r * 9.5 - c * 2.4; const i = T.idx(sr); const d = (1 - c) * 3.9;
-      const [x, y] = T.pt(i, d);
+      const { sr, i, d } = gridPose(k), [x, y] = T.pt(i, d);
       Object.assign(b, { x, y, h: T.H[i], i, s: T.wrapS(sr), d, prevS: T.wrapS(sr), held: true, gridCross: true, lap: 0, gear: 1, grid: k + 1 });
       b.fuel = b.isPlayer ? PHYS.tank * opts.fuelPct : aiStartFuel(b);
       b.fuelLapStart = b.fuel;
     });
     W.phase = 'grid'; W.lights = 0; W.phaseT = 0;
   } else {
-    // practice / qualifying: start from the box
+    // qualifying: start from the box; practice: on the chosen grid slot or the curve-training spot (GDD 2a, 11d)
     const b = pBike; const sr = T.PIT.boxS(b.box); const i = T.idx(sr);
     const [x, y] = T.pt(i, T.PIT.boxD - 0.5);
     Object.assign(b, { x, y, h: T.H[i], i, s: T.wrapS(sr), d: T.PIT.boxD - 0.5, prevS: T.wrapS(sr), outLap: true, lap: 0 });
     b.fuel = W.mode === 'quali' ? 12 : PHYS.tank; b.fuelLapStart = b.fuel;
     if (W.train) placeTraining(b, W.train);
-    W.phase = 'run';
+    else if (W.gridStart) placeGrid(b, W.gridSlot);
+    W.phase = 'run'; W.lights = 0;
     if (W.mode === 'quali') W.qualiAI = simulateQualiAI(opts);
   }
   const nb = Math.ceil((Math.max(W.totalLaps, 1) + 3) * T.L / 10) + 200;
@@ -861,9 +862,18 @@ function setupSession(kind, opts) {
   W.bestTrace = Records.d.trace && Records.d.trace.length === W.curTrace.length ? Float32Array.from(Records.d.trace) : null; W.bestTraceT = Records.d.traceT || 0;
   W.guide = W.mode === 'practice' && opts.guide; W.recordMsg = '';
   HUD.reset();
-  if (W.train) HUD.msg('CURVE TRAINING', T.cornerAt(W.train.s) + ' \u00B7 ' + Math.round(W.train.v * 3.6) + ' km/h', '#ffcf1f', 2.5);
-  else if (W.mode === 'practice') HUD.msg('FREE PRACTICE', 'Leave the box with W. Pit lane limiter is automatic.', '#ffcf1f', 4);
+  const ref = W.syncRef; // the start message names the reference ghost's speed at the spot (GDD 11c)
+  if (W.train) HUD.msg('CURVE TRAINING', T.cornerAt(W.train.s) + ' \u00B7 ' + Math.round(W.train.v * 3.6) + ' km/h' + (ref ? ' \u00B7 ghost ' + ref.short + ' ' + Math.round(ref.vSpot * 3.6) + ' km/h' : ''), '#ffcf1f', 3, true);
+  else if (W.mode === 'practice') HUD.msg('FREE PRACTICE', 'P' + (W.gridSlot + 1) + ' on the grid \u00B7 press W, S, A or D to go', '#ffcf1f', 4, true);
   if (W.mode === 'quali') HUD.msg('QUALIFYING', 'Out lap, then 3 flying laps. Best lap sets your grid slot.', '#ffcf1f', 4);
+}
+// grid slot k (0 = pole): 3 bikes per row, the same boxes in a race and in practice (GDD 2a)
+const GRID_SLOT = { pole: 0, front: 2, mid: 11, back: 21 };
+function gridPose(k) { const r = Math.floor(k / 3), c = k % 3, sr = -8 - r * 9.5 - c * 2.4; return { sr, i: T.idx(sr), d: (1 - c) * 3.9 }; }
+// practice grid start (GDD 2a): standing on the slot, frozen until the first input; lap 1 is a standing-start lap
+function placeGrid(b, k) {
+  const { sr, i, d } = gridPose(k), [x, y] = T.pt(i, d), s = T.wrapS(sr);
+  Object.assign(b, { x, y, h: T.H[i], i, s, d, prevS: s, v: 0, gear: 1, outLap: false, gridCross: true, lap: 0, grid: k + 1, trainHold: true });
 }
 // curve training (GDD 11d): centre of the road at the chosen spot, frozen until the first input
 function placeTraining(b, tr) {
@@ -921,6 +931,7 @@ function simStep(dt) {
   for (const b of bikes) {
     const pd = b.d;
     if (b.trainHold) { const K = Input.k; if (K.KeyW || K.KeyS || K.KeyA || K.KeyD || K.ArrowUp || K.ArrowDown || K.ArrowLeft || K.ArrowRight) b.trainHold = false; else continue; }
+    if (b.isPlayer && W.startT < 0 && W.mode === 'practice') startMoment(b);
     stepBike(b, dt, W);
     if (b.crashed || b.dnf) continue;
     T.project(b.x, b.y, b.i, b);
@@ -935,6 +946,13 @@ function simStep(dt) {
   collide(bikes);
   FX.step(dt);
   for (const b of bikes) if (b.crashed) { b.prevS = b.s; }
+}
+
+// the first input on the grid or the spot: lap 1 is timed from here and the ghosts start moving (GDD 2a, 11c)
+function startMoment(b) {
+  W.startT = W.time;
+  if (W.gridStart) { b.lapStartT = W.time; b.secStart = W.time; }
+  if (Rec.cur) Rec.cur.start.t = r2(W.time, 1000);
 }
 
 function playerControl(b, dt) {
@@ -1015,6 +1033,7 @@ function endService(b) {
 function timing(b) {
   const L = T.L, prev = b.prevS, s = b.s; const ds = s - prev;
   if (ds < -L / 2) { // crossed the line forwards
+    if (b.isPlayer) W.lineT = W.time; // practice ghosts start a best lap at every crossing (GDD 11c)
     if (b.gridCross) { b.gridCross = false; b.cp = 0; }
     else if (b.outLap) { b.outLap = false; b.lapStartT = W.time; b.secStart = W.time; b.cp = 0; b.fuelLapStart = b.fuel; if (b.isPlayer) { HUD.msg('TIMED LAP', '', '#ffcf1f', 1.2); W.curTrace.fill(-1); } }
     else if (b.cp >= 2) completeLap(b);
@@ -1151,7 +1170,7 @@ const Rec = {
       id: 'r' + Date.now().toString(36) + ((Math.random() * 1296) | 0).toString(36), date: new Date().toISOString(),
       kind: W.kind, mode: W.mode, totalLaps: W.totalLaps,
       rider: { name: b.name, num: b.num, team: b.team, short: b.short }, aids: !!o.aids, auto: !!o.auto,
-      laps: [], bestLap: 0, raceStart: 0, finishT: 0, position: 0, pits: 0,
+      laps: [], bestLap: 0, raceStart: 0, finishT: 0, position: 0, pits: 0, start: recStartOf(),
       samples: { dt: REC_DT, x: [], y: [], h: [], v: [], lean: [], s: [], p: [] }
     };
   },
@@ -1169,7 +1188,7 @@ const Rec = {
     const R = this.cur; if (!R) return null; const b = W.player;
     const own = R.laps.filter(l => !l.ap), pool = own.length ? own : R.laps;
     R.bestLap = pool.length ? Math.min(...pool.map(l => l.time)) : 0;
-    if (W.mode === 'race') { R.raceStart = W.raceStartT > 0 ? r2(W.raceStartT, 1000) : 0; R.finishT = b.finished ? r2(b.finishT, 1000) : 0; R.position = b.dnf ? 0 : standings().indexOf(b) + 1; }
+    if (W.mode === 'race') { R.raceStart = W.raceStartT > 0 ? r2(W.raceStartT, 1000) : 0; R.start.t = R.raceStart; R.finishT = b.finished ? r2(b.finishT, 1000) : 0; R.position = b.dnf ? 0 : standings().indexOf(b) + 1; }
     R.pits = b.pits;
     return JSON.parse(JSON.stringify(R));
   },
@@ -1179,6 +1198,38 @@ const Rec = {
     this.last = R; Lib.add(R, 'auto'); return R;
   }
 };
+
+// how this session starts (GDD 10, since 1.16.0); t is set at lights out (race) or the first input (practice)
+function recStartOf() {
+  const b = W.player;
+  if (W.mode === 'race') return { kind: 'grid', t: 0, slot: b.grid || 0 };
+  if (W.train) return { kind: 'spot', t: 0, s: r2(T.wrapS(W.train.s), 10), v: r2(W.train.v, 100) };
+  if (W.gridStart) return { kind: 'grid', t: 0, slot: W.gridSlot + 1 };
+  return { kind: 'box', t: 0 };
+}
+// start of a recording; files without one (before 1.16.0): a race with lights out is a grid start, anything else the box
+function recStart(R) {
+  const st = R.start;
+  if (st && typeof st === 'object' && ['grid', 'spot', 'box'].includes(st.kind) && isFinite(st.t) && st.t >= 0) return st;
+  return R.mode === 'race' && R.raceStart > 0 ? { kind: 'grid', t: R.raceStart } : { kind: 'box', t: 0 };
+}
+// launch moment of a standing start: the last standing sample before the first one above 0.5 m/s, from the start on (GDD 11c)
+function recLaunch(R, t0) {
+  const S = R.samples, n = S.v.length;
+  for (let k = Math.max(0, Math.ceil(t0 / S.dt - 1e-6)); k < n; k++) if (S.v[k] > 0.5) return Math.max(t0, (k - 1) * S.dt);
+  return t0;
+}
+// recording time where the track distance passes s0 within lap l (line to line), between two samples (GDD 11c)
+function recTimeAt(R, l, s0) {
+  const S = R.samples, cum = rpDist(R), dt = S.dt, n = cum.length;
+  const k0 = clamp(Math.floor(l.start / dt), 0, n - 1), f0 = clamp(l.start / dt - k0, 0, 1), k1 = Math.min(n - 1, k0 + 1);
+  const c0 = cum[k0] + (cum[k1] - cum[k0]) * f0, sStart = recAt(R, l.start).p;
+  const need = T.wrapS(s0 - T.wrapS(sStart)); // metres from the lap start to the spot
+  for (let k = k0 + 1; k < n && k * dt <= l.end + dt; k++) {
+    if (cum[k] - c0 >= need) { const a = cum[k - 1] - c0, b = cum[k] - c0, f = b > a ? clamp((need - a) / (b - a), 0, 1) : 0; return clamp((k - 1 + f) * dt, l.start, l.end); }
+  }
+  return l.end;
+}
 
 function recFileName(R) {
   const d = new Date(R.date), z = n => String(n).padStart(2, '0');
@@ -1223,9 +1274,10 @@ function unpackRec(R) {
 // library: the last 10 own sessions in localStorage; imports and saved_tracks files only for this visit.
 // IndexedDB keeps just the linked saved_tracks folder handle (and the pre-1.9.1 library, moved once).
 const Lib = {
-  db: null, meta: [], data: {}, ghosts: [], cmp: [], dir: null, dirOK: false, status: '', onChange: null, stored: true,
+  db: null, meta: [], data: {}, ghosts: [], sync: '', cmp: [], dir: null, dirOK: false, status: '', onChange: null, stored: true,
   init() {
     try { this.ghosts = JSON.parse(localStorage.getItem('sgp_ghosts') || '[]').slice(0, GHOST_MAX); } catch (e) { this.ghosts = []; }
+    try { this.sync = localStorage.getItem('sgp_ghost_sync') || ''; } catch (e) { this.sync = ''; }
     let had = false;
     try { const raw = localStorage.getItem(LS_KEY); had = raw !== null; for (const P of JSON.parse(raw || '[]')) { try { const R = unpackRec(P); if (recValid(R)) { this.data[R.id] = R; this.meta.push(recMeta(R, 'auto')); } } catch (e) { } } }
     catch (e) { this.stored = false; }
@@ -1290,10 +1342,13 @@ const Lib = {
     if (m && m.src === 'auto' && !noSave) this.persist();
     if (!quiet) this.changed();
   },
-  saveGhosts() { try { localStorage.setItem('sgp_ghosts', JSON.stringify(this.ghosts)); } catch (e) { } },
+  saveGhosts() { try { localStorage.setItem('sgp_ghosts', JSON.stringify(this.ghosts)); localStorage.setItem('sgp_ghost_sync', this.sync); } catch (e) { } },
+  // sync reference for spot starts (GDD 11c): the marked ghost, else the first selected one
+  syncId() { return this.ghosts.includes(this.sync) ? this.sync : this.ghosts[0] || ''; },
+  setSync(id) { if (!this.ghosts.includes(id)) return; this.sync = id; this.saveGhosts(); this.changed(); },
   toggleGhost(id) {
     const k = this.ghosts.indexOf(id);
-    if (k >= 0) this.ghosts.splice(k, 1); else { if (this.ghosts.length >= GHOST_MAX) { this.status = `Up to ${GHOST_MAX} ghosts at once. Switch one off first.`; this.changed(); return; } this.ghosts.push(id); }
+    if (k >= 0) { this.ghosts.splice(k, 1); if (this.sync === id) this.sync = this.ghosts[0] || ''; } else { if (this.ghosts.length >= GHOST_MAX) { this.status = `Up to ${GHOST_MAX} ghosts at once. Switch one off first.`; this.changed(); return; } this.ghosts.push(id); }
     this.saveGhosts(); this.changed();
   },
   ghostRecs() { return this.ghosts.map(id => this.data[id]).filter(Boolean); },
@@ -1373,13 +1428,26 @@ function makeGhost(R) {
   };
 }
 const Ghost = {
-  setup(recs) { // called from setupSession
-    W.ghosts = [];
+  setup(recs, syncId) { // called from setupSession
+    W.ghosts = []; W.syncRef = null;
     if (W.mode === 'quali') return;
     for (const R of recs.slice(0, GHOST_MAX)) {
       const g = makeGhost(R);
-      if (W.mode === 'practice' ? g.best : (g.isRace || g.chainT > 0)) W.ghosts.push(g);
+      if (W.mode !== 'practice') { if (g.isRace || g.chainT > 0) W.ghosts.push(g); continue; }
+      // practice (GDD 11c, 1.16.0): 'rec' plays a standing-start recording from its launch (grid start),
+      // 'spot' starts on its best lap synced to the spot, 'line' waits for the player's first line crossing
+      const st = recStart(R);
+      if (W.gridStart && st.kind === 'grid') { g.sync = 'rec'; g.launch = recLaunch(R, st.t); g.end = (R.samples.x.length - 1) * REC_DT; }
+      else if (g.best) g.sync = W.train ? 'spot' : 'line';
+      else continue;
+      W.ghosts.push(g);
     }
+    const spot = W.ghosts.filter(g => g.sync === 'spot'); if (!spot.length) return;
+    // spot start: the reference stands on the spot; the others are placed by lap time relative to it
+    const s0 = T.wrapS(W.train.s), ref = spot.find(g => g.rec.id === syncId) || spot[0];
+    const tSpot = recTimeAt(ref.rec, ref.best, s0), tau = tSpot - ref.best.start;
+    for (const g of spot) g.t0 = g === ref ? tSpot : g.best.start + tau;
+    ref.vSpot = recAt(ref.rec, tSpot).v; W.syncRef = ref;
   },
   place(g, q) { g.x = q.x; g.y = q.y; g.h = q.h; g.v = q.v; g.lean = q.lean; g.ctl.brk = q.dv < -0.6 ? 1 : 0; },
   step() {
@@ -1387,13 +1455,18 @@ const Ghost = {
     if (W.mode === 'practice') return this.stepPractice();
     for (const g of W.ghosts) this.stepRace(g);
   },
-  stepPractice() { // replay the best lap from each of the player's timed-lap starts
-    const b = W.player;
+  stepPractice() { // ghosts start with the player, then ride the best lap from each of the player's line crossings (GDD 11c)
+    const run = W.startT >= 0, el = run ? W.time - W.startT : 0;
     for (const g of W.ghosts) {
-      if (!b.outLap && b.lapStartT !== g.t0) g.t0 = b.lapStartT;
-      const tau = W.time - g.t0;
-      g.show = g.t0 >= 0 && !b.outLap && tau <= g.best.time;
-      if (g.show) { const q = recAt(g.rec, g.best.start + tau); this.place(g, q); g.s = ((q.p % T.L) + T.L) % T.L; }
+      let t = -1;
+      if (g.sync === 'rec') { t = g.launch + el; if (t > g.end) t = -1; } // standing start: the whole recording, then gone
+      else if (W.lineT >= 0) { const tau = W.time - W.lineT; if (tau <= g.best.time) t = g.best.start + tau; }
+      else if (g.sync === 'spot' && g.t0 + el <= g.best.end) t = g.t0 + el; // sync lap from the spot
+      g.show = t >= 0;
+      if (!g.show) continue;
+      const q = recAt(g.rec, t); this.place(g, q); g.s = ((q.p % T.L) + T.L) % T.L;
+      if (!run) { g.v = 0; g.ctl.brk = 0; } // standing at its sync position until the first input
+      if (g.sync === 'rec') { g.laps = []; for (const l of g.rec.laps) if (l.end <= t) g.laps.push(l.time); }
     }
   },
   stepRace(g) {
@@ -2174,12 +2247,12 @@ const FD = '"Saira Condensed", "Arial Narrow", sans-serif';
 const HUD = {
   m: null, tick: [], shake: 0, secFlash: [], lapFlash: null, mini: null,
   reset() { this.m = null; this.tick = []; this.secFlash = []; this.lapFlash = null; this.shake = 0; },
-  msg(t, sub, col, dur) { this.m = { t, sub, col, dur, age: 0 }; },
+  msg(t, sub, col, dur, hold) { this.m = { t, sub, col, dur, age: 0, hold }; }, // hold: stays while the bike waits for the first input
   ticker(t) { this.tick.unshift({ t, age: 0 }); this.tick = this.tick.slice(0, 3); },
   sector(k, t, best) { this.secFlash[k] = { t, best, age: 0, pb: !best || t < best }; },
   lap(t, pb, rec) { this.lapFlash = { t, pb, rec, age: 0 }; },
   step(dt) {
-    if (this.m) { this.m.age += dt; if (this.m.age > this.m.dur) this.m = null; }
+    if (this.m) { this.m.age += dt; if (this.m.hold && W.player && W.player.trainHold) this.m.age = Math.min(this.m.age, 1); if (this.m.age > this.m.dur) this.m = null; }
     for (const q of this.tick) q.age += dt; this.tick = this.tick.filter(q => q.age < 6);
     if (this.lapFlash) { this.lapFlash.age += dt; if (this.lapFlash.age > 5) this.lapFlash = null; }
     this.shake = Math.max(0, this.shake - dt * 3);
@@ -2263,7 +2336,7 @@ function drawHUD(dt) {
     txt(W.mode === 'quali' ? 'QUALIFYING' : W.train ? 'CURVE TRAINING' : 'PRACTICE', cx + 16, cy + 26, 15, '#ffcf1f', 800, 'left', true);
     txt(b.outLap ? 'OUT LAP' : 'LAP ' + (b.laps.length + 1) + (W.mode === 'quali' ? '/3' : ''), cx + 16, cy + 54, 26, '#fff', 800, 'left', true);
   }
-  const cur = (b.outLap || (W.mode === 'race' && W.phase !== 'run')) ? 0 : W.time - b.lapStartT;
+  const cur = (b.outLap || b.trainHold || (W.mode === 'race' && W.phase !== 'run')) ? 0 : W.time - b.lapStartT;
   const tx = cx + cw / 2 + (W.mode === 'race' ? -10 : 30);
   txt(b.outLap ? '\u2013:\u2013\u2013.\u2013\u2013\u2013' : fmtTime(cur), tx, cy + 36, 26, '#fff', 700, 'center');
   // live delta to best lap
@@ -2334,7 +2407,7 @@ function drawHUD(dt) {
     ctx.fillStyle = 'rgba(30,60,90,.75)'; ctx.fillRect(sx - tw / 2, sy - 34, tw, 16); ctx.fillStyle = TEAMS[o.team].c1; ctx.fillRect(sx - tw / 2, sy - 34, 3, 16);
     txt(label, sx + 1, sy - 22, 12, '#bfe4ff', 700, 'center'); ctx.globalAlpha = 1;
   }
-  if (b.trainHold) { panel(VW / 2 - 190, VH * 0.36 + 44, 380, 34, 0.85); txt('Press W, S, A or D to go \u00B7 R puts you back here', VW / 2, VH * 0.36 + 66, 15, '#e9edf0', 700, 'center'); }
+  if (b.trainHold) { panel(VW / 2 - 190, VH * 0.36 + 44, 380, 34, 0.85); txt('Press W, S, A or D to go \u00B7 R puts you back ' + (W.gridStart ? 'on the grid' : 'here'), VW / 2, VH * 0.36 + 66, 15, '#e9edf0', 700, 'center'); }
   if (b.crashed) { txt('Recovering rider\u2026', VW / 2, VH * 0.36 + 56, 15, '#c9d2d8', 600, 'center'); }
 }
 
@@ -2489,7 +2562,7 @@ function drawTower(st, me) {
   } else {
     let rows;
     if (W.mode === 'quali') rows = W.qualiAI.map(q => ({ short: q.name.split(' ').slice(-1)[0].toUpperCase().slice(0, 3), t: q.best, me: false, c: '#8d9aa4' })).concat([{ short: me.short, t: me.bestLap || 1e9, me: true }]).sort((a, c) => a.t - c.t);
-    else { rows = me.laps.slice(-12).map((t, k, arr) => ({ short: 'LAP ' + (me.laps.length - arr.length + k + 1), t, me: t === me.bestLap })); if (Records.d.traceT) rows.unshift({ short: 'ALL-TIME', t: Records.d.traceT, me: false, rec: true }); W.ghosts.forEach((g, k) => rows.splice(k + (Records.d.traceT ? 1 : 0), 0, { short: 'GHOST ' + g.short, t: g.recBest, me: false, gh: true })); }
+    else { rows = me.laps.slice(-12).map((t, k, arr) => ({ short: 'LAP ' + (me.laps.length - arr.length + k + 1), t, me: t === me.bestLap })); if (Records.d.traceT) rows.unshift({ short: 'ALL-TIME', t: Records.d.traceT, me: false, rec: true }); const gr = []; for (const g of W.ghosts) { gr.push({ short: 'GHOST ' + g.short, t: g.recBest || 1e9, me: false, gh: true }); if (g.sync === 'rec') g.laps.forEach((t, j) => gr.push({ short: g.short + ' LAP ' + (j + 1), t, me: false, gh: true })); } rows.splice(Records.d.traceT ? 1 : 0, 0, ...gr); }
     const maxRows = Math.max(6, Math.floor((VH - 200 - 56) / rowH)); let start = 0;
     if (rows.length > maxRows) { const mi = rows.findIndex(r => r.me); start = clamp(mi - Math.floor(maxRows / 2), 0, rows.length - maxRows); }
     const vis = rows.slice(start, start + maxRows);
@@ -2580,7 +2653,7 @@ window.addEventListener('keydown', e => {
     if (used) e.preventDefault(); return;
   }
   if (e.code === 'KeyC' && UI.state === 'play') camCycle();
-  if (e.code === 'KeyR' && UI.state === 'play' && W.train && !W.paused) UI.launch('practice', {});
+  if (e.code === 'KeyR' && UI.state === 'play' && W.mode === 'practice' && !W.paused) UI.launch('practice', {}); // back to the spot or the grid slot, ghosts re-synced (GDD 2a, 11d)
   if (e.code === 'Escape' && (UI.state === 'play')) UI.togglePause();
   if (e.code === 'KeyM') Sound.on = !Sound.on;
 });
@@ -2626,6 +2699,7 @@ const UI = {
     $('recList').addEventListener('click', e => {
       const bt = e.target.closest('button[data-act]'); if (!bt) return; const id = bt.dataset.id;
       if (bt.dataset.act === 'ghost') Lib.toggleGhost(id);
+      else if (bt.dataset.act === 'sync') Lib.setSync(id);
       else if (bt.dataset.act === 'replay') RP.open([Lib.data[id]], 'menu');
       else if (bt.dataset.act === 'cmp') { const k = Lib.cmp.indexOf(id); if (k >= 0) Lib.cmp.splice(k, 1); else if (Lib.cmp.length < RP_MAX) Lib.cmp.push(id); this.renderLib(); }
       else if (bt.dataset.act === 'export') Lib.get(id).then(R => Lib.export(R));
@@ -2645,7 +2719,7 @@ const UI = {
     const laps = o.mode === 'gp' ? 20 : 10; const L = PHYS.tank * o.fuel / 100; const range = L / 2.65;
     $('optFuelV').textContent = L.toFixed(1) + ' L';
     const stops = Math.max(0, Math.ceil(laps * 2.65 / PHYS.tank - 0.001) - 1); $('optFuelHint').textContent = o.mode === 'practice' ? 'Practice starts with a full tank.' : `About ${range.toFixed(1)} laps on this load. A ${laps} lap race needs at least ${stops} stop${stops === 1 ? '' : 's'} on a full tank. Less fuel is lighter and faster but means more stops.`;
-    $('optFuelWrap').hidden = o.mode === 'practice'; $('optGuideWrap').hidden = o.mode !== 'practice'; $('optTrainWrap').hidden = o.mode !== 'practice'; $('trainBox').hidden = o.train !== 'on'; this.renderTraining(); this.renderRecords(); $('optGridWrap').hidden = o.mode !== 'sprint';
+    $('optFuelWrap').hidden = o.mode === 'practice'; $('optGuideWrap').hidden = o.mode !== 'practice'; $('optTrainWrap').hidden = o.mode !== 'practice'; $('trainBox').hidden = o.train !== 'on'; this.renderTraining(); this.renderRecords(); $('optGridWrap').hidden = !(o.mode === 'sprint' || (o.mode === 'practice' && o.train !== 'on')); // one setting for the race and the practice grid start (GDD 2a)
     try { localStorage.setItem('sgp_opts', JSON.stringify(o)); } catch (e) { }
   },
   renderRecords() {
@@ -2752,18 +2826,32 @@ const UI = {
     const src = { auto: '', import: 'imported', folder: 'saved_tracks' };
     $('recStatus').textContent = Lib.status || (Lib.stored ? 'Your last 10 sessions are kept in this browser. Imported and saved_tracks files are loaded for this visit only.' : 'Browser storage is blocked here, recordings are kept until the page closes.');
     $('btnReloadDir').hidden = !Lib.dir; if (Lib.dir) $('btnReloadDir').textContent = 'Reload ' + Lib.dir.name;
-    $('recGhostHint').textContent = Lib.ghosts.length ? `${Lib.ghosts.length} ghost${Lib.ghosts.length === 1 ? '' : 's'} selected. They ride with you in Practice (also on Curve training timed laps) and in races (each one replaces a slow AI rider).` : 'Switch on Ghost to ride against a recording in Practice or a race (up to 4).';
+    $('recGhostHint').textContent = Lib.ghosts.length ? `${Lib.ghosts.length} ghost${Lib.ghosts.length === 1 ? '' : 's'} selected. They ride with you in Practice and in races (each one replaces a slow AI rider).` : 'Switch on Ghost to ride against a recording in Practice or a race (up to 4).';
+    if (Lib.ghosts.length) $('recGhostHint').textContent += ' In Practice they start with you on the grid or the curve-training spot; Sync picks the ghost that stands on the spot with you.';
     Lib.cmp = Lib.cmp.filter(id => Lib.meta.some(m => m.id === id));
     $('btnReplaySel').disabled = !Lib.cmp.length; $('btnReplaySel').textContent = Lib.cmp.length > 1 ? `Replay ${Lib.cmp.length} together` : 'Replay selected';
     if (!Lib.meta.length) { el.innerHTML = '<span class="small">No recordings yet. Every session with a completed lap or a race start is recorded automatically.</span>'; return; }
     el.innerHTML = '<table><thead><tr><th>Ghost</th><th>Replay</th><th>Rider</th><th>Session</th><th>Best lap</th><th>Laps</th><th>Result</th><th>When</th><th></th></tr></thead><tbody>' + Lib.meta.map(m => {
       const on = Lib.ghosts.includes(m.id);
       const res = m.raceStart ? (m.position ? 'P' + m.position + (m.finishT ? ' \u00B7 ' + fmtTime(m.finishT) : '') : 'DNF') : '';
-      const cmp = Lib.cmp.includes(m.id);
-      return `<tr><td><button class="chip" data-act="ghost" data-id="${esc(m.id)}" aria-pressed="${on}">${on ? 'Ghost on' : 'Ghost'}</button></td><td><button class="chip" data-act="replay" data-id="${esc(m.id)}">Replay</button> <button class="chip" data-act="cmp" data-id="${esc(m.id)}" aria-pressed="${cmp}">${cmp ? '&#10003; Compare' : 'Compare'}</button></td><td>${sw(clamp(m.rider.team | 0, 0, TEAMS.length - 1))}#${m.rider.num | 0} ${esc(m.rider.name)}</td><td>${lbl[m.kind] || esc(m.mode)}${src[m.src] ? ' <span class="small">\u00B7 ' + src[m.src] + '</span>' : ''}</td><td>${m.bestLap ? fmtTime(m.bestLap) : '\u2013'}</td><td>${m.laps | 0}</td><td>${res}</td><td class="small">${new Date(m.date).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</td><td><button class="chip" data-act="export" data-id="${esc(m.id)}">Export</button> <button class="chip" data-act="del" data-id="${esc(m.id)}">Delete</button></td></tr>`;
+      const cmp = Lib.cmp.includes(m.id), ref = on && Lib.syncId() === m.id;
+      return `<tr><td><button class="chip" data-act="ghost" data-id="${esc(m.id)}" aria-pressed="${on}">${on ? 'Ghost on' : 'Ghost'}</button>${on ? ` <button class="chip" data-act="sync" data-id="${esc(m.id)}" aria-pressed="${ref}" title="Sync reference: stands on the curve-training spot with you">${ref ? '&#10003; Sync' : 'Sync'}</button>` : ''}</td><td><button class="chip" data-act="replay" data-id="${esc(m.id)}">Replay</button> <button class="chip" data-act="cmp" data-id="${esc(m.id)}" aria-pressed="${cmp}">${cmp ? '&#10003; Compare' : 'Compare'}</button></td><td>${sw(clamp(m.rider.team | 0, 0, TEAMS.length - 1))}#${m.rider.num | 0} ${esc(m.rider.name)}</td><td>${lbl[m.kind] || esc(m.mode)}${src[m.src] ? ' <span class="small">\u00B7 ' + src[m.src] + '</span>' : ''}</td><td>${m.bestLap ? fmtTime(m.bestLap) : '\u2013'}</td><td>${m.laps | 0}</td><td>${res}</td><td class="small">${new Date(m.date).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</td><td><button class="chip" data-act="export" data-id="${esc(m.id)}">Export</button> <button class="chip" data-act="del" data-id="${esc(m.id)}">Delete</button></td></tr>`;
     }).join('') + '</tbody></table>';
   },
-  hideAll() { for (const id of ['menu', 'pause', 'results']) $(id).hidden = true; this.trainIn(false); this.camIn(false); },
+  hideAll() { for (const id of ['menu', 'pause', 'results']) $(id).hidden = true; this.trainIn(false); this.camIn(false); this.syncIn(false); },
+  syncIn(show) { // "Sync ghosts to" in the practice pause menu, with 2 or more ghosts (GDD 11c, 11d)
+    let P = $('pauseSync');
+    if (!P && show) {
+      P = document.createElement('div'); P.id = 'pauseSync'; P.className = 'opts'; P.style.marginTop = '14px';
+      P.innerHTML = '<div class="opt" style="grid-column:1/-1"><label for="optSync">Sync ghosts to</label><select id="optSync"></select><span class="hint">This ghost stands on the curve-training spot with you; the others are placed by lap time relative to it. Applies from the next Restart, R or Go to spot.</span></div>';
+      $('pauseTrain').after(P);
+      $('optSync').addEventListener('change', e => { Lib.setSync(e.target.value); e.target.blur(); });
+    }
+    if (!P) return;
+    const recs = Lib.ghostRecs(); P.hidden = !show || recs.length < 2; if (P.hidden) return;
+    $('optSync').innerHTML = recs.map(R => `<option value="${esc(R.id)}">#${R.rider.num | 0} ${esc(R.rider.name)} \u00B7 ${RP_LBL[R.kind] || esc(R.mode)} \u00B7 ${R.bestLap ? fmtTime(R.bestLap) : 'no lap'}</option>`).join('');
+    $('optSync').value = Lib.syncId();
+  },
   trainIn(pause) { // the curve-training block moves between the main menu and the practice pause menu (GDD 11d)
     const el = $('optTrainWrap'), P = $('pauseTrain');
     if (pause) { P.appendChild(el); P.hidden = false; } else if (el.parentNode === P) { $('optGridWrap').before(el); P.hidden = true; }
@@ -2804,7 +2892,7 @@ const UI = {
   sessionOpts(extra) {
     const o = this.opts;
     const train = o.mode === 'practice' && o.train === 'on' ? { s: o.trainS, v: o.trainV / 3.6 } : null;
-    return Object.assign({ train, name: o.name, num: o.num, team: o.team, aids: o.aids === 'on', auto: o.trans === 'auto', level: o.ai, fuelPct: o.fuel / 100, gridPos: o.grid, guide: o.guide === 'on' }, extra);
+    return Object.assign({ train, syncId: Lib.syncId(), name: o.name, num: o.num, team: o.team, aids: o.aids === 'on', auto: o.trans === 'auto', level: o.ai, fuelPct: o.fuel / 100, gridPos: o.grid, guide: o.guide === 'on' }, extra);
   },
   launch(kind, extra) {
     Rec.stop(); this.hideAll(); this.state = 'play'; setCamMode(this.opts.cam); CAM.init = false;
@@ -2816,8 +2904,9 @@ const UI = {
   togglePause() {
     if (this.state !== 'play') return;
     W.paused = !W.paused; $('pause').hidden = !W.paused;
-    $('pauseSub').textContent = W.mode === 'race' ? `Lap ${Math.min(W.totalLaps, W.player.lap + 1)} of ${W.totalLaps}` : W.mode === 'quali' ? 'Qualifying' : W.train ? 'Curve training \u00B7 restart puts you back on the spot' : 'Free practice';
+    $('pauseSub').textContent = W.mode === 'race' ? `Lap ${Math.min(W.totalLaps, W.player.lap + 1)} of ${W.totalLaps}` : W.mode === 'quali' ? 'Qualifying' : W.train ? 'Curve training \u00B7 restart puts you back on the spot' : 'Free practice \u00B7 restart puts you back on the grid';
     this.trainIn(W.paused && W.mode === 'practice');
+    this.syncIn(W.paused && W.mode === 'practice');
     this.camIn(W.paused && camTilted());
     if (W.paused) $('btnResume').focus();
   },

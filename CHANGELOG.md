@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.13.1 (2026-10-28)
+- Close camera sees further with much less sky: tilt 55° (was 60°), distance 1.8 × screen height (was 1.6), ground depth 6 × screen (was 5.5), far image 0.7 (was 0.6, keeps the near-to-far hand-over smooth at the lower tilt). Sky goes from about 31 % to about 8 % of the screen at 1470×830, the ground reaches about 10 % further ahead and the bike is about 20 % longer on screen (same zoom). `tests/camera_tuning.test.js` also checks that the Close sky is at most 12 % of the screen on a straight (16 checks).
+
 ## v1.13.0 (2026-10-28)
 - Camera profiles: the Camera tuning panel (pause menu, Behind camera) has a Profile list, Standard (the 1.12.0 defaults) and Close. A profile sets all sliders; moving a slider afterwards shows Custom. The profile is saved with the other settings, and settings saved by 1.12.0 still load. Reset to defaults = Standard.
 - Close camera, closer to what a rider sees: tilt 60°, distance 1.6 × screen height, bike 8 % above the bottom edge, zoom 30 px/m max / 12 m base / 0.4 speed factor, ground 3.5 × 5.5 screens, near image 1.5 and far image 0.6. On Retina screens, near quality above 1.0 now really draws the tilted view with more pixels. The horizon sits about a third of the way down the screen.

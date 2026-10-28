@@ -37,7 +37,7 @@ const camGet = d => +(TILT[d.k] / (d.f || 1)).toFixed(4); // display value
 // camera profiles (GDD 11a, since 1.13.0), in display units; any slider change afterwards makes the profile 'custom'
 const CAM_PROFILES = {
   standard: Object.fromEntries(CAM_SET.map(d => [d.k, camGet(d)])),
-  close: { a: 60, p: 1.6, bike: 8, zMax: 30, zBase: 12, zK: 0.4, wk: 3.5, hk: 5.5, nearQ: 1.5, farQ: 0.6, fade: 30, minLen: 40 },
+  close: { a: 55, p: 1.8, bike: 8, zMax: 30, zBase: 12, zK: 0.4, wk: 3.5, hk: 6, nearQ: 1.5, farQ: 0.7, fade: 30, minLen: 40 }, // 1.13.1: less sky, sees further
 };
 let CAM_PROF = 'standard';
 function camSave() { try { localStorage.setItem('sgp_cam', JSON.stringify(Object.assign({ profile: CAM_PROF }, Object.fromEntries(CAM_SET.map(e => [e.k, camGet(e)]))))); } catch (e) { } }

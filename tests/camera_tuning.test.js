@@ -4,6 +4,7 @@
 // reload (localStorage 'sgp_cam'), and Reset to defaults brings back the built-in values.
 // Since 1.13.0: a profile list (Standard, Close, Custom); a profile sets all sliders, a moved slider shows
 // Custom, the profile is kept after a reload, Reset to defaults = Standard, old saved data still loads.
+// Since 1.13.1: with Close at 1470x830 @2x, sky is at most 12 % of the screen on a straight at speed.
 // Usage: node tests/camera_tuning.test.js [path/to/index.html]   (needs Playwright + Chromium)
 const path = require('path');
 const { chromium } = require('playwright');
@@ -11,7 +12,7 @@ const FILE = 'file://' + path.resolve(process.argv[2] || path.join(__dirname, '.
 const DEG = Math.PI / 180;
 // defaults in display units (tilt in degrees, bike height and fade zone in %)
 const DEF = { a: 40, p: 1.3, bike: 20, zMax: 20, zBase: 30, zK: 1.0, wk: 2.3, hk: 2.6, nearQ: 0.75, farQ: 0.45, fade: 30, minLen: 40 };
-const CLOSE = { a: 60, p: 1.6, bike: 8, zMax: 30, zBase: 12, zK: 0.4, wk: 3.5, hk: 5.5, nearQ: 1.5, farQ: 0.6, fade: 30, minLen: 40 };
+const CLOSE = { a: 55, p: 1.8, bike: 8, zMax: 30, zBase: 12, zK: 0.4, wk: 3.5, hk: 6, nearQ: 1.5, farQ: 0.7, fade: 30, minLen: 40 };
 const UNIT = { a: DEG, bike: 0.01, fade: 0.01 }; // display unit -> TILT value
 
 (async () => {
@@ -123,6 +124,34 @@ const UNIT = { a: DEG, bike: 0.01, fade: 0.01 }; // display unit -> TILT value
   p = await panel();
   const pauseOpen = await page.$eval('#pause', el => !el.hidden);
   check(pauseOpen && !p.visible, 'panel hidden in the Top-down pause menu', `pause menu ${pauseOpen ? 'open' : 'closed'}  panel ${p.exists ? (p.visible ? 'visible' : 'hidden') : 'not built'}`);
+
+  // l) Close on a straight at speed (1470x830 @2x): sky rows at the top are at most 12 % of the screen (GDD 1.13.1)
+  const p2 = await browser.newPage({ viewport: { width: 1470, height: 830 }, deviceScaleFactor: 2 });
+  p2.on('pageerror', e => { console.error('page error:', e.message); process.exitCode = 1; });
+  await p2.goto(FILE); await p2.waitForFunction(() => window.__sgp && document.getElementById('loading').hidden);
+  const v0 = await p2.evaluate(() => {
+    const S = window.__sgp; try { localStorage.removeItem('sgp_cam'); } catch (e) { }
+    S.UI.opts.cam = 'behind'; S.UI.opts.train = 'off'; S.UI.launch('practice', {}); S.setCamModeX('behind'); S.setCamProfileX('close');
+    const W = S.W, b = W.player; b.autopilot = true; W.paused = true; let g = 0, hp = b.h, ok = 0;
+    while (g < 120 * 300) { // drive until 0.5 s on a straight above 270 km/h
+      S.simStep(S.SUB); g++; const yaw = Math.abs(((b.h - hp + 9 * Math.PI) % (2 * Math.PI)) - Math.PI) * 120; hp = b.h;
+      ok = b.v > 75 && yaw < 0.02 ? ok + 1 : 0; if (ok > 60) break;
+    }
+    S.CAM.init = false; // the next frame snaps the zoom to the target for this speed
+    return b.v * 3.6;
+  });
+  await p2.waitForTimeout(300);
+  const sk = await p2.evaluate(v => {
+    const S = window.__sgp;
+    const c = document.getElementById('game'), d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let rows = 0;
+    for (let y = 0; y < c.height; y++) { // a row is sky while at least 1/8 of it is the blue-to-haze sky colour
+      let n = 0; for (let x = 0; x < c.width; x += 4) { const i = (y * c.width + x) * 4, R = d[i], G = d[i + 1], B = d[i + 2]; if (B > 150 && B >= G && G >= R - 5 && R > 90) n++; }
+      if (n > c.width / 8) rows++; else break;
+    }
+    return { sky: rows / c.height, v, prof: S.camProfX() };
+  }, v0);
+  check(sk.prof === 'close' && sk.v > 270 && sk.sky <= 0.12, 'Close: sky at most 12 % on a straight', `sky ${(sk.sky * 100).toFixed(1)} %  at ${sk.v.toFixed(0)} km/h`);
+  await p2.close();
 
   await browser.close();
   console.log(failed ? `${failed} of ${total} camera tuning checks FAILED` : `all ${total} camera tuning checks passed`);

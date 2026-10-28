@@ -1,6 +1,6 @@
 # Silverstone GP — Game Design Document
 
-**Version:** 1.6.0 · **Last updated:** 2026-10-28 · **Owner:** Petr
+**Version:** 1.6.1 · **Last updated:** 2026-10-28 · **Owner:** Petr
 
 This document is the source of truth for how the game should work. Every
 change starts here: update the GDD on a feature branch first, then change the
@@ -157,6 +157,10 @@ where the ideal speed drops by more than 80 km/h.
 
 - **When:** it appears ~400 m before the corner's braking reference point. It disappears just after the corner entry. It is hidden in the pit lane and while crashed.
 - **Where:** top centre, directly under the lap stopwatch (under the speed guide when that is shown). The section name moves below it.
+- **Size:** compact, about 250 × 44 px.
+  - Left: a 36 px pictogram.
+  - Right, top row: corner name and distance.
+  - Right, below: the four board tiles (each ~42 × 20 px) and a thin countdown bar.
 - **Marks:** four board tiles **300 · 200 · 100 · 50**, measured to the same point as the trackside boards.
   - Upcoming tiles are drawn as white boards.
   - The next tile to pass is highlighted and grows as it gets closer.
@@ -207,4 +211,4 @@ The repository is local only (no remote push).
 
 ## 16. Version history
 
-See `CHANGELOG.md`. Current: **1.6.0**.
+See `CHANGELOG.md`. Current: **1.6.1**.

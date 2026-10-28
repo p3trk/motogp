@@ -107,7 +107,7 @@ function drawHUD(dt) {
   const showGuide = W.guide && !b.crashed && !b.inPitLane; let gOff = showGuide ? 62 : 0;
   if (showGuide) drawGuide(b, cx, cy + 96, cw);
   const cz = !b.crashed && !b.inPitLane ? cornerAhead(b) : null;
-  if (cz) { drawCountdown(b, cz, cx, cy + 96 + gOff, cw); gOff += 82; }
+  if (cz) { drawCountdown(b, cz, VW / 2 - 125, cy + 96 + gOff, 250); gOff += 52; }
   txt(T.cornerAt(b.s).toUpperCase(), VW / 2, cy + 108 + gOff, 14, 'rgba(255,255,255,.75)', 700, 'center', true);
   // race gaps ahead / behind
   if (W.mode === 'race' && W.phase === 'run') {
@@ -195,37 +195,37 @@ function cornerShape(z) { // centreline from the approach to the exit, rotated s
 function drawCountdown(b, cz, dx, dy, dw) {
   const { z, d } = cz, S = cornerShape(z);
   ctx.globalAlpha = clamp((400 - d) / 40, 0, 1) * clamp((d + 30) / 25, 0, 1);
-  const H = 74; panel(dx, dy, dw, H, 0.85);
+  const H = 44; panel(dx, dy, dw, H, 0.85);
   // pictogram
-  const pw = 66, ph = 62, px = dx + 6, py = dy + 6;
+  const pw = 36, ph = 36, px = dx + 4, py = dy + 4;
   ctx.fillStyle = 'rgba(255,255,255,.05)'; ctx.fillRect(px, py, pw, ph);
-  const sc = Math.min((pw - 14) / Math.max(1, S.x1 - S.x0), (ph - 14) / Math.max(1, S.y1 - S.y0));
+  const sc = Math.min((pw - 8) / Math.max(1, S.x1 - S.x0), (ph - 8) / Math.max(1, S.y1 - S.y0));
   const ox = px + pw / 2 - (S.x0 + S.x1) / 2 * sc, oy = py + ph / 2 - (S.y0 + S.y1) / 2 * sc;
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  ctx.strokeStyle = 'rgba(255,255,255,.18)'; ctx.lineWidth = 7; ctx.beginPath(); S.pts.forEach((q, k) => k ? ctx.lineTo(ox + q[0] * sc, oy + q[1] * sc) : ctx.moveTo(ox + q[0] * sc, oy + q[1] * sc)); ctx.stroke();
-  ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.5; ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,255,255,.18)'; ctx.lineWidth = 5; ctx.beginPath(); S.pts.forEach((q, k) => k ? ctx.lineTo(ox + q[0] * sc, oy + q[1] * sc) : ctx.moveTo(ox + q[0] * sc, oy + q[1] * sc)); ctx.stroke();
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
   const e1 = S.pts[S.pts.length - 1], e0 = S.pts[S.pts.length - 4], ang = Math.atan2(e1[1] - e0[1], e1[0] - e0[0]);
-  ctx.save(); ctx.translate(ox + e1[0] * sc, oy + e1[1] * sc); ctx.rotate(ang); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(4, 0); ctx.lineTo(-4, -4.5); ctx.lineTo(-4, 4.5); ctx.closePath(); ctx.fill(); ctx.restore();
+  ctx.save(); ctx.translate(ox + e1[0] * sc, oy + e1[1] * sc); ctx.rotate(ang); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(3, 0); ctx.lineTo(-3, -3.5); ctx.lineTo(-3, 3.5); ctx.closePath(); ctx.fill(); ctx.restore();
   let rel = b.i - S.i0; if (rel < 0) rel += T.N;
-  if (rel <= S.n) { const q = S.tf(b.x, b.y); ctx.fillStyle = '#ffcf1f'; ctx.beginPath(); ctx.arc(ox + q[0] * sc, oy + q[1] * sc, 3.5, 0, TAU); ctx.fill(); }
+  if (rel <= S.n) { const q = S.tf(b.x, b.y); ctx.fillStyle = '#ffcf1f'; ctx.beginPath(); ctx.arc(ox + q[0] * sc, oy + q[1] * sc, 2.8, 0, TAU); ctx.fill(); }
   // name + marks
-  const mx = px + pw + 10, mw = dx + dw - 10 - mx;
-  txt(S.name.toUpperCase(), mx, dy + 18, 13, '#e9edf0', 800, 'left', true);
-  txt(d > 0 ? Math.round(d) + ' m' : 'TURN IN', dx + dw - 10, dy + 18, 13, d > 50 ? '#8d9aa4' : '#ffcf1f', 700, 'right');
-  const gap = 6, tw = (mw - gap * 3) / 4, ty = dy + 26, th = 32;
+  const mx = px + pw + 6, mw = dx + dw - 6 - mx;
+  txt(S.name.toUpperCase(), mx, dy + 13, 11, '#e9edf0', 800, 'left', true);
+  txt(d > 0 ? Math.round(d) + ' m' : 'TURN IN', dx + dw - 6, dy + 13, 11, d > 50 ? '#8d9aa4' : '#ffcf1f', 700, 'right');
+  const gap = 4, tw = (mw - gap * 3) / 4, ty = dy + 18, th = 20;
   const next = CD_MARKS.find(m => d > m);
   CD_MARKS.forEach((m, k) => {
     const x = mx + k * (tw + gap), passed = d <= m, isNext = m === next;
-    let grow = 0; if (isNext) { const prev = k ? CD_MARKS[k - 1] : 400; grow = clamp(1 - (d - m) / (prev - m), 0, 1) * 3; }
+    let grow = 0; if (isNext) { const prev = k ? CD_MARKS[k - 1] : 400; grow = clamp(1 - (d - m) / (prev - m), 0, 1) * 2; }
     ctx.fillStyle = passed ? '#262e34' : isNext ? '#ffcf1f' : '#f4f4f2';
     ctx.fillRect(x - grow, ty - grow, tw + 2 * grow, th + 2 * grow);
-    if (!passed) { ctx.strokeStyle = '#111'; ctx.lineWidth = 1; ctx.strokeRect(x + 2.5, ty + 2.5, tw - 5, th - 5); }
-    txt(String(m), x + tw / 2, ty + th / 2 + 7, 20, passed ? '#56636d' : '#111', 800, 'center', true);
+    if (!passed) { ctx.strokeStyle = '#111'; ctx.lineWidth = 1; ctx.strokeRect(x + 1.5, ty + 1.5, tw - 3, th - 3); }
+    txt(String(m), x + tw / 2, ty + th / 2 + 5, 14, passed ? '#56636d' : '#111', 800, 'center', true);
   });
   // countdown bar
   const f = clamp(d / 300, 0, 1);
-  ctx.fillStyle = 'rgba(255,255,255,.1)'; ctx.fillRect(mx, dy + H - 8, mw, 3);
-  ctx.fillStyle = d < 50 ? '#e3312a' : '#ffcf1f'; ctx.fillRect(mx, dy + H - 8, mw * f, 3);
+  ctx.fillStyle = 'rgba(255,255,255,.1)'; ctx.fillRect(mx, dy + H - 4, mw, 2);
+  ctx.fillStyle = d < 50 ? '#e3312a' : '#ffcf1f'; ctx.fillRect(mx, dy + H - 4, mw * f, 2);
   ctx.globalAlpha = 1; ctx.lineCap = 'butt'; ctx.lineJoin = 'miter';
 }
 function drawGuide(b, dx, dy, dw) {

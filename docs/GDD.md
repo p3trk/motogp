@@ -1,6 +1,6 @@
 # Silverstone GP — Game Design Document
 
-**Version:** 1.12.0 · **Last updated:** 2026-10-28 · **Owner:** Petr
+**Version:** 1.13.0 · **Last updated:** 2026-10-28 · **Owner:** Petr
 
 This document is the source of truth for how the game should work. Every
 change starts here: update the GDD on a feature branch first, then change the
@@ -169,15 +169,22 @@ Two cameras, switched with **C** or in the menu.
 **Behind camera tuning (since 1.12.0)**
 - With the Behind camera on, the pause menu (Esc) shows a **Camera tuning** panel: one slider with a number box per setting. The view behind the menu updates live while dragging.
 - Settings (default, range):
-  - Tilt: 40°, 20–60.
-  - Camera distance: 1.3 × screen height, 0.8–2.5.
-  - Bike height on screen: 20 %, 10–40.
-  - Zoom: maximum 20 px/m (10–30), base 30 m (15–60), speed factor 1.0 (0.5–2.0) in `ppm = min(max, min(VW, 1.25·VH) / (base + factor·v))`.
-  - Ground area: width 2.3 × screen (1.5–3.5), depth 2.6 × screen (1.5–4).
-  - Image quality: near band 0.75 (0.4–1.0), far band 0.45 (0.25–0.8), fade zone 30 % (0–60).
+  - Tilt: 40°, 20–70.
+  - Camera distance: 1.3 × screen height, 0.5–2.5.
+  - Bike height on screen: 20 %, 5–40.
+  - Zoom: maximum 20 px/m (10–30), base 30 m (10–60), speed factor 1.0 (0.3–2.0) in `ppm = min(max, min(VW, 1.25·VH) / (base + factor·v))`.
+  - Ground area: width 2.3 × screen (1.5–3.5), depth 2.6 × screen (1.5–6).
+  - Image quality: near band 0.75 (0.4–2.0), far band 0.45 (0.25–0.8), fade zone 30 % (0–60).
   - Minimum bike length: 40 px, 20–80.
-- **Reset to defaults** button. Settings are saved in the browser (localStorage key `sgp_cam`) and kept after a reload.
+- **Reset to defaults** button (= the Standard profile, since 1.13.0). Settings are saved in the browser (localStorage key `sgp_cam`) and kept after a reload.
 - Not shown with the Top-down camera.
+
+**Camera profiles (since 1.13.0)**
+- A **Profile** list at the top of the Camera tuning panel: **Standard** (the 1.12.0 defaults) and **Close**. Choosing a profile sets all sliders; moving any slider afterwards shows **Custom**. The chosen profile is saved with the other settings.
+- **Close** aims at what a rider really sees: tilt 60°, so the road stretches ahead and the ground is seen at a low angle; camera distance 1.6 × screen height and the bike 8 % above the bottom edge; zoomed in (maximum 30 px/m, base 12 m, speed factor 0.4); most detail (near image 1.5, far image 0.6; above 1.0 uses the extra pixels of Retina screens); a deeper and wider ground (depth 5.5 × screen, width 3.5 × screen) so the road reaches the horizon, which sits about a third of the way down the screen. Fade zone 30 % and minimum bike length 40 px as in Standard.
+  - Fine-tuned on a 1470 × 830 Retina screen. The first draft had distance 0.6, depth 5, width 2.3 and speed factor 0.6. With tilt 60°, a distance of 0.6 puts the horizon only about 35 % above the bottom edge (it sits at distance × cot(tilt)), so two thirds of the screen were sky. Distance 1.6 with depth 5.5 brings the far edge of the ground to about 69 % of the screen height. Width 3.5 keeps the far ground as wide as the view, and speed factor 0.4 keeps the bike bigger at speed.
+- Slider ranges widened: tilt up to 70°, distance from 0.5, bike height from 5 %, near quality up to 2.0, ground depth up to 6, and (so the Close zoom fits) zoom base from 10 m and speed factor from 0.3.
+- Close draws more pixels and can be slower; the automatic quality drop for slow machines still applies.
 
 **Top-down (Rotating)**
 - The pre-1.7 camera. Top-down, rotates with the bike's heading, zooms out with speed and looks ahead along the heading.
@@ -355,9 +362,9 @@ Watch one recording, or several together for comparison. Any recording in the li
   - Cases: live riding and replay at 0.25×, 1× and 4×, each with the Behind and Top-down cameras.
   - Measured against a 0.4 s moving average (in game time): camera speed, camera turn rate, direction of camera travel, and the bike's position on screen.
   - Limits: speed 2 %, turn rate 0.08 rad/s, direction 0.08 rad/s, screen position 2 px (RMS). The test exits with an error if any case is over.
-- Tests: `node tests/tilt_seam.test.js [index.html]` draws a pattern of straight lines through the real Behind camera projection, in live riding and in replay, at 1280×800, 1470×830 (2× pixels) and 1024×700, and fails if a line bends by more than 0.5 px from one screen row to the next (v1.11.4 fails with about 1 px). It also measures how sharp the lines are on each screen row and fails if the sharpness changes by more than 15 % between the 8 px above and the 8 px below any row (since 1.11.6; v1.11.5 fails with a 25 % step where the near and far bands join, v1.11.6 measures 5–6 %).
+- Tests: `node tests/tilt_seam.test.js [index.html]` draws a pattern of straight lines through the real Behind camera projection, in live riding and in replay, at 1280×800, 1470×830 (2× pixels) and 1024×700, and fails if a line bends by more than 0.5 px from one screen row to the next (v1.11.4 fails with about 1 px). It also measures how sharp the lines are on each screen row and fails if the sharpness changes by more than 15 % between the 8 px above and the 8 px below any row (since 1.11.6; v1.11.5 fails with a 25 % step where the near and far bands join, v1.11.6 measures 5–6 %). Since 1.13.0 it also runs at 1470×830 (2× pixels) with the Close camera profile.
 - Tests: `node tests/track_edges.test.js [index.html]` checks that no outline beside the track ends square or jumps sideways between two neighbouring track points (~2 m apart). Limits: kerb width 0.45 m, run-off outer edge 2 m, wall 1.5 m, pit lane edges 1.5 m. Live riding and replay draw the same geometry, so this covers both; the test also draws the pit exit in both modes. v1.11.2 fails the kerb check (68 square ends); v1.11.3 fails run-off, wall and pit lane.
-- Tests: `node tests/camera_tuning.test.js [index.html]` checks the Behind camera tuning panel: 12 sliders in the pause menu, values applied, kept after a reload (localStorage), Reset to defaults, hidden with Top-down. `npm test` runs all tests (needs `npm install` and `npx playwright install chromium` once).
+- Tests: `node tests/camera_tuning.test.js [index.html]` checks the Behind camera tuning panel: 12 sliders in the pause menu, values applied, kept after a reload (localStorage), Reset to defaults, hidden with Top-down; since 1.13.0 also the profile list (Close sets its values, a moved slider shows Custom, the profile is kept after a reload, Reset to defaults gives Standard). `npm test` runs all tests (needs `npm install` and `npx playwright install chromium` once).
 
 ## 14. Change process
 
@@ -382,4 +389,4 @@ After tagging, push `main`, the tag and the feature branch to GitHub (`p3trk/mot
 
 ## 16. Version history
 
-See `CHANGELOG.md`. Current: **1.12.0**.
+See `CHANGELOG.md`. Current: **1.13.0**.

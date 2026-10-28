@@ -19,34 +19,53 @@ let LAYERS = [];
 const TILT = { a: 40 * DEG, p: 1.3, wk: 2.3, hk: 2.6, bike: 0.2, zMax: 20, zBase: 30, zK: 1.0, nearQ: 0.75, farQ: 0.45, fade: 0.3, minLen: 40, q: 1 }; // q: resolution scale, lowered on slow machines
 // Behind camera tuning (GDD 11a): the pause-menu panel edits these in display units (deg, %), saved in localStorage 'sgp_cam'
 const CAM_SET = [ // k: TILT field, f: display unit -> TILT value, rs: needs resize()
-  { k: 'a', lbl: 'Tilt', unit: '°', min: 20, max: 60, step: 1, f: DEG, rs: 1 },
-  { k: 'p', lbl: 'Camera distance', unit: '× screen h', min: 0.8, max: 2.5, step: 0.05, rs: 1 },
-  { k: 'bike', lbl: 'Bike height on screen', unit: '%', min: 10, max: 40, step: 1, f: 0.01 },
+  { k: 'a', lbl: 'Tilt', unit: '°', min: 20, max: 70, step: 1, f: DEG, rs: 1 },
+  { k: 'p', lbl: 'Camera distance', unit: '× screen h', min: 0.5, max: 2.5, step: 0.05, rs: 1 },
+  { k: 'bike', lbl: 'Bike height on screen', unit: '%', min: 5, max: 40, step: 1, f: 0.01 },
   { k: 'zMax', lbl: 'Zoom maximum', unit: 'px/m', min: 10, max: 30, step: 1 },
-  { k: 'zBase', lbl: 'Zoom base', unit: 'm', min: 15, max: 60, step: 1 },
-  { k: 'zK', lbl: 'Zoom speed factor', unit: '', min: 0.5, max: 2, step: 0.05 },
+  { k: 'zBase', lbl: 'Zoom base', unit: 'm', min: 10, max: 60, step: 1 },
+  { k: 'zK', lbl: 'Zoom speed factor', unit: '', min: 0.3, max: 2, step: 0.05 },
   { k: 'wk', lbl: 'Ground width', unit: '× screen', min: 1.5, max: 3.5, step: 0.05, rs: 1 },
-  { k: 'hk', lbl: 'Ground depth', unit: '× screen', min: 1.5, max: 4, step: 0.05, rs: 1 },
-  { k: 'nearQ', lbl: 'Near band quality', unit: '', min: 0.4, max: 1, step: 0.05, rs: 1 },
+  { k: 'hk', lbl: 'Ground depth', unit: '× screen', min: 1.5, max: 6, step: 0.05, rs: 1 },
+  { k: 'nearQ', lbl: 'Near band quality', unit: '', min: 0.4, max: 2, step: 0.05, rs: 1 },
   { k: 'farQ', lbl: 'Far band quality', unit: '', min: 0.25, max: 0.8, step: 0.05, rs: 1 },
   { k: 'fade', lbl: 'Fade zone', unit: '%', min: 0, max: 60, step: 1, f: 0.01, rs: 1 },
   { k: 'minLen', lbl: 'Minimum bike length', unit: 'px', min: 20, max: 80, step: 1 },
 ];
 const TILT_DEF = Object.freeze(Object.fromEntries(CAM_SET.map(d => [d.k, TILT[d.k]])));
 const camGet = d => +(TILT[d.k] / (d.f || 1)).toFixed(4); // display value
+// camera profiles (GDD 11a, since 1.13.0), in display units; any slider change afterwards makes the profile 'custom'
+const CAM_PROFILES = {
+  standard: Object.fromEntries(CAM_SET.map(d => [d.k, camGet(d)])),
+  close: { a: 60, p: 1.6, bike: 8, zMax: 30, zBase: 12, zK: 0.4, wk: 3.5, hk: 5.5, nearQ: 1.5, farQ: 0.6, fade: 30, minLen: 40 },
+};
+let CAM_PROF = 'standard';
+function camSave() { try { localStorage.setItem('sgp_cam', JSON.stringify(Object.assign({ profile: CAM_PROF }, Object.fromEntries(CAM_SET.map(e => [e.k, camGet(e)]))))); } catch (e) { } }
 function camSet(d, v, save) { // clamps, applies, saves; returns the display value
   v = +v; if (!isFinite(v)) v = TILT_DEF[d.k] / (d.f || 1);
   v = clamp(v, d.min, d.max); TILT[d.k] = v * (d.f || 1);
-  if (save) { try { localStorage.setItem('sgp_cam', JSON.stringify(Object.fromEntries(CAM_SET.map(e => [e.k, camGet(e)])))); } catch (e) { } }
+  if (save) camSave();
   return v;
 }
-try { const s = JSON.parse(localStorage.getItem('sgp_cam') || 'null'); if (s && typeof s === 'object') for (const d of CAM_SET) if (d.k in s) camSet(d, s[d.k], false); } catch (e) { }
-function tiltBikeH() { const P = TILT.p * VH, s = TILT.bike * VH; return s * P / (Math.cos(TILT.a) * P - s * Math.sin(TILT.a)); } // canvas px above the bottom edge that project to TILT.bike of the screen
+function camProfile(name, save) { // applies all values of a profile; the caller calls resize()
+  const P = CAM_PROFILES[name]; if (!P) return;
+  for (const d of CAM_SET) camSet(d, P[d.k], false);
+  CAM_PROF = name; if (save) camSave();
+}
+const camIs = name => CAM_SET.every(d => Math.abs(camGet(d) - CAM_PROFILES[name][d.k]) < 1e-6);
+try {
+  const s = JSON.parse(localStorage.getItem('sgp_cam') || 'null');
+  if (s && typeof s === 'object') { // saved before 1.13.0 without a profile name: Standard if the values are the defaults, else Custom
+    for (const d of CAM_SET) if (d.k in s) camSet(d, s[d.k], false);
+    CAM_PROF = s.profile in CAM_PROFILES || s.profile === 'custom' ? s.profile : camIs('standard') ? 'standard' : 'custom';
+  }
+} catch (e) { }
+function tiltBikeH() { const P = TILT.p * VH, ca = Math.cos(TILT.a), sa = Math.sin(TILT.a), s = Math.min(TILT.bike * VH, 0.8 * P * ca / sa); return s * P / (ca * P - s * sa); } // canvas px above the bottom edge that project to TILT.bike of the screen (kept below the horizon at P*cot(a), GDD 1.13.0)
 function resize() {
   DPR = Math.min(DPR_CAP, window.devicePixelRatio || 1); VW = window.innerWidth; VH = window.innerHeight;
   hcv.width = Math.round(VW * DPR); hcv.height = Math.round(VH * DPR);
   const tilt = CAM.mode === 'behind';
-  ODPR = tilt ? 1 : DPR; // tilted view is resampled anyway; HUD stays sharp on its own layer
+  ODPR = tilt ? clamp(TILT.nearQ * TILT.q, 1, Math.max(1, DPR)) : DPR; // tilted view is resampled anyway; near quality above 1 uses Retina pixels (GDD 1.13.0)
   cv.width = Math.round(VW * ODPR); cv.height = Math.round(VH * ODPR);
   RW = tilt ? Math.round(VW * TILT.wk) : VW; RH = tilt ? Math.round(VH * TILT.hk) : VH;
   const layer = (c, x0, y0, w, h, dpr) => { if (c !== cv) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); } return { c, g: c === cv ? mainCtx : c.getContext('2d', { alpha: false }), x0, y0, w, h, dpr }; };
@@ -401,6 +420,7 @@ function projectTilted() {
   const g = mainCtx; g.setTransform(ODPR, 0, 0, ODPR, 0, 0); g.imageSmoothingEnabled = true;
   const sky = g.createLinearGradient(0, 0, 0, VH - uTop + 2); sky.addColorStop(0, '#6fa3d2'); sky.addColorStop(1, '#c9d8de');
   g.fillStyle = sky; g.fillRect(0, 0, VW, VH - uTop + 2);
+  g.fillStyle = '#c9d8de'; g.fillRect(0, VH - uTop, VW, uTop); // haze where a narrow ground area does not reach the screen sides
   const near = LAYERS[1], far = LAYERS[0], hN = near.h;
   // one strip per screen row: the horizontal scale changes from row to row, so taller strips drew straight lines
   // as small steps, worst where the near and far bands join (GDD 1.11.5)
@@ -410,10 +430,11 @@ function projectTilted() {
   const row = (Ly, u0, u1, h0, h1, sc) => {
     const d = Ly.dpr, cw = Ly.c.width;
     const sy0 = Math.max(0, (RH - h1 - Ly.y0) * d), sh = Math.min(Ly.c.height, (RH - h0 - Ly.y0) * d) - sy0; if (sh <= 0) return;
-    g.drawImage(Ly.c, 0, sy0, cw, sh, VW / 2 + (Ly.x0 - RW / 2) * sc, VH - u1, cw / d * sc, u1 - u0 + 0.5);
+    g.drawImage(Ly.c, 0, sy0, cw, sh, VW / 2 + (Ly.x0 - RW / 2) * sc, VH - u1, cw / d * sc, u1 - u0 + 0.5 * du);
   };
-  for (let u0 = 0; u0 < uTop; u0 += 1) {
-    const u1 = Math.min(uTop, u0 + 1), h0 = hOf(u0), h1 = hOf(u1), hm = (h0 + h1) / 2, sc = P / (P + hm * sa);
+  const du = 1 / ODPR; // one strip per device row
+  for (let u0 = 0; u0 < uTop; u0 += du) {
+    const u1 = Math.min(uTop, u0 + du), h0 = hOf(u0), h1 = hOf(u1), hm = (h0 + h1) / 2, sc = P / (P + hm * sa);
     if (hm < hN) row(near, u0, u1, h0, h1, sc);
     if (hm > hF) { const a = hm >= hN ? 1 : (hm - hF) / hB; if (a < 1) g.globalAlpha = a; row(far, u0, u1, h0, h1, sc); g.globalAlpha = 1; }
   }

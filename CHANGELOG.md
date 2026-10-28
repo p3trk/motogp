@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.13.0 (2026-10-28)
+- Camera profiles: the Camera tuning panel (pause menu, Behind camera) has a Profile list, Standard (the 1.12.0 defaults) and Close. A profile sets all sliders; moving a slider afterwards shows Custom. The profile is saved with the other settings, and settings saved by 1.12.0 still load. Reset to defaults = Standard.
+- Close camera, closer to what a rider sees: tilt 60°, distance 1.6 × screen height, bike 8 % above the bottom edge, zoom 30 px/m max / 12 m base / 0.4 speed factor, ground 3.5 × 5.5 screens, near image 1.5 and far image 0.6. On Retina screens, near quality above 1.0 now really draws the tilted view with more pixels. The horizon sits about a third of the way down the screen.
+- Wider slider ranges: tilt up to 70°, distance from 0.5, bike height from 5 %, near quality up to 2.0, ground depth up to 6, zoom base from 10 m, zoom speed factor from 0.3.
+- Tests: `tests/camera_tuning.test.js` also checks the profiles (15 checks). `tests/tilt_seam.test.js` also runs with the Close profile at 1470×830 @2x.
 ## v1.12.0 (2026-10-28)
 - Behind camera tuning: with the Behind camera, the pause menu has a Camera tuning panel with a slider and number for every setting in GDD 11a (tilt, distance, bike height, zoom, ground area, image quality, minimum bike length), Reset to defaults, saved in the browser.
 

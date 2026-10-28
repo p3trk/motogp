@@ -82,9 +82,10 @@ function setupSession(kind, opts) {
       W.bikes.push(b);
     });
   }
-  // ghost opponents (GDD 11c): in a race each one takes the place of one of the slowest AI riders
+  // ghost opponents (GDD 11c): in a race each one takes the place of one of the slowest AI riders;
+  // in practice, also curve training (GDD 11d), they only ride with the player's timed laps
   W.train = W.mode === 'practice' && opts.train ? opts.train : null;
-  Ghost.setup(W.train ? [] : opts.ghosts || []);
+  Ghost.setup(opts.ghosts || []);
   if (W.mode === 'race') for (const b of W.bikes.filter(b => !b.isPlayer).sort((a, b) => a.ai.pace - b.ai.pace).slice(0, W.ghosts.length)) W.bikes.splice(W.bikes.indexOf(b), 1);
   // box assignment: teammates share neighbouring boxes in team order
   const order = W.bikes.slice().sort((a, b) => a.team - b.team || a.id - b.id); order.forEach((b, k) => b.box = k);

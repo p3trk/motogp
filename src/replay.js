@@ -84,7 +84,7 @@ function unpackRec(R) {
 // library: the last 10 own sessions in localStorage; imports and saved_tracks files only for this visit.
 // IndexedDB keeps just the linked saved_tracks folder handle (and the pre-1.9.1 library, moved once).
 const Lib = {
-  db: null, meta: [], data: {}, ghosts: [], dir: null, dirOK: false, status: '', onChange: null, stored: true,
+  db: null, meta: [], data: {}, ghosts: [], cmp: [], dir: null, dirOK: false, status: '', onChange: null, stored: true,
   init() {
     try { this.ghosts = JSON.parse(localStorage.getItem('sgp_ghosts') || '[]').slice(0, GHOST_MAX); } catch (e) { this.ghosts = []; }
     let had = false;
@@ -280,5 +280,93 @@ const Ghost = {
     const base = Math.round(recAt(R, l.start + 0.05).p / T.L) * T.L;
     let lp = q.p - base; if (lp < -T.L / 2) lp += T.L;
     q.p = n * T.L + clamp(lp, 0, T.L); return q;
+  }
+};
+
+// ---------------------------------------------------------------------------
+// Replay viewer: one or several recordings on one timeline (GDD 11e)
+// ---------------------------------------------------------------------------
+const RP_SPEEDS = [-8, -4, -2, -1, 0.25, 0.5, 1, 2, 4, 8], RP_MAX = 6;
+function rpBestLap(R) { const own = R.laps.filter(l => !l.ap), pool = own.length ? own : R.laps; return pool.slice().sort((a, b) => a.time - b.time)[0] || null; }
+function rpDist(R) { // continuous distance along the track for every sample (line crossings and invalid laps unwrapped)
+  const p = R.samples.p, c = new Float64Array(p.length); for (let k = 1; k < p.length; k++) { let d = p[k] - p[k - 1]; if (d < -T.L / 2) d += T.L; else if (d > T.L / 2) d -= T.L; c[k] = c[k - 1] + d; } return c;
+}
+const RP = {
+  items: [], align: 'best', lapN: 1, t: 0, dur: 1, speed: 1, playing: true, follow: 0, back: null, saved: null,
+  open(recs, back) {
+    recs = recs.filter(Boolean).slice(0, RP_MAX); if (!recs.length) return;
+    this.saved = back === 'pause' ? { bikes: W.bikes, ghosts: W.ghosts, player: W.player, guide: W.guide, train: W.train } : null;
+    this.back = back || 'menu';
+    this.items = recs.map((R, k) => ({ R, cum: rpDist(R), best: rpBestLap(R), g: { id: 'rp' + k, team: R.rider.team, num: R.rider.num, short: R.rider.short, name: R.rider.name, isPlayer: k === 0, x: 0, y: 0, h: 0, v: 0, vs: 0, lean: 0, wheelie: 0, s: 0, i: 0, ctl: { thr: 0, brk: 0 }, show: true, crashed: false, dnf: false } }));
+    this.align = recs.length > 1 && this.items.every(it => it.best) ? 'best' : 'start'; this.lapN = 1; this.follow = 0;
+    UI.hideAll(); UI.state = 'replay'; W.paused = false; FX.clear(); W.guide = false; W.train = null;
+    W.bikes = [this.items[0].g]; W.ghosts = this.items.slice(1).map(it => it.g); W.player = this.items[0].g;
+    this.setAlign(this.align); this.speed = 1; this.playing = true; CAM.init = false;
+    UI.rbarOpen(this);
+  },
+  setAlign(a) {
+    this.align = a; const maxLaps = Math.max(...this.items.map(it => it.R.laps.length));
+    if (a === 'lap') this.lapN = clamp(this.lapN, 1, Math.max(1, maxLaps));
+    for (const it of this.items) {
+      const R = it.R, end = (R.samples.x.length - 1) * REC_DT; let l = null;
+      if (a === 'best') l = it.best; else if (a === 'lap') l = R.laps[this.lapN - 1] || null;
+      if (a === 'start') { it.off = R.raceStart > 0 ? R.raceStart : 0; it.len = end - it.off; it.on = true; }
+      else { it.on = !!l; it.off = l ? l.start : 0; it.len = l ? l.time : 0; }
+      it.end = end; it.lapT = l ? l.time : 0;
+      // time to reach each 10 m of aligned distance, for the gap panel
+      const k0 = Math.round(it.off / REC_DT), d0 = it.cum[Math.min(k0, it.cum.length - 1)]; it.d0 = d0;
+      const tr = []; for (let k = k0; k < it.cum.length; k++) { const b = Math.floor((it.cum[k] - d0) / 10); if (b >= 0 && tr[b] === undefined) for (let q = tr.length; q <= b; q++) tr[q] = k * REC_DT - it.off; }
+      it.trace = tr;
+    }
+    if (!this.items[0].on) { const k = this.items.findIndex(it => it.on); if (k > 0) { const [x] = this.items.splice(k, 1); this.items.unshift(x); x.g.isPlayer = true; this.items.forEach((it, j) => { it.g.isPlayer = j === 0; }); W.bikes = [this.items[0].g]; W.ghosts = this.items.slice(1).map(it => it.g); } }
+    this.dur = Math.max(1, ...this.items.filter(it => it.on).map(it => it.len)); this.t = 0; this.place();
+  },
+  laps() { // lap start marks on the timeline (reference session, Session start alignment)
+    if (this.align !== 'start') return [];
+    const it = this.items[0]; return it.R.laps.map((l, k) => ({ t: l.start - it.off, n: k + 1, best: l === it.best, len: l.time })).filter(m => m.t >= 0 && m.t <= this.dur);
+  },
+  step(dt) {
+    if (!this.playing) return;
+    this.t += dt * this.speed;
+    if (this.t >= this.dur) { this.t = this.dur; this.playing = false; }
+    if (this.t <= 0) { this.t = 0; if (this.speed < 0) this.playing = false; }
+    this.place();
+  },
+  place() {
+    for (const it of this.items) {
+      const g = it.g, rt = it.off + this.t;
+      g.show = it.on && rt >= 0 && rt <= it.end;
+      if (!g.show) continue;
+      const q = recAt(it.R, rt); Ghost.place(g, q); g.s = ((q.p % T.L) + T.L) % T.L; g.i = T.idx(g.s);
+      const k = clamp(rt / REC_DT, 0, it.cum.length - 1), k0 = Math.floor(k), k1 = Math.min(it.cum.length - 1, k0 + 1);
+      it.dist = it.cum[k0] + (it.cum[k1] - it.cum[k0]) * (k - k0) - it.d0;
+      const R = it.R; let lap = 0; for (let j = 0; j < R.laps.length; j++) if (R.laps[j].start <= rt) lap = j;
+      it.lap = R.laps.length ? (R.laps[lap].start <= rt ? lap + 1 : 0) : 0; it.lapStart = R.laps.length && it.lap ? R.laps[lap].start : 0; it.rt = rt;
+    }
+    W.player = this.items[this.follow] ? this.items[this.follow].g : this.items[0].g;
+  },
+  gap(it) { // time behind the reference at the same aligned distance
+    const ref = this.items[0]; if (it === ref || !it.on || !ref.on) return null;
+    const b = Math.floor(it.dist / 10), tr = ref.trace[b]; if (tr === undefined || b < 0) return null;
+    const tr1 = ref.trace[b + 1] ?? tr; const f = it.dist / 10 - b; return this.t - (tr + (tr1 - tr) * f);
+  },
+  seek(t) { this.t = clamp(t, 0, this.dur); this.place(); },
+  setSpeed(v) { this.speed = v; if (!this.playing) this.playing = true; },
+  faster(dir) { const k = RP_SPEEDS.indexOf(this.speed); this.setSpeed(RP_SPEEDS[clamp((k < 0 ? 6 : k) + dir, 0, RP_SPEEDS.length - 1)]); },
+  rew() { this.setSpeed(this.speed > 0 ? -1 : Math.max(-8, this.speed * 2)); },
+  ff() { this.setSpeed(this.speed < 1 ? 2 : Math.min(8, Math.max(2, this.speed * 2))); },
+  slow() { this.setSpeed(this.speed === 0.5 ? 0.25 : 0.5); },
+  toggle() { if (this.t >= this.dur && this.speed > 0) this.t = 0; if (this.t <= 0 && this.speed < 0) this.speed = 1; this.playing = !this.playing; },
+  lapJump(dir) {
+    const m = this.laps(); if (!m.length) { this.seek(dir < 0 ? 0 : this.dur); return; }
+    const cur = this.t; const next = dir > 0 ? m.find(x => x.t > cur + 0.05) : m.slice().reverse().find(x => x.t < cur - 1);
+    this.seek(next ? next.t : dir > 0 ? this.dur : 0);
+  },
+  cycle() { const vis = this.items.map((it, k) => k).filter(k => this.items[k].on); const j = vis.indexOf(this.follow); this.follow = vis[(j + 1) % vis.length]; this.place(); CAM.init = false; },
+  close() {
+    UI.rbarClose(); FX.clear();
+    if (this.back === 'pause' && this.saved) { Object.assign(W, { bikes: this.saved.bikes, ghosts: this.saved.ghosts, player: this.saved.player, guide: this.saved.guide, train: this.saved.train }); this.saved = null; UI.state = 'play'; W.paused = true; $('pause').hidden = false; UI.trainIn(W.mode === 'practice'); CAM.init = false; return; }
+    if (this.back === 'results') { attractSession(); UI.state = 'results'; $('results').hidden = false; return; }
+    attractSession(); UI.toMenu();
   }
 };

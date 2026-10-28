@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.11.0 (2026-10-28)
+- **Session replay**: a Replay button on every recording, plus Watch replay on the results screen and in the pause menu.
+- Timeline along the bottom: drag to jump, lap marks (best lap in purple), play/pause, rewind 1–8×, slow motion 0.25× / 0.5×, fast forward 2–8×, previous / next lap, camera switch.
+- **Compare**: tick up to 6 recordings and replay them together. Align them by best lap (default), lap N or session start. A gap panel shows each bike's live gap to the reference; Tab switches the followed bike.
+- Keys in the replay: Space, arrows, [ ], Tab, C, Esc.
+
 ## v1.10.0 (2026-10-28)
 - Curve training is On by default (older saved options switch to On once).
 - In Practice the pause menu (Esc) shows the Curve training toggle, map, corner list and speed. **Go to spot** puts you on the new spot at once; Resume keeps riding and the change applies from the next restart or R.

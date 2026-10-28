@@ -170,6 +170,48 @@ function drawHUD(dt) {
   if (b.crashed) { txt('Recovering rider…', VW / 2, VH * 0.36 + 56, 15, '#c9d2d8', 600, 'center'); }
 }
 
+// replay HUD (GDD 11e): gap panel, followed bike's speed / lap, name tags, countdown, minimap
+const RP_LBL = { practice: 'Practice', quali: 'Quali', sprint: 'Race 10', gp: 'GP' };
+function drawReplayHUD() {
+  const PAD = 16, b = W.player; if (!b) return;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.textBaseline = 'alphabetic';
+  const it = RP.items[RP.follow] || RP.items[0], barH = 92;
+  // gap panel
+  const rows = RP.items, rowH = 21, w = 300; panel(PAD, PAD, w, rows.length * rowH + 30, 0.8);
+  txt('REPLAY · ' + (RP.align === 'best' ? 'BEST LAPS' : RP.align === 'lap' ? 'LAP ' + RP.lapN : 'SESSION START'), PAD + 10, PAD + 18, 13, '#ffcf1f', 800, 'left', true);
+  const bestT = Math.min(...rows.filter(r => r.on && r.lapT).map(r => r.lapT));
+  rows.forEach((r, k) => {
+    const y = PAD + 26 + k * rowH, d = new Date(r.R.date);
+    if (r === it) { ctx.fillStyle = 'rgba(255,207,31,.16)'; ctx.fillRect(PAD + 2, y, w - 4, rowH); }
+    ctx.fillStyle = TEAMS[r.g.team].c1; ctx.fillRect(PAD + 8, y + 4, 4, rowH - 8);
+    ctx.globalAlpha = r.on ? 1 : 0.4;
+    txt(r.g.short + ' ' + (RP_LBL[r.R.kind] || r.R.mode) + ' ' + d.getDate() + '.' + (d.getMonth() + 1) + '. ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'), PAD + 18, y + 15, 13, '#fff', 700);
+    if (r.lapT) txt(fmtTime(r.lapT), PAD + w - 76, y + 15, 12, r.lapT === bestT ? '#b46bff' : '#c9d2d8', 600, 'right');
+    const g = RP.gap(r);
+    txt(k === 0 ? 'REF' : !r.on ? 'NO LAP' : g === null ? '' : (g >= 0 ? '+' : '\u2212') + Math.abs(g).toFixed(2), PAD + w - 10, y + 15, 13, k === 0 ? '#ffcf1f' : g === null ? '#8d9aa4' : g <= 0 ? '#3ad17a' : '#e3312a', 800, 'right');
+    ctx.globalAlpha = 1;
+  });
+  // followed bike: speed, lean, lap and lap time
+  const cw = 320, cx = VW / 2 - cw / 2; panel(cx, PAD, cw, 62);
+  txt('#' + b.num + ' ' + b.name.toUpperCase(), cx + 14, PAD + 22, 14, '#ffcf1f', 800, 'left', true);
+  txt(it.lap ? 'LAP ' + it.lap : 'OUT LAP', cx + 14, PAD + 48, 22, '#fff', 800, 'left', true);
+  txt(it.lap ? fmtTime(it.rt - it.lapStart) : '\u2013:\u2013\u2013.\u2013\u2013\u2013', cx + cw - 14, PAD + 48, 24, '#fff', 700, 'right');
+  txt('BEST ' + (it.best ? fmtTime(it.best.time) : '\u2013'), cx + cw - 14, PAD + 22, 12, '#8d9aa4', 600, 'right');
+  const dy = VH - barH - 90; panel(PAD, dy, 230, 76);
+  txt(String(Math.round(b.v * 3.6)), PAD + 14, dy + 52, 46, '#fff', 800, 'left', true); txt('KM/H', PAD + 16, dy + 68, 12, '#8d9aa4', 600);
+  const ld = Math.round(Math.abs(b.lean) / DEG); txt(ld + '\u00B0', PAD + 200, dy + 46, 24, ld > 55 ? '#ffcf1f' : '#e9edf0', 800, 'right', true); txt('LEAN', PAD + 200, dy + 64, 11, '#8d9aa4', 600, 'right');
+  const cz = cornerAhead(b); if (cz) drawCountdown(b, cz, VW / 2 - 125, PAD + 70, 250);
+  txt(T.cornerAt(b.s).toUpperCase(), VW / 2, PAD + (cz ? 134 : 84), 14, 'rgba(255,255,255,.75)', 700, 'center', true);
+  if (VW >= 640) drawMinimap(b);
+  for (const r of RP.items) {
+    const o = r.g; if (!o.show || o === b) continue; const dd = Math.hypot(o.x - b.x, o.y - b.y); if (dd > 120) continue;
+    const [sx, sy] = worldToScreen(o.x, o.y); if (sx < 0 || sy < 0 || sx > VW || sy > VH) continue;
+    const label = o.short + ' ' + (RP_LBL[r.R.kind] || ''); ctx.font = `700 12px ${FD}`; const tw = ctx.measureText(label).width + 10;
+    ctx.globalAlpha = 0.85; ctx.fillStyle = 'rgba(9,13,16,.75)'; ctx.fillRect(sx - tw / 2, sy - 34, tw, 16); ctx.fillStyle = TEAMS[o.team].c1; ctx.fillRect(sx - tw / 2, sy - 34, 3, 16);
+    txt(label, sx + 1, sy - 22, 12, '#fff', 700, 'center'); ctx.globalAlpha = 1;
+  }
+}
+
 // practice speed guide: recommended speed here, and the next braking point
 const GUIDE_K = 0.96;
 function guideSpeed(i) { return T.VP[i] * GUIDE_K; }
@@ -353,7 +395,7 @@ const Sound = {
 const Input = { k: {} };
 const GAME_KEYS = new Set(['KeyR', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyO', 'KeyL', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space']);
 window.addEventListener('keydown', e => {
-  if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT')) return;
+  if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') && !(UI.state === 'replay' && (e.target.id === 'rPos' || e.code === 'Escape'))) return;
   if (GAME_KEYS.has(e.code) && UI.state === 'play') e.preventDefault();
   Input.k[e.code] = true;
   if (e.repeat) return;
@@ -361,6 +403,13 @@ window.addEventListener('keydown', e => {
   if (UI.state === 'play' && b && !W.paused) {
     if (e.code === 'KeyO' && !b.auto) shift(b, 1);
     if (e.code === 'KeyL' && !b.auto) shift(b, -1);
+  }
+  if (UI.state === 'replay') {
+    const k = e.code; let used = true;
+    if (k === 'Space') RP.toggle(); else if (k === 'ArrowLeft') RP.seek(RP.t - 5); else if (k === 'ArrowRight') RP.seek(RP.t + 5);
+    else if (k === 'ArrowUp') RP.faster(1); else if (k === 'ArrowDown') RP.faster(-1); else if (k === 'BracketLeft') RP.lapJump(-1); else if (k === 'BracketRight') RP.lapJump(1);
+    else if (k === 'Tab') RP.cycle(); else if (k === 'KeyC') setCamMode(CAM.mode === 'behind' ? 'chase' : 'behind'); else if (k === 'Escape') RP.close(); else used = false;
+    if (used) e.preventDefault(); return;
   }
   if (e.code === 'KeyC' && UI.state === 'play') { setCamMode(CAM.mode === 'behind' ? 'chase' : 'behind'); UI.opts.cam = CAM.mode; UI.sync(); HUD.msg('CAMERA', CAM.mode === 'behind' ? 'Behind' : 'Top-down', '#4cc3ff', 1.2); }
   if (e.code === 'KeyR' && UI.state === 'play' && W.train && !W.paused) UI.launch('practice', {});
@@ -402,10 +451,15 @@ const UI = {
     $('recList').addEventListener('click', e => {
       const bt = e.target.closest('button[data-act]'); if (!bt) return; const id = bt.dataset.id;
       if (bt.dataset.act === 'ghost') Lib.toggleGhost(id);
+      else if (bt.dataset.act === 'replay') RP.open([Lib.data[id]], 'menu');
+      else if (bt.dataset.act === 'cmp') { const k = Lib.cmp.indexOf(id); if (k >= 0) Lib.cmp.splice(k, 1); else if (Lib.cmp.length < RP_MAX) Lib.cmp.push(id); this.renderLib(); }
       else if (bt.dataset.act === 'export') Lib.get(id).then(R => Lib.export(R));
       else if (bt.dataset.act === 'del') { if (bt.dataset.armed) Lib.del(id); else { bt.dataset.armed = '1'; bt.textContent = 'Sure?'; setTimeout(() => this.renderLib(), 3000); } }
     });
     Lib.onChange = () => this.renderLib();
+    $('btnReplaySel').addEventListener('click', () => RP.open(Lib.cmp.map(id => Lib.data[id]), 'menu'));
+    $('btnWatch').addEventListener('click', () => { const R = Rec.snapshot(); if (R && R.samples.x.length > 5) { $('pause').hidden = true; RP.open([R], 'pause'); } });
+    this.rbarInit();
     this.sync();
   },
   sync() {
@@ -476,6 +530,41 @@ const UI = {
     $('optTrainV').value = o.trainV; $('optTrainVV').textContent = o.trainV + ' km/h';
     $('trainInfo').textContent = `Start at ${T.cornerAt(o.trainS)}, centre of the road. ${nz ? 'Next corner ' + T.cornerAt(nz.k * T.DS) + ' in ' + Math.round(nd) + ' m.' : ''} Guide speed here ${Math.round(guideSpeed(i) * 3.6)} km/h.`;
   },
+  // replay bar (GDD 11e)
+  rbarInit() {
+    $('rPos').addEventListener('input', e => RP.seek(+e.target.value / 1000 * RP.dur));
+    $('rPos').addEventListener('change', e => e.target.blur());
+    $('rPlay').addEventListener('click', () => RP.toggle());
+    $('rRew').addEventListener('click', () => RP.rew());
+    $('rFf').addEventListener('click', () => RP.ff());
+    $('rSlow').addEventListener('click', () => RP.slow());
+    $('rPrev').addEventListener('click', () => RP.lapJump(-1));
+    $('rNext').addEventListener('click', () => RP.lapJump(1));
+    $('rExit').addEventListener('click', () => RP.close());
+    $('rCam').addEventListener('click', () => setCamMode(CAM.mode === 'behind' ? 'chase' : 'behind'));
+    $('rFollow').addEventListener('click', () => RP.cycle());
+    $('rAlign').addEventListener('change', e => { RP.setAlign(e.target.value); this.rbarTicks(); });
+    $('rLapN').addEventListener('change', e => { RP.lapN = +e.target.value; RP.setAlign('lap'); this.rbarTicks(); });
+    for (const id of ['rPrev', 'rRew', 'rPlay', 'rFf', 'rNext', 'rSlow', 'rCam', 'rFollow', 'rExit']) $(id).addEventListener('mouseup', e => e.currentTarget.blur());
+  },
+  rbarOpen(rp) {
+    $('rbar').hidden = false; $('rAlign').value = rp.align;
+    const n = Math.max(...rp.items.map(it => it.R.laps.length));
+    $('rLapN').innerHTML = Array.from({ length: Math.max(1, n) }, (_, k) => `<option value="${k + 1}">Lap ${k + 1}</option>`).join('');
+    $('rFollow').hidden = rp.items.length < 2; this.rbarTicks();
+  },
+  rbarClose() { $('rbar').hidden = true; },
+  rbarTicks() {
+    $('rAlign').value = RP.align; $('rLapN').hidden = RP.align !== 'lap'; $('rLapN').value = RP.lapN;
+    $('rPrev').disabled = $('rNext').disabled = RP.align !== 'start';
+    $('rTicks').innerHTML = RP.laps().map(m => `<span class="${m.best ? 'best' : ''}" style="left:${(m.t / RP.dur * 100).toFixed(3)}%">${m.n}</span>` + (m.best ? `<i style="left:${(m.t / RP.dur * 100).toFixed(3)}%;width:${(m.len / RP.dur * 100).toFixed(3)}%"></i>` : '')).join('');
+  },
+  rbarUpdate() {
+    const pos = $('rPos'); if (document.activeElement !== pos || !this.rDrag) pos.value = (RP.t / RP.dur * 1000).toFixed(1);
+    $('rPlay').textContent = RP.playing ? 'Pause' : 'Play';
+    $('rSpeed').textContent = (RP.speed < 0 ? '\u25C0 ' + -RP.speed : RP.speed) + '\u00D7';
+    $('rTime').textContent = fmtTime(RP.t).replace(/\.\d+$/, m => m.slice(0, 2)) + ' / ' + fmtTime(RP.dur).replace(/\.\d+$/, m => m.slice(0, 2));
+  },
   renderLib() {
     const el = $('recList'); if (!el) return;
     const lbl = { practice: 'Practice', quali: 'Qualifying', sprint: '10 lap race', gp: 'Grand Prix' };
@@ -483,11 +572,14 @@ const UI = {
     $('recStatus').textContent = Lib.status || (Lib.stored ? 'Your last 10 sessions are kept in this browser. Imported and saved_tracks files are loaded for this visit only.' : 'Browser storage is blocked here, recordings are kept until the page closes.');
     $('btnReloadDir').hidden = !Lib.dir; if (Lib.dir) $('btnReloadDir').textContent = 'Reload ' + Lib.dir.name;
     $('recGhostHint').textContent = Lib.ghosts.length ? `${Lib.ghosts.length} ghost${Lib.ghosts.length === 1 ? '' : 's'} selected. They ride with you in Practice and in races (each one replaces a slow AI rider).` : 'Switch on Ghost to ride against a recording in Practice or a race (up to 4).';
+    Lib.cmp = Lib.cmp.filter(id => Lib.meta.some(m => m.id === id));
+    $('btnReplaySel').disabled = !Lib.cmp.length; $('btnReplaySel').textContent = Lib.cmp.length > 1 ? `Replay ${Lib.cmp.length} together` : 'Replay selected';
     if (!Lib.meta.length) { el.innerHTML = '<span class="small">No recordings yet. Every session with a completed lap or a race start is recorded automatically.</span>'; return; }
-    el.innerHTML = '<table><thead><tr><th>Ghost</th><th>Rider</th><th>Session</th><th>Best lap</th><th>Laps</th><th>Result</th><th>When</th><th></th></tr></thead><tbody>' + Lib.meta.map(m => {
+    el.innerHTML = '<table><thead><tr><th>Ghost</th><th>Replay</th><th>Rider</th><th>Session</th><th>Best lap</th><th>Laps</th><th>Result</th><th>When</th><th></th></tr></thead><tbody>' + Lib.meta.map(m => {
       const on = Lib.ghosts.includes(m.id);
       const res = m.raceStart ? (m.position ? 'P' + m.position + (m.finishT ? ' · ' + fmtTime(m.finishT) : '') : 'DNF') : '';
-      return `<tr><td><button class="chip" data-act="ghost" data-id="${esc(m.id)}" aria-pressed="${on}">${on ? 'Ghost on' : 'Ghost'}</button></td><td>${sw(clamp(m.rider.team | 0, 0, TEAMS.length - 1))}#${m.rider.num | 0} ${esc(m.rider.name)}</td><td>${lbl[m.kind] || esc(m.mode)}${src[m.src] ? ' <span class="small">· ' + src[m.src] + '</span>' : ''}</td><td>${m.bestLap ? fmtTime(m.bestLap) : '–'}</td><td>${m.laps | 0}</td><td>${res}</td><td class="small">${new Date(m.date).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</td><td><button class="chip" data-act="export" data-id="${esc(m.id)}">Export</button> <button class="chip" data-act="del" data-id="${esc(m.id)}">Delete</button></td></tr>`;
+      const cmp = Lib.cmp.includes(m.id);
+      return `<tr><td><button class="chip" data-act="ghost" data-id="${esc(m.id)}" aria-pressed="${on}">${on ? 'Ghost on' : 'Ghost'}</button></td><td><button class="chip" data-act="replay" data-id="${esc(m.id)}">Replay</button> <button class="chip" data-act="cmp" data-id="${esc(m.id)}" aria-pressed="${cmp}">${cmp ? '&#10003; Compare' : 'Compare'}</button></td><td>${sw(clamp(m.rider.team | 0, 0, TEAMS.length - 1))}#${m.rider.num | 0} ${esc(m.rider.name)}</td><td>${lbl[m.kind] || esc(m.mode)}${src[m.src] ? ' <span class="small">· ' + src[m.src] + '</span>' : ''}</td><td>${m.bestLap ? fmtTime(m.bestLap) : '–'}</td><td>${m.laps | 0}</td><td>${res}</td><td class="small">${new Date(m.date).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</td><td><button class="chip" data-act="export" data-id="${esc(m.id)}">Export</button> <button class="chip" data-act="del" data-id="${esc(m.id)}">Delete</button></td></tr>`;
     }).join('') + '</tbody></table>';
   },
   hideAll() { for (const id of ['menu', 'pause', 'results']) $(id).hidden = true; this.trainIn(false); },
@@ -525,7 +617,7 @@ const UI = {
     this.results('Qualifying', 'Grid for the 20 lap British Grand Prix', `Your best: ${me.bestLap ? fmtTime(me.bestLap) : 'no time set'} · P${rows.findIndex(r => r.me) + 1}`,
       ['Pos', '#', 'Rider', 'Team', 'Best lap', 'Gap'],
       rows.map((r, k) => { const team = r.me ? me.team : W.bikes.length ? teamForId(r.id, me.team) : 0; return { me: r.me, cells: [k + 1, r.num, r.name, sw(team) + TEAMS[team].name, r.t < 1e8 ? fmtTime(r.t) : 'No time', k ? (r.t < 1e8 ? '+' + (r.t - pole).toFixed(3) : '') : 'Pole'] }; }),
-      [['Start the race', () => this.launch('gp', { qualiGrid: grid })], ...(rec ? [['Export session', () => Lib.export(rec), true]] : []), ['Back to menu', () => this.toMenu(), true]]);
+      [['Start the race', () => this.launch('gp', { qualiGrid: grid })], ...(rec ? [['Watch replay', () => RP.open([rec], 'results'), true], ['Export session', () => Lib.export(rec), true]] : []), ['Back to menu', () => this.toMenu(), true]]);
   },
   raceResults() {
     // let the rest of the field finish (fast-forward)
@@ -538,7 +630,7 @@ const UI = {
     this.results('Race result', 'British Grand Prix · ' + W.totalLaps + ' laps', me.dnf ? 'You did not finish.' : `You finished P${myPos} of ${st.length}. Fastest lap: #${fl.num} ${fl.name} ${fmtTime(fl.bestLap)}`,
       ['Pos', '#', 'Rider', 'Team', 'Time / gap', 'Best lap', 'Pits'],
       st.map((b, k) => ({ me: b === me, cells: [b.dnf ? 'DNF' : k + 1, b.num, b.ghost ? b.name.replace(' (ghost)', '') + ' · GHOST' : b.name, sw(b.team) + TEAMS[b.team].name, b.dnf ? 'Retired' : k === 0 ? fmtTime(b.finishT) : (b.lap < win.lap ? '+' + (win.lap - b.lap) + ' lap' + (win.lap - b.lap > 1 ? 's' : '') : '+' + (b.finishT - win.finishT).toFixed(3)), b.bestLap ? (b === fl ? '<span class="pb">' + fmtTime(b.bestLap) + '</span>' : fmtTime(b.bestLap)) : '–', b.ghost ? '–' : b.pits] })),
-      [['Race again', () => this.launch(W.kind, W.kind === 'gp' ? { qualiGrid: W.opts.qualiGrid } : {})], ...(rec ? [['Export session', () => Lib.export(rec), true]] : []), ['Back to menu', () => this.toMenu(), true]]);
+      [['Race again', () => this.launch(W.kind, W.kind === 'gp' ? { qualiGrid: W.opts.qualiGrid } : {})], ...(rec ? [['Watch replay', () => RP.open([rec], 'results'), true], ['Export session', () => Lib.export(rec), true]] : []), ['Back to menu', () => this.toMenu(), true]]);
   },
   results(eyebrow, title, sub, head, rows, actions) {
     this.state = 'results'; this.hideAll();
@@ -571,24 +663,27 @@ function frame(now) {
     if (W.endTimer > 0) { W.endTimer -= dt; if (W.endTimer <= 0) { if (W.mode === 'race') UI.raceResults(); else if (W.mode === 'quali') UI.finishQuali(); } }
     if (W.mode === 'race' && W.player.dnf && !W.endTimer && !W.resultsShown) { W.resultsShown = true; W.endTimer = 3; }
   }
+  if (UI.state === 'replay') { RP.step(dt); UI.rbarUpdate(); }
   if (W.player) {
-    updateCamera(UI.state === 'play' && !W.paused ? dt : 0.0001); drawWorld();
+    updateCamera((UI.state === 'play' && !W.paused) || UI.state === 'replay' ? dt : 0.0001); drawWorld();
     ctx = hudCtx; ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, hcv.width, hcv.height);
-    try { if (UI.state === 'play') drawHUD(dt); } finally { ctx = mainCtx; }
+    try { if (UI.state === 'play') drawHUD(dt); else if (UI.state === 'replay') drawReplayHUD(); } finally { ctx = mainCtx; }
   }
   Sound.update(UI.state === 'play' ? W.player : null);
   requestAnimationFrame(frame);
+}
+function attractSession() { // attract mode behind the menu: AI field circulating
+  setupSession('sprint', UI.sessionOpts({ gridPos: 'mid', train: null }));
+  W.player.autopilot = true; W.phase = 'run'; for (const b of W.bikes) { b.held = false; b.lapStartT = 0; }
 }
 function boot() {
   resize(); window.addEventListener('resize', resize);
   buildTextures(); buildGeometry(); buildMinimap();
   UI.init(); Lib.init();
-  // attract mode behind the menu: AI field circulating
-  setupSession('sprint', UI.sessionOpts({ gridPos: 'mid' }));
-  W.player.autopilot = true; W.phase = 'run'; for (const b of W.bikes) { b.held = false; b.lapStartT = 0; }
+  attractSession();
   $('loading').hidden = true; $('menu').hidden = false;
   requestAnimationFrame(t => { last = t; requestAnimationFrame(frame); });
   setInterval(() => { if (UI.state === 'menu') { for (let k = 0; k < 4; k++) simStep(SUB); } }, 1000 / 30);
 }
-window.__sgp = { Rec, Lib, Ghost, W, T, PHYS, Input, FX, Records, completeLapX: b => completeLap(b), drawWorldX: () => drawWorld(), setupSession, simStep, standings, UI, SUB, setAIReal: v => { AI_REAL = v; } };
+window.__sgp = { RP, Rec, Lib, Ghost, W, T, PHYS, Input, FX, Records, completeLapX: b => completeLap(b), drawWorldX: () => drawWorld(), setupSession, simStep, standings, UI, SUB, setAIReal: v => { AI_REAL = v; } };
 if (document.fonts && document.fonts.ready) { Promise.race([document.fonts.ready, new Promise(r => setTimeout(r, 1500))]).then(boot).catch(e => { console.error("boot failed", e && e.stack); }); } else boot();

@@ -282,7 +282,7 @@ function updateCamera(dt) {
   let tx, ty, targetPpm;
   if (CAM.mode === 'behind') {
     CAM.ay = 1 - tiltBikeH() / RH;
-    targetPpm = Math.min(20, Math.min(VW, VH * 1.25) / (30 + v * 1.45));
+    targetPpm = Math.min(20, Math.min(VW, VH * 1.25) / (30 + v * 1.0));
     tx = px; ty = py;
   } else {
     CAM.ay = 0.6;

@@ -502,7 +502,7 @@ const Touch = {
   want() { return UI.opts.controls === 'touch' || (UI.opts.controls !== 'keys' && coarseMQ.matches); },
   // the screen half that drives a control: brake on the left unless the option swaps the sides
   zone(x) { return (x < innerWidth / 2) === (UI.opts.side !== 'gas') ? 'brk' : 'gas'; },
-  sens() { return { low: 45, normal: 35, high: 25 }[UI.opts.tilt] || 35; },
+  sens() { return { verylow: 60, low: 45, normal: 35, high: 25 }[UI.opts.tilt] || 45; },
   angle() { return screen.orientation ? screen.orientation.angle : 0; },
   press(e) {
     e.preventDefault();
@@ -522,7 +522,7 @@ const Touch = {
     if (!this.rollSeen) { this.roll = this.roll0 = r; this.rollSeen = true; }
     this.roll += (r - this.roll) * 0.25;
     const d = (this.roll - this.roll0) * 180 / Math.PI;
-    this.tilt = Math.sign(d) * clamp((Math.abs(d) - 3) / (this.sens() - 3), 0, 1); // 3 degree dead zone, full lean at the sensitivity angle
+    this.tilt = Math.sign(d) * clamp((Math.abs(d) - 8) / (this.sens() - 8), 0, 1); // 8 degree dead zone, full lean at the sensitivity angle
   },
   // iPhone asks for motion access once, from a tap; the zero point is set again at each start
   enable() {
@@ -558,7 +558,7 @@ const Touch = {
 };
 const $ = id => document.getElementById(id);
 const UI = {
-  state: 'menu', opts: { mode: 'sprint', trans: 'manual', controls: 'auto', side: 'brk', tilt: 'normal', aids: 'on', ai: 'pro', cam: 'behind', guide: 'on', blur: 'on', train: 'on', trainS: -1, trainV: -1, fuel: 100, grid: 'mid', name: 'Petr', num: 25, team: 2 },
+  state: 'menu', opts: { mode: 'sprint', trans: 'manual', controls: 'auto', side: 'brk', tilt: 'low', aids: 'on', ai: 'pro', cam: 'behind', guide: 'on', blur: 'on', train: 'on', trainS: -1, trainV: -1, fuel: 100, grid: 'mid', name: 'Petr', num: 25, team: 2 },
   init() {
     try { const s = JSON.parse(localStorage.getItem('sgp_opts') || 'null'); if (s) { if (!CAM_ORDER.includes(s.cam)) delete s.cam; if (!s.trainDef) delete s.train; Object.assign(this.opts, s); } this.opts.trainDef = 1; } catch (e) { }
     const sel = $('optTeam'); TEAMS.forEach((t, k) => { const o = document.createElement('option'); o.value = k; o.textContent = t.name; sel.appendChild(o); });

@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.19.1 (2026-10-28)
+- Tilt lean on phones (GDD 3a): the dead zone is 8 degrees (was 3), so the bike stays straight until the phone is turned past 8 degrees, and then leans smoothly.
+- Tilt sensitivity has a new Very low option (full lean at 60 degrees). The default is Low (45 degrees) instead of Normal (35 degrees). Settings saved before this version keep their saved choice.
+- Tests: the tilt check in tests/mobile_controls.test.js uses the Low setting.
+
 ## v1.19.0 (2026-10-28)
 - Phone HUD (GDD 11g): on phones (touch controls on) the HUD is compacted. The fuel, engine, aero and chassis panel at the bottom right is removed; the status tags (pit limiter, slipstream, cold tyres, no fuel, over-rev) move to the right above it.
 - Speedometer at the bottom left is smaller: speed, gear, rpm bar, and a lean bar with the angle. The brake and gas bars are removed.

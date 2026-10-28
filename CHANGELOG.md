@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.6.0 (2026-10-28)
+- Corner countdown on the HUD: 300 / 200 / 100 / 50 m marks before every braking corner, with a pictogram of the corner shape, your position, the corner name and the distance.
+- Removed the Look-ahead and North-up cameras (the Look-ahead camera lost the feel of speed). Rotating is the only camera; the camera option and the C key are gone.
+
 ## v1.5.0 (2026-10-28)
 - New default **Look-ahead camera**: the bike sits low on screen, the zoom is based on stopping distance (up to 220 m ahead at top speed), and the view turns towards the track ahead so corners show up early.
 - C now cycles through Look-ahead, Rotating and North up. Saved options switch once to the new camera.

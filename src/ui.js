@@ -104,15 +104,17 @@ function drawHUD(dt) {
   // sector strip
   for (let k = 0; k < 3; k++) { const f = HUD.secFlash[k]; const sx = cx + 8 + k * (cw - 16) / 3; ctx.fillStyle = f && (b.cp > k || HUD.lapFlash) ? (f.pb ? '#b46bff' : '#ffcf1f') : 'rgba(255,255,255,.1)'; if (f && f.pb && f.best && f.t < f.best) ctx.fillStyle = '#b46bff'; else if (f && f.best && f.t >= f.best) ctx.fillStyle = '#ffcf1f'; else if (f && !f.best) ctx.fillStyle = '#3ad17a'; if (!f || (b.cp <= k && !(k === 2 && HUD.lapFlash))) ctx.fillStyle = 'rgba(255,255,255,.1)'; ctx.fillRect(sx, cy + 84, (cw - 16) / 3 - 4, 4); }
   // corner name
-  const showGuide = W.guide && !b.crashed && !b.inPitLane; const gOff = showGuide ? 62 : 0;
+  const showGuide = W.guide && !b.crashed && !b.inPitLane; let gOff = showGuide ? 62 : 0;
   if (showGuide) drawGuide(b, cx, cy + 96, cw);
+  const cz = !b.crashed && !b.inPitLane ? cornerAhead(b) : null;
+  if (cz) { drawCountdown(b, cz, cx, cy + 96 + gOff, cw); gOff += 82; }
   txt(T.cornerAt(b.s).toUpperCase(), VW / 2, cy + 108 + gOff, 14, 'rgba(255,255,255,.75)', 700, 'center', true);
   // race gaps ahead / behind
   if (W.mode === 'race' && W.phase === 'run') {
     const ahead = st[pos - 2], behind = st[pos];
     const g0 = gapOf(b);
-    if (ahead && !ahead.dnf) txt('▲ ' + ahead.short + ' ' + Math.max(0, g0 - gapOf(ahead)).toFixed(3), VW / 2 - 70, cy + 128, 13, '#c9d2d8', 600, 'center');
-    if (behind && !behind.dnf && !b.finished) txt('▼ ' + behind.short + ' ' + Math.max(0, gapOf(behind) - g0).toFixed(3), VW / 2 + 70, cy + 128, 13, '#c9d2d8', 600, 'center');
+    if (ahead && !ahead.dnf) txt('▲ ' + ahead.short + ' ' + Math.max(0, g0 - gapOf(ahead)).toFixed(3), VW / 2 - 70, cy + 128 + gOff, 13, '#c9d2d8', 600, 'center');
+    if (behind && !behind.dnf && !b.finished) txt('▼ ' + behind.short + ' ' + Math.max(0, gapOf(behind) - g0).toFixed(3), VW / 2 + 70, cy + 128 + gOff, 13, '#c9d2d8', 600, 'center');
   }
   // ---- timing tower (left)
   if (!tiny) { drawTower(st, b); drawMinimap(b); }
@@ -169,6 +171,62 @@ function nextBrake(b) {
     if (T.VP[k] <= T.VP[p] && T.VP[k] < T.VP[n] && guideSpeed(k) < b.v - 3) { best = { k, dist: o * T.DS, v: guideSpeed(k) }; break; }
   }
   return best;
+}
+// ---- corner countdown: 300/200/100/50 marks + corner pictogram (GDD 11b)
+const CD_MARKS = [300, 200, 100, 50];
+function cornerAhead(b) {
+  let best = null, bd = 1e9;
+  for (const z of T.zones) {
+    let d = z.zi * T.DS - b.s; if (d < -T.L / 2) d += T.L; if (d > T.L / 2) d -= T.L;
+    if (d > -30 && d < 400 && d < bd) { bd = d; best = z; }
+  }
+  return best ? { z: best, d: bd } : null;
+}
+function cornerShape(z) { // centreline from the approach to the exit, rotated so the approach points up
+  if (z.shape) return z.shape;
+  const N = T.N, i0 = (z.zi - Math.round(70 / T.DS) + N) % N, n = Math.round(250 / T.DS);
+  const h = T.H[i0], c = Math.cos(-h - Math.PI / 2), sn = Math.sin(-h - Math.PI / 2);
+  const tf = (x, y) => { const dx = x - T.X[i0], dy = y - T.Y[i0]; return [dx * c - dy * sn, dx * sn + dy * c]; };
+  const pts = []; let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+  for (let o = 0; o <= n; o += 2) { const i = (i0 + o) % N, q = tf(T.X[i], T.Y[i]); pts.push(q); x0 = Math.min(x0, q[0]); x1 = Math.max(x1, q[0]); y0 = Math.min(y0, q[1]); y1 = Math.max(y1, q[1]); }
+  z.shape = { pts, tf, x0, y0, x1, y1, i0, n, name: T.cornerAt(z.k * T.DS) };
+  return z.shape;
+}
+function drawCountdown(b, cz, dx, dy, dw) {
+  const { z, d } = cz, S = cornerShape(z);
+  ctx.globalAlpha = clamp((400 - d) / 40, 0, 1) * clamp((d + 30) / 25, 0, 1);
+  const H = 74; panel(dx, dy, dw, H, 0.85);
+  // pictogram
+  const pw = 66, ph = 62, px = dx + 6, py = dy + 6;
+  ctx.fillStyle = 'rgba(255,255,255,.05)'; ctx.fillRect(px, py, pw, ph);
+  const sc = Math.min((pw - 14) / Math.max(1, S.x1 - S.x0), (ph - 14) / Math.max(1, S.y1 - S.y0));
+  const ox = px + pw / 2 - (S.x0 + S.x1) / 2 * sc, oy = py + ph / 2 - (S.y0 + S.y1) / 2 * sc;
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.strokeStyle = 'rgba(255,255,255,.18)'; ctx.lineWidth = 7; ctx.beginPath(); S.pts.forEach((q, k) => k ? ctx.lineTo(ox + q[0] * sc, oy + q[1] * sc) : ctx.moveTo(ox + q[0] * sc, oy + q[1] * sc)); ctx.stroke();
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.5; ctx.stroke();
+  const e1 = S.pts[S.pts.length - 1], e0 = S.pts[S.pts.length - 4], ang = Math.atan2(e1[1] - e0[1], e1[0] - e0[0]);
+  ctx.save(); ctx.translate(ox + e1[0] * sc, oy + e1[1] * sc); ctx.rotate(ang); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(4, 0); ctx.lineTo(-4, -4.5); ctx.lineTo(-4, 4.5); ctx.closePath(); ctx.fill(); ctx.restore();
+  let rel = b.i - S.i0; if (rel < 0) rel += T.N;
+  if (rel <= S.n) { const q = S.tf(b.x, b.y); ctx.fillStyle = '#ffcf1f'; ctx.beginPath(); ctx.arc(ox + q[0] * sc, oy + q[1] * sc, 3.5, 0, TAU); ctx.fill(); }
+  // name + marks
+  const mx = px + pw + 10, mw = dx + dw - 10 - mx;
+  txt(S.name.toUpperCase(), mx, dy + 18, 13, '#e9edf0', 800, 'left', true);
+  txt(d > 0 ? Math.round(d) + ' m' : 'TURN IN', dx + dw - 10, dy + 18, 13, d > 50 ? '#8d9aa4' : '#ffcf1f', 700, 'right');
+  const gap = 6, tw = (mw - gap * 3) / 4, ty = dy + 26, th = 32;
+  const next = CD_MARKS.find(m => d > m);
+  CD_MARKS.forEach((m, k) => {
+    const x = mx + k * (tw + gap), passed = d <= m, isNext = m === next;
+    let grow = 0; if (isNext) { const prev = k ? CD_MARKS[k - 1] : 400; grow = clamp(1 - (d - m) / (prev - m), 0, 1) * 3; }
+    ctx.fillStyle = passed ? '#262e34' : isNext ? '#ffcf1f' : '#f4f4f2';
+    ctx.fillRect(x - grow, ty - grow, tw + 2 * grow, th + 2 * grow);
+    if (!passed) { ctx.strokeStyle = '#111'; ctx.lineWidth = 1; ctx.strokeRect(x + 2.5, ty + 2.5, tw - 5, th - 5); }
+    txt(String(m), x + tw / 2, ty + th / 2 + 7, 20, passed ? '#56636d' : '#111', 800, 'center', true);
+  });
+  // countdown bar
+  const f = clamp(d / 300, 0, 1);
+  ctx.fillStyle = 'rgba(255,255,255,.1)'; ctx.fillRect(mx, dy + H - 8, mw, 3);
+  ctx.fillStyle = d < 50 ? '#e3312a' : '#ffcf1f'; ctx.fillRect(mx, dy + H - 8, mw * f, 3);
+  ctx.globalAlpha = 1; ctx.lineCap = 'butt'; ctx.lineJoin = 'miter';
 }
 function drawGuide(b, dx, dy, dw) {
   const rec = guideSpeed(b.i); const kmh = b.v * 3.6, rk = rec * 3.6;
@@ -294,7 +352,6 @@ window.addEventListener('keydown', e => {
   }
   if (e.code === 'Escape' && (UI.state === 'play')) UI.togglePause();
   if (e.code === 'KeyM') Sound.on = !Sound.on;
-  if (e.code === 'KeyC' && UI.state === 'play') { CAM.mode = CAM_MODES[(CAM_MODES.indexOf(CAM.mode) + 1) % CAM_MODES.length]; HUD.msg('CAMERA', { look: 'Look-ahead', chase: 'Rotating', north: 'North up' }[CAM.mode], '#4cc3ff', 1.2); }
 });
 window.addEventListener('keyup', e => { Input.k[e.code] = false; });
 window.addEventListener('blur', () => { Input.k = {}; if (UI.state === 'play' && !W.paused) UI.togglePause(); });
@@ -304,12 +361,12 @@ window.addEventListener('blur', () => { Input.k = {}; if (UI.state === 'play' &&
 // ---------------------------------------------------------------------------
 const $ = id => document.getElementById(id);
 const UI = {
-  state: 'menu', opts: { mode: 'sprint', trans: 'manual', aids: 'on', ai: 'pro', cam: 'look', guide: 'on', fuel: 100, grid: 'mid', name: 'Petr', num: 25, team: 2 },
+  state: 'menu', opts: { mode: 'sprint', trans: 'manual', aids: 'on', ai: 'pro', guide: 'on', fuel: 100, grid: 'mid', name: 'Petr', num: 25, team: 2 },
   init() {
-    try { const s = JSON.parse(localStorage.getItem('sgp_opts') || 'null'); if (s) { if (!s.v || s.v < 2) delete s.cam; Object.assign(this.opts, s); } this.opts.v = 2; } catch (e) { }
+    try { const s = JSON.parse(localStorage.getItem('sgp_opts') || 'null'); if (s) { delete s.cam; Object.assign(this.opts, s); } } catch (e) { }
     const sel = $('optTeam'); TEAMS.forEach((t, k) => { const o = document.createElement('option'); o.value = k; o.textContent = t.name; sel.appendChild(o); });
     document.querySelectorAll('.mode').forEach(m => m.addEventListener('click', () => { this.opts.mode = m.dataset.mode; this.sync(); }));
-    for (const [id, key] of [['optTrans', 'trans'], ['optAids', 'aids'], ['optAI', 'ai'], ['optCam', 'cam'], ['optGuide', 'guide']]) $(id).querySelectorAll('button').forEach(bt => bt.addEventListener('click', () => { this.opts[key] = bt.dataset.v; this.sync(); }));
+    for (const [id, key] of [['optTrans', 'trans'], ['optAids', 'aids'], ['optAI', 'ai'], ['optGuide', 'guide']]) $(id).querySelectorAll('button').forEach(bt => bt.addEventListener('click', () => { this.opts[key] = bt.dataset.v; this.sync(); }));
     $('optFuel').addEventListener('input', e => { this.opts.fuel = +e.target.value; this.sync(); });
     $('optGrid').addEventListener('change', e => { this.opts.grid = e.target.value; });
     $('optTeam').addEventListener('change', e => { this.opts.team = +e.target.value; });
@@ -326,7 +383,7 @@ const UI = {
   sync() {
     const o = this.opts;
     document.querySelectorAll('.mode').forEach(m => m.setAttribute('aria-pressed', String(m.dataset.mode === o.mode)));
-    for (const [id, key] of [['optTrans', 'trans'], ['optAids', 'aids'], ['optAI', 'ai'], ['optCam', 'cam'], ['optGuide', 'guide']]) $(id).querySelectorAll('button').forEach(bt => bt.setAttribute('aria-pressed', String(bt.dataset.v === o[key])));
+    for (const [id, key] of [['optTrans', 'trans'], ['optAids', 'aids'], ['optAI', 'ai'], ['optGuide', 'guide']]) $(id).querySelectorAll('button').forEach(bt => bt.setAttribute('aria-pressed', String(bt.dataset.v === o[key])));
     $('optFuel').value = o.fuel; $('optGrid').value = o.grid; $('optTeam').value = o.team; $('optName').value = o.name; $('optNum').value = o.num;
     const laps = o.mode === 'gp' ? 20 : 10; const L = PHYS.tank * o.fuel / 100; const range = L / 2.65;
     $('optFuelV').textContent = L.toFixed(1) + ' L';
@@ -352,7 +409,7 @@ const UI = {
     return Object.assign({ name: o.name, num: o.num, team: o.team, aids: o.aids === 'on', auto: o.trans === 'auto', level: o.ai, fuelPct: o.fuel / 100, gridPos: o.grid, guide: o.guide === 'on' }, extra);
   },
   launch(kind, extra) {
-    this.hideAll(); this.state = 'play'; CAM.mode = this.opts.cam; CAM.init = false;
+    this.hideAll(); this.state = 'play'; CAM.init = false;
     setupSession(kind, this.sessionOpts(extra));
     if (kind === 'gp' || kind === 'sprint') W.kind = kind;
     $('btnEndQ').hidden = kind !== 'quali';
@@ -429,5 +486,5 @@ function boot() {
   requestAnimationFrame(t => { last = t; requestAnimationFrame(frame); });
   setInterval(() => { if (UI.state === 'menu') { for (let k = 0; k < 4; k++) simStep(SUB); } }, 1000 / 30);
 }
-window.__sgp = { TLV, renderTile, W, T, PHYS, Input, FX, Records, completeLapX: b => completeLap(b), drawWorldX: () => drawWorld(), setupSession, simStep, standings, UI, SUB, setAIReal: v => { AI_REAL = v; } };
+window.__sgp = { W, T, PHYS, Input, FX, Records, completeLapX: b => completeLap(b), drawWorldX: () => drawWorld(), setupSession, simStep, standings, UI, SUB, setAIReal: v => { AI_REAL = v; } };
 if (document.fonts && document.fonts.ready) { Promise.race([document.fonts.ready, new Promise(r => setTimeout(r, 1500))]).then(boot).catch(e => { console.error("boot failed", e && e.stack); }); } else boot();

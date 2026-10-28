@@ -250,56 +250,29 @@ function bikeSprite(team, num) {
 }
 
 // --- camera
-// look: bike low on screen, zoom by stopping distance, view turned towards the track ahead (GDD 11a)
-const CAM = { x: 0, y: 0, rot: 0, ppm: 10, mode: 'look', init: false, ax: 0.5, ay: 0.6, boost: 1 };
-const CAM_MODES = ['look', 'chase', 'north'];
-function camAhead(v) { return clamp(v * v / 30 + v * 0.8 + 30, 60, 220); }
+const CAM = { x: 0, y: 0, rot: 0, ppm: 10, init: false };
 function updateCamera(dt) {
   const b = W.player; if (!b) return;
   let px = b.x, py = b.y, h = b.h, v = b.v;
-  const crashed = b.crashed && b.crash;
-  if (crashed) { px = b.crash.rd.x; py = b.crash.rd.y; v = Math.hypot(b.crash.rd.vx, b.crash.rd.vy); }
-  let tx, ty, tr, targetPpm;
-  if (CAM.mode === 'look') {
-    CAM.ay = 0.8;
-    const D = camAhead(v);
-    targetPpm = clamp(VH * (CAM.ay - 0.22) / D, 1.5, 24);
-    let dir = h;
-    if (!crashed && v > 8.3 && !b.inPitLane && Math.abs(b.d) < 30) {
-      const k = (b.i + Math.round(D * 0.55 / T.DS)) % T.N;
-      const cd = Math.atan2(T.RY[k] - py, T.RX[k] - px);
-      if (Math.abs(angWrap(cd - h)) < 1.2 && Math.abs(angWrap(T.H[b.i] - h)) < 1.4) dir = cd;
-    }
-    tx = px; ty = py; tr = -dir - Math.PI / 2;
-  } else {
-    CAM.ay = 0.6;
-    targetPpm = Math.min(24, Math.min(VW, VH * 1.25) / (34 + v * 0.95));
-    // keep the bike on screen at top speed (was dropping off the bottom edge)
-    const look = Math.min(55, v * 0.62, VH * 0.24 / targetPpm) * (CAM.mode === 'chase' ? 1 : 0.7);
-    tx = px + Math.cos(h) * look; ty = py + Math.sin(h) * look;
-    tr = CAM.mode === 'chase' ? -h - Math.PI / 2 : 0;
-  }
+  if (b.crashed && b.crash) { px = b.crash.rd.x; py = b.crash.rd.y; v = Math.hypot(b.crash.rd.vx, b.crash.rd.vy); }
+  const targetPpm = Math.min(24, Math.min(VW, VH * 1.25) / (34 + v * 0.95));
+  const look = Math.min(55, v * 0.62, VH * 0.24 / targetPpm); // keeps the bike on screen at top speed
+  const tx = px + Math.cos(h) * look, ty = py + Math.sin(h) * look;
+  const tr = -h - Math.PI / 2;
   if (!CAM.init) { CAM.x = tx; CAM.y = ty; CAM.rot = tr; CAM.ppm = targetPpm; CAM.init = true; }
-  if (CAM.mode === 'look') { CAM.x = tx; CAM.y = ty; }
-  else { const k = 1 - Math.exp(-dt * 6); CAM.x += (tx - CAM.x) * k; CAM.y += (ty - CAM.y) * k; }
-  CAM.rot += angWrap(tr - CAM.rot) * (1 - Math.exp(-dt * (CAM.mode === 'look' ? 3 : 4.5)));
+  const k = 1 - Math.exp(-dt * 6);
+  CAM.x += (tx - CAM.x) * k; CAM.y += (ty - CAM.y) * k;
+  CAM.rot += angWrap(tr - CAM.rot) * (1 - Math.exp(-dt * 4.5));
   CAM.ppm += (targetPpm - CAM.ppm) * (1 - Math.exp(-dt * 1.8));
-  CAM.boost = Math.max(1, 30 / (2.5 * PHYS.VS * CAM.ppm)); // bikes stay readable when zoomed out
 }
 function worldToScreen(x, y) {
   const dx = x - CAM.x, dy = y - CAM.y, c = Math.cos(CAM.rot), s = Math.sin(CAM.rot);
-  return [VW * CAM.ax + (dx * c - dy * s) * CAM.ppm, VH * CAM.ay + (dx * s + dy * c) * CAM.ppm];
-}
-function screenToWorld(sx, sy) {
-  const dx = (sx - VW * CAM.ax) / CAM.ppm, dy = (sy - VH * CAM.ay) / CAM.ppm, c = Math.cos(CAM.rot), s = Math.sin(CAM.rot);
-  return [CAM.x + dx * c + dy * s, CAM.y - dx * s + dy * c];
+  return [VW / 2 + (dx * c - dy * s) * CAM.ppm, VH * 0.6 + (dx * s + dy * c) * CAM.ppm];
 }
 
 // --- static world baked into cached tiles (track, run-off, walls, paint, buildings, trees)
-// detail levels: 40 m tiles close up, 80 m and 160 m tiles when zoomed out (GDD 11a)
-const TILE_PX = 512;
-const TLV = [{ m: 40, map: new Map(), cap: 160 }, { m: 80, map: new Map(), cap: 140 }, { m: 160, map: new Map(), cap: 140 }];
-let tileFrame = 0;
+const TILE_M = 40, TILE_PX = 512, TPPM = TILE_PX / TILE_M;
+const TILES = new Map(); let tileFrame = 0;
 function drawStatic(vis, x0, y0, w, h) {
   ctx.fillStyle = TEX.pGrass; ctx.fillRect(x0, y0, w, h);
   ctx.fillStyle = TEX.pRun; for (const p of GEO.runoff) ctx.fill(p);
@@ -326,56 +299,44 @@ function drawStatic(vis, x0, y0, w, h) {
   drawBuildings(vis, true);
   drawTrees(vis);
 }
-function renderTile(L, tx, ty) {
-  const M = L.m, c = mkCanvas(TILE_PX, TILE_PX), g = c.getContext('2d', { alpha: false });
-  const x0 = tx * M, y0 = ty * M, cx = x0 + M / 2, cy = y0 + M / 2;
-  const vis = (x, y, rad) => Math.abs(x - cx) < M / 2 + rad + 2 && Math.abs(y - cy) < M / 2 + rad + 2;
-  g.scale(TILE_PX / M, TILE_PX / M); g.translate(-x0, -y0);
-  g.beginPath(); g.rect(x0, y0, M, M); g.clip();
+function renderTile(tx, ty) {
+  const c = mkCanvas(TILE_PX, TILE_PX), g = c.getContext('2d', { alpha: false });
+  const x0 = tx * TILE_M, y0 = ty * TILE_M, cx = x0 + TILE_M / 2, cy = y0 + TILE_M / 2;
+  const vis = (x, y, rad) => Math.abs(x - cx) < TILE_M / 2 + rad + 2 && Math.abs(y - cy) < TILE_M / 2 + rad + 2;
+  g.scale(TPPM, TPPM); g.translate(-x0, -y0);
+  g.beginPath(); g.rect(x0, y0, TILE_M, TILE_M); g.clip();
   const prev = ctx; ctx = g;
-  try { drawStatic(vis, x0 - 1, y0 - 1, M + 2, M + 2); } finally { ctx = prev; }
+  try { drawStatic(vis, x0 - 1, y0 - 1, TILE_M + 2, TILE_M + 2); } finally { ctx = prev; }
   return c;
 }
-function getTile(L, tx, ty, allowRender) {
-  const key = tx * 100000 + ty; let t = L.map.get(key);
-  if (!t) { if (!allowRender) return null; t = { c: renderTile(L, tx, ty), used: tileFrame }; L.map.set(key, t);
-    if (L.map.size > L.cap) { let old = null, ok = 0; for (const [k, v] of L.map) if (!old || v.used < old.used) { old = v; ok = k; } L.map.delete(ok); } }
+function getTile(tx, ty, allowRender) {
+  const key = tx * 100000 + ty; let t = TILES.get(key);
+  if (!t) { if (!allowRender) return null; t = { c: renderTile(tx, ty), used: tileFrame }; TILES.set(key, t);
+    if (TILES.size > 160) { let old = null, ok = 0; for (const [k, v] of TILES) if (!old || v.used < old.used) { old = v; ok = k; } TILES.delete(ok); } }
   t.used = tileFrame; return t.c;
 }
 function drawWorld() {
   const ppm = CAM.ppm; tileFrame++;
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   let sx = 0, sy = 0; if (HUD.shake > 0.01) { sx = (Math.random() - 0.5) * 8 * HUD.shake; sy = (Math.random() - 0.5) * 8 * HUD.shake; }
-  ctx.translate(VW * CAM.ax + sx, VH * CAM.ay + sy); ctx.rotate(CAM.rot); ctx.scale(ppm, ppm); ctx.translate(-CAM.x, -CAM.y);
-  const R = Math.hypot(VW * Math.max(CAM.ax, 1 - CAM.ax), VH * Math.max(CAM.ay, 1 - CAM.ay)) / ppm + 2;
+  ctx.translate(VW / 2 + sx, VH * 0.6 + sy); ctx.rotate(CAM.rot); ctx.scale(ppm, ppm); ctx.translate(-CAM.x, -CAM.y);
+  const R = Math.hypot(VW, VH) * 0.62 / ppm;
   const vis = (x, y, rad) => Math.abs(x - CAM.x) < R + rad && Math.abs(y - CAM.y) < R + rad;
-  // world bounds of the (rotated) screen
-  let wx0 = Infinity, wy0 = Infinity, wx1 = -Infinity, wy1 = -Infinity;
-  for (const [qx, qy] of [[0, 0], [VW, 0], [0, VH], [VW, VH]]) { const [x, y] = screenToWorld(qx, qy); wx0 = Math.min(wx0, x); wy0 = Math.min(wy0, y); wx1 = Math.max(wx1, x); wy1 = Math.max(wy1, y); }
-  wx0 -= 12; wy0 -= 12; wx1 += 12; wy1 += 12;
-  ctx.fillStyle = '#3d6e30'; ctx.fillRect(wx0, wy0, wx1 - wx0, wy1 - wy0);
   // tiles: draw visible ones, render missing ones nearest-first within a per-frame budget
-  let lv = 0; while (lv < TLV.length - 1 && TILE_PX / TLV[lv + 1].m >= ppm * DPR * 0.75) lv++;
-  const coarse = lv > 0, L = TLV[lv], TM = L.m;
-  const t0x = Math.floor(wx0 / TM), t1x = Math.floor(wx1 / TM), t0y = Math.floor(wy0 / TM), t1y = Math.floor(wy1 / TM);
+  ctx.fillStyle = '#3d6e30'; ctx.fillRect(CAM.x - R, CAM.y - R, 2 * R, 2 * R);
+  const t0x = Math.floor((CAM.x - R) / TILE_M), t1x = Math.floor((CAM.x + R) / TILE_M), t0y = Math.floor((CAM.y - R) / TILE_M), t1y = Math.floor((CAM.y + R) / TILE_M);
   const missing = [];
   ctx.imageSmoothingEnabled = true;
   for (let tx = t0x; tx <= t1x; tx++) for (let ty = t0y; ty <= t1y; ty++) {
-    const c = getTile(L, tx, ty, false);
-    if (c) ctx.drawImage(c, tx * TM, ty * TM, TM + 0.04, TM + 0.04);
-    else missing.push([tx, ty, (tx + 0.5) * TM - CAM.x, (ty + 0.5) * TM - CAM.y]);
+    const c = getTile(tx, ty, false);
+    if (c) ctx.drawImage(c, tx * TILE_M, ty * TILE_M, TILE_M + 0.04, TILE_M + 0.04);
+    else missing.push([tx, ty, (tx + 0.5) * TILE_M - CAM.x, (ty + 0.5) * TILE_M - CAM.y]);
   }
   missing.sort((a, b) => a[2] * a[2] + a[3] * a[3] - b[2] * b[2] - b[3] * b[3]);
-  let budget = L.map.size < 6 ? 40 : coarse ? 3 : 4;
-  for (const m of missing) {
-    if (budget-- > 0) { ctx.drawImage(getTile(L, m[0], m[1], true), m[0] * TM, m[1] * TM, TM + 0.04, TM + 0.04); continue; }
-    if (!coarse) continue;
-    // coarse tile not baked yet: show whatever finer tiles are already cached there
-    const F = TLV[lv - 1], r = TM / F.m;
-    for (let i = 0; i < r; i++) for (let j = 0; j < r; j++) { const c = getTile(F, m[0] * r + i, m[1] * r + j, false); if (c) ctx.drawImage(c, (m[0] * r + i) * F.m, (m[1] * r + j) * F.m, F.m + 0.04, F.m + 0.04); }
-  }
-  // prefetch ahead of the rider along the track
-  if (budget > 0 && W.player) { const b = W.player, k = (b.i + Math.round((wy1 - wy0 + wx1 - wx0) * 0.35 / T.DS)) % T.N; getTile(L, Math.floor(T.X[k] / TM), Math.floor(T.Y[k] / TM), true); }
+  let budget = TILES.size < 6 ? 40 : 4;
+  for (const m of missing) { if (budget-- <= 0) break; ctx.drawImage(getTile(m[0], m[1], true), m[0] * TILE_M, m[1] * TILE_M, TILE_M + 0.04, TILE_M + 0.04); }
+  // prefetch ahead of the rider
+  if (budget > 0 && W.player) { const b = W.player; const ax = b.x + Math.cos(b.h) * (R + 40), ay = b.y + Math.sin(b.h) * (R + 40); getTile(Math.floor(ax / TILE_M), Math.floor(ay / TILE_M), true); }
   // tyre marks
   ctx.lineCap = 'round';
   const M = FX.marks; ctx.lineWidth = 0.2;
@@ -509,14 +470,14 @@ function drawTrees(vis) {
   }
 }
 function drawBikeShadow(b, vis) {
-  const VS = PHYS.VS * CAM.boost;
+  const VS = PHYS.VS;
   if (b.crashed && b.crash) { for (const o of [b.crash.bk, b.crash.rd]) { if (!vis(o.x, o.y, 4)) continue; ctx.save(); ctx.translate(o.x + 0.35, o.y + 0.45); ctx.rotate(o.rot); ctx.globalAlpha = 0.6; ctx.drawImage(TEX.shadow, -1.2 * VS, -0.55 * VS, 2.4 * VS, 1.1 * VS); ctx.restore(); } ctx.globalAlpha = 1; return; }
   if (b.dnf || !vis(b.x, b.y, 4)) return;
   const sl = Math.sin(b.lean);
   ctx.save(); ctx.translate(b.x + 0.45, b.y + 0.6); ctx.rotate(b.h); ctx.translate(0, sl * 0.55 * VS); ctx.globalAlpha = 0.7; ctx.drawImage(TEX.shadow, -1.25 * VS, -0.55 * VS, 2.5 * VS, 1.1 * VS); ctx.restore(); ctx.globalAlpha = 1;
 }
 function drawBike(b, vis) {
-  const VS = PHYS.VS * CAM.boost; const sp = bikeSprite(b.team, b.num); const w = SPW / SPR, h = SPH / SPR;
+  const VS = PHYS.VS; const sp = bikeSprite(b.team, b.num); const w = SPW / SPR, h = SPH / SPR;
   if (b.crashed && b.crash) {
     const C = b.crash;
     if (vis(C.bk.x, C.bk.y, 4)) { ctx.save(); ctx.translate(C.bk.x, C.bk.y); ctx.rotate(C.bk.rot); ctx.scale(VS, VS * 0.8); ctx.translate(0, C.bk.side * 0.2); ctx.drawImage(sp.c, -w / 2, -h / 2, w, h); ctx.restore(); }

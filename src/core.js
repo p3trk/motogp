@@ -260,12 +260,12 @@ const T = {};
   const prof = T.speedProfile(PHYS.mu * 0.97);
   T.VP = prof.V; T.refLap = prof.lapTime;
   // braking boards: big decelerations ahead of corners
-  T.boards = [];
+  T.boards = []; T.zones = []; // zones: one per braking corner, boards measured to zi (GDD 11b)
   for (let i = 0; i < N; i++) {
     const V = T.VP, p = (i - 1 + N) % N;
     if (V[i] < V[p] - 0.02 && V[p] >= V[(p - 1 + N) % N] - 0.001) {
       let k = i, mn = V[i]; for (let o = 0; o < 200; o++) { const q = (i + o) % N; if (V[q] < mn) { mn = V[q]; k = q; } if (V[(q + 1) % N] > V[q] + 0.01) break; }
-      if (V[p] - mn > 22) { const turnRight = KS[k] > 0; for (const dist of [300, 200, 100, 50]) { const bi = (k - Math.round((dist + 25) / DS) + 4 * N) % N; T.boards.push({ i: bi, dist, side: turnRight ? -1 : 1 }); } }
+      if (V[p] - mn > 22) { const turnRight = KS[k] > 0; T.zones.push({ k, zi: (k - Math.round(25 / DS) + N) % N, right: turnRight }); for (const dist of [300, 200, 100, 50]) { const bi = (k - Math.round((dist + 25) / DS) + 4 * N) % N; T.boards.push({ i: bi, dist, side: turnRight ? -1 : 1 }); } }
     }
   }
 })();

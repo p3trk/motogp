@@ -92,7 +92,7 @@ function drawHUD(dt) {
     txt('LAP', cx + cw - 16, cy + 22, 12, '#8d9aa4', 600, 'right');
     txt(Math.min(W.totalLaps, b.lap + 1) + '/' + W.totalLaps, cx + cw - 16, cy + 52, 30, '#fff', 800, 'right', true);
   } else {
-    txt(W.mode === 'quali' ? 'QUALIFYING' : 'PRACTICE', cx + 16, cy + 26, 15, '#ffcf1f', 800, 'left', true);
+    txt(W.mode === 'quali' ? 'QUALIFYING' : W.train ? 'CURVE TRAINING' : 'PRACTICE', cx + 16, cy + 26, 15, '#ffcf1f', 800, 'left', true);
     txt(b.outLap ? 'OUT LAP' : 'LAP ' + (b.laps.length + 1) + (W.mode === 'quali' ? '/3' : ''), cx + 16, cy + 54, 26, '#fff', 800, 'left', true);
   }
   const cur = (b.outLap || (W.mode === 'race' && W.phase !== 'run')) ? 0 : W.time - b.lapStartT;
@@ -166,6 +166,7 @@ function drawHUD(dt) {
     ctx.fillStyle = 'rgba(30,60,90,.75)'; ctx.fillRect(sx - tw / 2, sy - 34, tw, 16); ctx.fillStyle = TEAMS[o.team].c1; ctx.fillRect(sx - tw / 2, sy - 34, 3, 16);
     txt(label, sx + 1, sy - 22, 12, '#bfe4ff', 700, 'center'); ctx.globalAlpha = 1;
   }
+  if (b.trainHold) { panel(VW / 2 - 190, VH * 0.36 + 44, 380, 34, 0.85); txt('Press W, S, A or D to go · R puts you back here', VW / 2, VH * 0.36 + 66, 15, '#e9edf0', 700, 'center'); }
   if (b.crashed) { txt('Recovering rider…', VW / 2, VH * 0.36 + 56, 15, '#c9d2d8', 600, 'center'); }
 }
 
@@ -350,7 +351,7 @@ const Sound = {
 // Input
 // ---------------------------------------------------------------------------
 const Input = { k: {} };
-const GAME_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyO', 'KeyL', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space']);
+const GAME_KEYS = new Set(['KeyR', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyO', 'KeyL', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space']);
 window.addEventListener('keydown', e => {
   if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT')) return;
   if (GAME_KEYS.has(e.code) && UI.state === 'play') e.preventDefault();
@@ -362,6 +363,7 @@ window.addEventListener('keydown', e => {
     if (e.code === 'KeyL' && !b.auto) shift(b, -1);
   }
   if (e.code === 'KeyC' && UI.state === 'play') { setCamMode(CAM.mode === 'behind' ? 'chase' : 'behind'); UI.opts.cam = CAM.mode; UI.sync(); HUD.msg('CAMERA', CAM.mode === 'behind' ? 'Behind' : 'Top-down', '#4cc3ff', 1.2); }
+  if (e.code === 'KeyR' && UI.state === 'play' && W.train && !W.paused) UI.launch('practice', {});
   if (e.code === 'Escape' && (UI.state === 'play')) UI.togglePause();
   if (e.code === 'KeyM') Sound.on = !Sound.on;
 });
@@ -373,12 +375,12 @@ window.addEventListener('blur', () => { Input.k = {}; if (UI.state === 'play' &&
 // ---------------------------------------------------------------------------
 const $ = id => document.getElementById(id);
 const UI = {
-  state: 'menu', opts: { mode: 'sprint', trans: 'manual', aids: 'on', ai: 'pro', cam: 'behind', guide: 'on', fuel: 100, grid: 'mid', name: 'Petr', num: 25, team: 2 },
+  state: 'menu', opts: { mode: 'sprint', trans: 'manual', aids: 'on', ai: 'pro', cam: 'behind', guide: 'on', train: 'off', trainS: -1, trainV: -1, fuel: 100, grid: 'mid', name: 'Petr', num: 25, team: 2 },
   init() {
     try { const s = JSON.parse(localStorage.getItem('sgp_opts') || 'null'); if (s) { if (s.cam !== 'chase') delete s.cam; Object.assign(this.opts, s); } } catch (e) { }
     const sel = $('optTeam'); TEAMS.forEach((t, k) => { const o = document.createElement('option'); o.value = k; o.textContent = t.name; sel.appendChild(o); });
     document.querySelectorAll('.mode').forEach(m => m.addEventListener('click', () => { this.opts.mode = m.dataset.mode; this.sync(); }));
-    for (const [id, key] of [['optTrans', 'trans'], ['optAids', 'aids'], ['optAI', 'ai'], ['optCam', 'cam'], ['optGuide', 'guide']]) $(id).querySelectorAll('button').forEach(bt => bt.addEventListener('click', () => { this.opts[key] = bt.dataset.v; this.sync(); }));
+    for (const [id, key] of [['optTrans', 'trans'], ['optAids', 'aids'], ['optAI', 'ai'], ['optCam', 'cam'], ['optGuide', 'guide'], ['optTrain', 'train']]) $(id).querySelectorAll('button').forEach(bt => bt.addEventListener('click', () => { this.opts[key] = bt.dataset.v; this.sync(); }));
     $('optFuel').addEventListener('input', e => { this.opts.fuel = +e.target.value; this.sync(); });
     $('optGrid').addEventListener('change', e => { this.opts.grid = e.target.value; });
     $('optTeam').addEventListener('change', e => { this.opts.team = +e.target.value; });
@@ -390,6 +392,7 @@ const UI = {
     $('btnRestart').addEventListener('click', () => { this.hideAll(); this.launch(W.kind === 'quali' ? 'quali' : this.opts.mode, W.kind === 'gp' ? { qualiGrid: W.opts.qualiGrid } : {}); });
     $('btnQuit').addEventListener('click', () => this.toMenu());
     $('btnEndQ').addEventListener('click', () => { this.hideAll(); this.finishQuali(); });
+    this.initTraining();
     $('btnExport').addEventListener('click', () => Lib.export(Rec.snapshot()));
     $('btnImport').addEventListener('click', () => $('fileImport').click());
     $('fileImport').addEventListener('change', e => { Lib.importFiles([...e.target.files], 'import'); e.target.value = ''; });
@@ -408,12 +411,12 @@ const UI = {
   sync() {
     const o = this.opts;
     document.querySelectorAll('.mode').forEach(m => m.setAttribute('aria-pressed', String(m.dataset.mode === o.mode)));
-    for (const [id, key] of [['optTrans', 'trans'], ['optAids', 'aids'], ['optAI', 'ai'], ['optCam', 'cam'], ['optGuide', 'guide']]) $(id).querySelectorAll('button').forEach(bt => bt.setAttribute('aria-pressed', String(bt.dataset.v === o[key])));
+    for (const [id, key] of [['optTrans', 'trans'], ['optAids', 'aids'], ['optAI', 'ai'], ['optCam', 'cam'], ['optGuide', 'guide'], ['optTrain', 'train']]) $(id).querySelectorAll('button').forEach(bt => bt.setAttribute('aria-pressed', String(bt.dataset.v === o[key])));
     $('optFuel').value = o.fuel; $('optGrid').value = o.grid; $('optTeam').value = o.team; $('optName').value = o.name; $('optNum').value = o.num;
     const laps = o.mode === 'gp' ? 20 : 10; const L = PHYS.tank * o.fuel / 100; const range = L / 2.65;
     $('optFuelV').textContent = L.toFixed(1) + ' L';
     const stops = Math.max(0, Math.ceil(laps * 2.65 / PHYS.tank - 0.001) - 1); $('optFuelHint').textContent = o.mode === 'practice' ? 'Practice starts with a full tank.' : `About ${range.toFixed(1)} laps on this load. A ${laps} lap race needs at least ${stops} stop${stops === 1 ? '' : 's'} on a full tank. Less fuel is lighter and faster but means more stops.`;
-    $('optFuelWrap').hidden = o.mode === 'practice'; $('optGuideWrap').hidden = o.mode !== 'practice'; this.renderRecords(); $('optGridWrap').hidden = o.mode !== 'sprint';
+    $('optFuelWrap').hidden = o.mode === 'practice'; $('optGuideWrap').hidden = o.mode !== 'practice'; $('optTrainWrap').hidden = o.mode !== 'practice'; $('trainBox').hidden = o.train !== 'on'; this.renderTraining(); this.renderRecords(); $('optGridWrap').hidden = o.mode !== 'sprint';
     try { localStorage.setItem('sgp_opts', JSON.stringify(o)); } catch (e) { }
   },
   renderRecords() {
@@ -425,6 +428,52 @@ const UI = {
     const last = d.laps.slice(-6).reverse().map(e => `<tr><td>${fmtTime(e.t)}</td><td>${lbl[e.mode] || e.mode}</td><td class="small">${e.s && e.s.length === 3 ? e.s.map(x => x.toFixed(2)).join(' / ') : ''}</td><td class="small">${new Date(e.at).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</td></tr>`).join('');
     el.innerHTML = `<div class="recs">${best}<div class="rec"><span class="lbl">Laps logged</span><b>${n}</b></div></div><div class="tablewrap"><table><thead><tr><th>Lap</th><th>Session</th><th>Sectors</th><th>When</th></tr></thead><tbody>${last}</tbody></table></div>`;
     $('btnClearRec').hidden = false; $('btnClearRec').textContent = 'Clear saved laps';
+  },
+  // curve training picker (GDD 11d)
+  trainSpot(z) { return T.wrapS(z.zi * T.DS - 350); },
+  initTraining() {
+    const o = this.opts, sel = $('optTrainCorner'), cv = $('trainMap');
+    const names = {}; T.zones.forEach((z, k) => { const n = T.cornerAt(z.k * T.DS); names[n] = (names[n] || 0) + 1; const op = document.createElement('option'); op.value = k; op.textContent = n + (names[n] > 1 ? ' ' + names[n] : ''); sel.appendChild(op); });
+    const custom = document.createElement('option'); custom.value = 'x'; custom.textContent = 'Picked on the map'; sel.appendChild(custom);
+    const guideV = s => Math.round(guideSpeed(T.idx(s)) * 3.6 / 5) * 5;
+    if (!(o.trainS >= 0)) o.trainS = this.trainSpot(T.zones[0]);
+    if (!(o.trainV >= 0)) o.trainV = clamp(guideV(o.trainS), 0, 300);
+    sel.addEventListener('change', () => { if (sel.value === 'x') return; o.trainS = this.trainSpot(T.zones[+sel.value]); o.trainV = clamp(guideV(o.trainS), 0, 300); this.sync(); });
+    $('optTrainV').addEventListener('input', e => { o.trainV = +e.target.value; this.sync(); });
+    $('btnTrainGuide').addEventListener('click', () => { o.trainV = clamp(guideV(o.trainS), 0, 300); this.sync(); });
+    // map: fit the centreline, pick the nearest point on click / drag
+    const S = 2, W0 = 300, H0 = 220; cv.width = W0 * S; cv.height = H0 * S;
+    const bb = T.bbox, sc = Math.min((W0 - 24) / (bb.maxx - bb.minx), (H0 - 24) / (bb.maxy - bb.miny));
+    const ox = (W0 - (bb.maxx - bb.minx) * sc) / 2 - bb.minx * sc, oy = (H0 - (bb.maxy - bb.miny) * sc) / 2 - bb.miny * sc;
+    this.tmap = { S, W0, H0, sc, ox, oy };
+    const pick = e => {
+      const r = cv.getBoundingClientRect(), mx = (e.clientX - r.left) * W0 / r.width, my = (e.clientY - r.top) * H0 / r.height;
+      const wx = (mx - ox) / sc, wy = (my - oy) / sc; let bi = 0, bd = 1e18;
+      for (let i = 0; i < T.N; i++) { const d = (T.X[i] - wx) ** 2 + (T.Y[i] - wy) ** 2; if (d < bd) { bd = d; bi = i; } }
+      o.trainS = Math.round(bi * T.DS); this.sync();
+    };
+    let down = false;
+    cv.addEventListener('pointerdown', e => { down = true; cv.setPointerCapture(e.pointerId); pick(e); });
+    cv.addEventListener('pointermove', e => { if (down) pick(e); });
+    cv.addEventListener('pointerup', () => { down = false; o.trainV = clamp(guideV(o.trainS), 0, 300); this.sync(); });
+  },
+  renderTraining() {
+    const M = this.tmap; if (!M) return; const o = this.opts, cv = $('trainMap'), g = cv.getContext('2d');
+    g.setTransform(M.S, 0, 0, M.S, 0, 0); g.clearRect(0, 0, M.W0, M.H0);
+    const tf = i => [M.ox + T.X[i] * M.sc, M.oy + T.Y[i] * M.sc];
+    g.lineJoin = 'round'; g.beginPath(); for (let i = 0; i <= T.N; i += 2) { const [x, y] = tf(i % T.N); i ? g.lineTo(x, y) : g.moveTo(x, y); } g.closePath();
+    g.strokeStyle = '#000'; g.lineWidth = 7; g.stroke(); g.strokeStyle = '#d8dde1'; g.lineWidth = 3.5; g.stroke();
+    for (const z of T.zones) { const [x, y] = tf(z.k); g.fillStyle = '#56636d'; g.beginPath(); g.arc(x, y, 2.5, 0, TAU); g.fill(); }
+    const [sx, sy] = tf(0); g.fillStyle = '#fff'; g.fillRect(sx - 3, sy - 3, 6, 6);
+    const i = T.idx(o.trainS), [x, y] = tf(i), h = T.H[i];
+    g.save(); g.translate(x, y); g.rotate(h); g.fillStyle = '#ffcf1f'; g.strokeStyle = '#111'; g.lineWidth = 1.5;
+    g.beginPath(); g.moveTo(14, 0); g.lineTo(-6, -7); g.lineTo(-2, 0); g.lineTo(-6, 7); g.closePath(); g.fill(); g.stroke(); g.restore();
+    // corner list follows the spot; the info line names it
+    const zk = T.zones.findIndex(z => Math.abs(this.trainSpot(z) - T.wrapS(o.trainS)) < 1);
+    $('optTrainCorner').value = zk >= 0 ? zk : 'x';
+    let nz = null, nd = 1e9; for (const z of T.zones) { let d = z.k * T.DS - o.trainS; if (d < 0) d += T.L; if (d < nd) { nd = d; nz = z; } }
+    $('optTrainV').value = o.trainV; $('optTrainVV').textContent = o.trainV + ' km/h';
+    $('trainInfo').textContent = `Start at ${T.cornerAt(o.trainS)}, centre of the road. ${nz ? 'Next corner ' + T.cornerAt(nz.k * T.DS) + ' in ' + Math.round(nd) + ' m.' : ''} Guide speed here ${Math.round(guideSpeed(i) * 3.6)} km/h.`;
   },
   renderLib() {
     const el = $('recList'); if (!el) return;
@@ -445,7 +494,8 @@ const UI = {
   start() { Sound.start(); this.launch(this.opts.mode === 'gp' ? 'quali' : this.opts.mode, {}); },
   sessionOpts(extra) {
     const o = this.opts;
-    return Object.assign({ name: o.name, num: o.num, team: o.team, aids: o.aids === 'on', auto: o.trans === 'auto', level: o.ai, fuelPct: o.fuel / 100, gridPos: o.grid, guide: o.guide === 'on' }, extra);
+    const train = o.mode === 'practice' && o.train === 'on' ? { s: o.trainS, v: o.trainV / 3.6 } : null;
+    return Object.assign({ train, name: o.name, num: o.num, team: o.team, aids: o.aids === 'on', auto: o.trans === 'auto', level: o.ai, fuelPct: o.fuel / 100, gridPos: o.grid, guide: o.guide === 'on' }, extra);
   },
   launch(kind, extra) {
     Rec.stop(); this.hideAll(); this.state = 'play'; setCamMode(this.opts.cam); CAM.init = false;
@@ -457,7 +507,7 @@ const UI = {
   togglePause() {
     if (this.state !== 'play') return;
     W.paused = !W.paused; $('pause').hidden = !W.paused;
-    $('pauseSub').textContent = W.mode === 'race' ? `Lap ${Math.min(W.totalLaps, W.player.lap + 1)} of ${W.totalLaps}` : W.mode === 'quali' ? 'Qualifying' : 'Free practice';
+    $('pauseSub').textContent = W.mode === 'race' ? `Lap ${Math.min(W.totalLaps, W.player.lap + 1)} of ${W.totalLaps}` : W.mode === 'quali' ? 'Qualifying' : W.train ? 'Curve training · restart puts you back on the spot' : 'Free practice';
     if (W.paused) $('btnResume').focus();
   },
   finishQuali() {

@@ -1,6 +1,6 @@
 # Silverstone GP — Game Design Document
 
-**Version:** 1.8.0 · **Last updated:** 2026-10-28 · **Owner:** Petr
+**Version:** 1.9.0 · **Last updated:** 2026-10-28 · **Owner:** Petr
 
 This document is the source of truth for how the game should work. Every
 change starts here: update the GDD on a feature branch first, then change the
@@ -24,7 +24,7 @@ Teams, riders and liveries are **fictional**; no real MotoGP names or branding.
 
 | Mode | Grid | Length | Notes |
 |---|---|---|---|
-| **Practice** | Player alone | Unlimited | Starts from the pit box. Lap and sector times, pit stops, optional speed guide (§9). Laps are saved (§10). |
+| **Practice** | Player alone | Unlimited | Starts from the pit box, or from a chosen spot with Curve training (§11d). Lap and sector times, pit stops, optional speed guide (§9). Laps are saved (§10). |
 | **10 Lap Race** | 22 riders | 10 laps | Player picks the starting slot (pole / front row / mid-pack / back of the grid). |
 | **Grand Prix + Qualifying** | 22 riders | Qualifying, then 20 laps | Qualifying: out lap + 3 flying laps, best lap sets the grid. AI quali times are simulated from their pace. Player can end qualifying early from the pause menu. |
 
@@ -46,6 +46,7 @@ chequered flag → results table (positions, gaps, best laps, DNFs).
 | O / L | Shift up / down (ignored in automatic) |
 | M | Mute / unmute sound |
 | C | Switch camera: Behind ↔ Top-down (§11a) |
+| R | Curve training only: back to the training spot at once (§11d) |
 | Esc | Pause menu (resume, restart, end qualifying, quit) |
 
 ## 4. Options (menu)
@@ -59,6 +60,7 @@ Stored in `localStorage` key `sgp_opts`.
 | AI level | Rookie (0.905) / Pro (0.955) / Legend (0.99) of ideal pace | Pro |
 | Camera | Behind (tilted) / Top-down | Behind |
 | Speed guide (practice only) | On / Off | On |
+| Curve training (practice only) | Off / On, plus spot on track and start speed 0–300 km/h | Off, spot 350 m before Abbey, guide speed |
 | Starting fuel (races) | 25–100 % of tank, step 5 | 100 % |
 | Starting position (10 lap race) | Pole / Front row / Mid-pack / Back | Mid-pack |
 | Rider name, number, team | up to 14 chars / 1–99 / 11 teams | Petr, 25, Arancia Tech |
@@ -245,6 +247,25 @@ where the ideal speed drops by more than 80 km/h.
     - It retires (shown "OUT") if its recording ends before that.
 - **Qualifying:** no ghosts (the AI field is simulated).
 
+## 11d. Curve training (practice only)
+
+Practise one corner again and again without riding the whole lap.
+
+**Menu (shown when Practice is selected)**
+- **Curve training** On / Off. When On, the menu shows:
+  - **Track map:** click or drag on the map to pick the start spot. The spot snaps to the nearest point of the track centreline and is drawn as a marker with an arrow for the direction of travel.
+  - **Corner list:** picks the spot 350 m before the braking zone of that corner (so all four countdown boards come up) and sets the start speed to the guide speed there.
+  - **Start speed** slider, 0–300 km/h in steps of 5, plus a **Guide speed** button that sets the recommended speed for the spot.
+  - A line naming the spot: the corner it is in, and the distance to the next corner.
+- Spot and speed are saved with the other options.
+
+**Session**
+- The bike starts on the spot, always in the **centre of the road** (lateral offset 0), pointing along the track, at the chosen speed and in the matching gear. The tank is full and the tyres are warm.
+- The bike waits on the spot, frozen, until the player presses W, S, A or D, then rides off at the chosen speed. "CURVE TRAINING · press W, S, A or D to go" is shown meanwhile.
+- **Restart session** (pause menu) and the **R** key put the bike back on the same spot at the same speed, with no delay.
+- Riding on past the line starts normal timed laps, as in practice. Ghosts (§11c) are not shown in curve training.
+- Curve training is not available in qualifying or races.
+
 ## 12. Track and graphics
 
 - Centreline from the TUMFTM racetrack-database (LGPL-3.0), resampled every ~2 m (5 888 m, 2 944 points); start line at the real finish line.
@@ -288,4 +309,4 @@ After tagging, push `main`, the tag and the feature branch to GitHub (`p3trk/mot
 
 ## 16. Version history
 
-See `CHANGELOG.md`. Current: **1.8.0**.
+See `CHANGELOG.md`. Current: **1.9.0**.

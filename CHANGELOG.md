@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.9.0 (2026-10-28)
+- **Curve training** (Practice only): pick a start spot on a clickable track map or from the corner list (350 m before the braking zone), and a start speed of 0–300 km/h (or the guide speed).
+- The bike starts in the centre of the road at that speed in the right gear, with warm tyres, and waits until you press W, S, A or D.
+- Restart session and the new **R** key put you back on the same spot at the same speed at once.
+
 ## v1.8.0 (2026-10-28)
 - Every session is recorded (10 Hz positions plus laps, race start and finish) and kept when it has a timed lap or a race start.
 - New menu panel **Recordings & ghosts**: list, export to JSON, import JSON files, delete, and pick up to 4 recordings as ghost opponents.

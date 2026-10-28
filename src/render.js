@@ -17,7 +17,7 @@ let DPR_CAP = 1.5;
 let RW = 800, RH = 600, ODPR = 1;
 let LAYERS = [];
 const TILT = { a: 40 * DEG, p: 1.3, wk: 2.3, hk: 2.6, bike: 0.2, zMax: 20, zBase: 30, zK: 1.0, nearQ: 0.75, farQ: 0.45, fade: 0.3, minLen: 40, q: 1 }; // q: resolution scale, lowered on slow machines
-// Behind camera tuning (GDD 11a): the pause-menu panel edits these in display units (deg, %), saved in localStorage 'sgp_cam'
+// tilted camera tuning (GDD 11a): the pause-menu panel edits these in display units (deg, %), per camera (below)
 const CAM_SET = [ // k: TILT field, f: display unit -> TILT value, rs: needs resize()
   { k: 'a', lbl: 'Tilt', unit: '°', min: 20, max: 70, step: 1, f: DEG, rs: 1 },
   { k: 'p', lbl: 'Camera distance', unit: '× screen h', min: 0.5, max: 2.5, step: 0.05, rs: 1 },
@@ -34,37 +34,39 @@ const CAM_SET = [ // k: TILT field, f: display unit -> TILT value, rs: needs res
 ];
 const TILT_DEF = Object.freeze(Object.fromEntries(CAM_SET.map(d => [d.k, TILT[d.k]])));
 const camGet = d => +(TILT[d.k] / (d.f || 1)).toFixed(4); // display value
-// camera profiles (GDD 11a, since 1.13.0), in display units; any slider change afterwards makes the profile 'custom'
-const CAM_PROFILES = {
-  standard: Object.fromEntries(CAM_SET.map(d => [d.k, camGet(d)])),
+// per-camera tuning (GDD 11a, since 1.14.0): Behind and CLOSE keep their own values in display units, saved in
+// localStorage 'sgp_cam' (Behind) and 'sgp_cam_close' (CLOSE); TILT holds the values of the tilted camera in use
+const CAM_DEF = {
+  behind: Object.fromEntries(CAM_SET.map(d => [d.k, camGet(d)])),
   close: { a: 55, p: 1.8, bike: 8, zMax: 30, zBase: 12, zK: 0.4, wk: 3.5, hk: 6, nearQ: 1.5, farQ: 0.7, fade: 30, minLen: 40 }, // 1.13.1: less sky, sees further
 };
-let CAM_PROF = 'standard';
-function camSave() { try { localStorage.setItem('sgp_cam', JSON.stringify(Object.assign({ profile: CAM_PROF }, Object.fromEntries(CAM_SET.map(e => [e.k, camGet(e)]))))); } catch (e) { } }
-function camSet(d, v, save) { // clamps, applies, saves; returns the display value
-  v = +v; if (!isFinite(v)) v = TILT_DEF[d.k] / (d.f || 1);
-  v = clamp(v, d.min, d.max); TILT[d.k] = v * (d.f || 1);
-  if (save) camSave();
+const CAM_KEY = { behind: 'sgp_cam', close: 'sgp_cam_close' };
+const CAM_VAL = { behind: Object.assign({}, CAM_DEF.behind), close: Object.assign({}, CAM_DEF.close) };
+let TILT_CAM = 'behind'; // the tilted camera whose values are in TILT
+function camSave(name) { try { localStorage.setItem(CAM_KEY[name], JSON.stringify(CAM_VAL[name])); } catch (e) { } }
+function camSet(d, v, save) { // clamps, applies to the tilted camera in use, saves; returns the display value
+  v = +v; if (!isFinite(v)) v = CAM_DEF[TILT_CAM][d.k];
+  v = clamp(v, d.min, d.max); CAM_VAL[TILT_CAM][d.k] = v; TILT[d.k] = v * (d.f || 1);
+  if (save) camSave(TILT_CAM);
   return v;
 }
-function camProfile(name, save) { // applies all values of a profile; the caller calls resize()
-  const P = CAM_PROFILES[name]; if (!P) return;
-  for (const d of CAM_SET) camSet(d, P[d.k], false);
-  CAM_PROF = name; if (save) camSave();
-}
-const camIs = name => CAM_SET.every(d => Math.abs(camGet(d) - CAM_PROFILES[name][d.k]) < 1e-6);
-try {
-  const s = JSON.parse(localStorage.getItem('sgp_cam') || 'null');
-  if (s && typeof s === 'object') { // saved before 1.13.0 without a profile name: Standard if the values are the defaults, else Custom
-    for (const d of CAM_SET) if (d.k in s) camSet(d, s[d.k], false);
-    CAM_PROF = s.profile in CAM_PROFILES || s.profile === 'custom' ? s.profile : camIs('standard') ? 'standard' : 'custom';
-  }
+function camLoad(name) { TILT_CAM = name; for (const d of CAM_SET) camSet(d, CAM_VAL[name][d.k], false); } // the caller calls resize()
+function camReset() { Object.assign(CAM_VAL[TILT_CAM], CAM_DEF[TILT_CAM]); camLoad(TILT_CAM); camSave(TILT_CAM); } // current camera only
+for (const name in CAM_KEY) try {
+  const s = JSON.parse(localStorage.getItem(CAM_KEY[name]) || 'null');
+  if (!s || typeof s !== 'object') continue;
+  // 1.13.x kept the Close profile in 'sgp_cam': unchanged Close values there mean the player picked Close, which is
+  // now the CLOSE camera, so Behind starts from its defaults; any other saved values (also Custom) stay with Behind
+  const wasClose = name === 'behind' && s.profile === 'close' && CAM_SET.every(d => Math.abs(+s[d.k] - CAM_DEF.close[d.k]) < 1e-6);
+  if (!wasClose) for (const d of CAM_SET) { const v = +s[d.k]; if (d.k in s && isFinite(v)) CAM_VAL[name][d.k] = clamp(v, d.min, d.max); }
+  if ('profile' in s) camSave(name); // the profile field is no longer written
 } catch (e) { }
+camLoad('behind');
 function tiltBikeH() { const P = TILT.p * VH, ca = Math.cos(TILT.a), sa = Math.sin(TILT.a), s = Math.min(TILT.bike * VH, 0.8 * P * ca / sa); return s * P / (ca * P - s * sa); } // canvas px above the bottom edge that project to TILT.bike of the screen (kept below the horizon at P*cot(a), GDD 1.13.0)
 function resize() {
   DPR = Math.min(DPR_CAP, window.devicePixelRatio || 1); VW = window.innerWidth; VH = window.innerHeight;
   hcv.width = Math.round(VW * DPR); hcv.height = Math.round(VH * DPR);
-  const tilt = CAM.mode === 'behind';
+  const tilt = camTilted();
   ODPR = tilt ? clamp(TILT.nearQ * TILT.q, 1, Math.max(1, DPR)) : DPR; // tilted view is resampled anyway; near quality above 1 uses Retina pixels (GDD 1.13.0)
   cv.width = Math.round(VW * ODPR); cv.height = Math.round(VH * ODPR);
   RW = tilt ? Math.round(VW * TILT.wk) : VW; RH = tilt ? Math.round(VH * TILT.hk) : VH;
@@ -318,15 +320,17 @@ function bikeSprite(team, num) {
   return SPRITES[key];
 }
 
-// --- camera: 'behind' = tilted chase view, 'chase' = top-down rotating (GDD 11a)
+// --- camera: 'behind' and 'close' = tilted chase views with their own values, 'chase' = top-down rotating (GDD 11a)
 const CAM = { x: 0, y: 0, rot: 0, ppm: 10, mode: 'behind', init: false, ax: 0.5, ay: 0.6, boost: 1 };
-function setCamMode(m) { if (CAM.mode === m) return; CAM.mode = m; CAM.init = false; resize(); }
+const CAM_ORDER = ['behind', 'close', 'chase'], CAM_NAME = { behind: 'Behind', close: 'CLOSE', chase: 'Top-down' }; // C goes through them in this order
+const camTilted = () => CAM.mode !== 'chase';
+function setCamMode(m) { if (CAM.mode === m || !CAM_NAME[m]) return; CAM.mode = m; if (m in CAM_KEY) camLoad(m); CAM.init = false; resize(); }
 function updateCamera(dt) {
   const b = W.player; if (!b) return;
   let px = b.x, py = b.y, h = b.h, v = b.v;
   if (b.crashed && b.crash) { px = b.crash.rd.x; py = b.crash.rd.y; v = Math.hypot(b.crash.rd.vx, b.crash.rd.vy); }
   let tx, ty, targetPpm;
-  if (CAM.mode === 'behind') {
+  if (camTilted()) {
     CAM.ay = 1 - tiltBikeH() / RH;
     targetPpm = Math.min(TILT.zMax, Math.min(VW, VH * 1.25) / (TILT.zBase + v * TILT.zK));
     tx = px; ty = py;
@@ -338,11 +342,11 @@ function updateCamera(dt) {
   }
   const tr = -h - Math.PI / 2;
   if (!CAM.init) { CAM.x = tx; CAM.y = ty; CAM.rot = tr; CAM.ppm = targetPpm; CAM.init = true; }
-  if (CAM.mode === 'behind') { CAM.x = tx; CAM.y = ty; }
+  if (camTilted()) { CAM.x = tx; CAM.y = ty; }
   else { const k = 1 - Math.exp(-dt * 6); CAM.x += (tx - CAM.x) * k; CAM.y += (ty - CAM.y) * k; }
   CAM.rot += angWrap(tr - CAM.rot) * (1 - Math.exp(-dt * 4.5));
   CAM.ppm += (targetPpm - CAM.ppm) * (1 - Math.exp(-dt * 1.8));
-  CAM.boost = CAM.mode === 'behind' ? Math.max(1, TILT.minLen / (2.5 * PHYS.VS * CAM.ppm)) : 1; // keep bikes readable when zoomed out
+  CAM.boost = camTilted() ? Math.max(1, TILT.minLen / (2.5 * PHYS.VS * CAM.ppm)) : 1; // keep bikes readable when zoomed out
 }
 function worldToCanvas(x, y) {
   const dx = x - CAM.x, dy = y - CAM.y, c = Math.cos(CAM.rot), s = Math.sin(CAM.rot);
@@ -354,7 +358,7 @@ function canvasToWorld(sx, sy) {
 }
 function worldToScreen(x, y) {
   const [cx, cy] = worldToCanvas(x, y);
-  if (CAM.mode !== 'behind') return [cx, cy];
+  if (!camTilted()) return [cx, cy];
   // same projection as the CSS perspective(P) rotateX(a) about the canvas bottom centre
   const P = TILT.p * VH, yy = cy - RH, sc = P / (P - yy * Math.sin(TILT.a));
   return [VW / 2 + (cx - RW / 2) * sc, VH + yy * Math.cos(TILT.a) * sc];
@@ -411,7 +415,7 @@ function drawWorld() {
   tileFrame++;
   let sx = 0, sy = 0; if (HUD.shake > 0.01) { sx = (Math.random() - 0.5) * 8 * HUD.shake; sy = (Math.random() - 0.5) * 8 * HUD.shake; }
   try { for (const Ly of LAYERS) { ctx = Ly.g; drawWorldLayer(Ly, sx, sy); } } finally { ctx = mainCtx; }
-  if (CAM.mode === 'behind') projectTilted();
+  if (camTilted()) projectTilted();
 }
 // perspective: screen height u above the bottom edge <-> plane distance h, as seen from TILT.p*VH away at angle TILT.a
 function projectTilted() {
@@ -499,7 +503,7 @@ function drawWorldLayer(Ly, sx, sy) {
   for (const b of list) drawBike(b, vis);
   drawParticles(vis);
   ctx.setTransform(Ly.dpr, 0, 0, Ly.dpr, 0, 0);
-  if (CAM.mode === 'behind' && Ly.y0 === 0) { // haze towards the horizon
+  if (camTilted() && Ly.y0 === 0) { // haze towards the horizon
     const fh = RH * 0.22, g = ctx.createLinearGradient(0, 0, 0, fh);
     g.addColorStop(0, 'rgba(201,216,222,1)'); g.addColorStop(1, 'rgba(201,216,222,0)'); ctx.fillStyle = g; ctx.fillRect(0, 0, Ly.w, fh);
   }

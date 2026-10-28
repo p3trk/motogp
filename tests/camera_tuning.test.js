@@ -1,10 +1,12 @@
 #!/usr/bin/env node
-// Behind camera tuning test (GDD 11a): the pause menu shows a Camera tuning panel with the Behind camera only.
+// Camera tuning test (GDD 11a): the pause menu shows a Camera tuning panel with the Behind or CLOSE camera only.
 // It has 12 sliders, each with a number box; changed values apply to the camera at once, are kept after a
 // reload (localStorage 'sgp_cam'), and Reset to defaults brings back the built-in values.
-// Since 1.13.0: a profile list (Standard, Close, Custom); a profile sets all sliders, a moved slider shows
-// Custom, the profile is kept after a reload, Reset to defaults = Standard, old saved data still loads.
-// Since 1.13.1: with Close at 1470x830 @2x, sky is at most 12 % of the screen on a straight at speed.
+// Since 1.14.0 CLOSE is its own camera (the 1.13.x profile list is gone): chosen on the start screen and kept after
+// a reload, C cycles Behind -> CLOSE -> Top-down in a session and in replay, CLOSE starts with the Close values,
+// its panel has its own title, Behind and CLOSE keep separate values ('sgp_cam' / 'sgp_cam_close'), Reset per
+// camera, an old saved Close profile gives Behind its defaults. With CLOSE at 1470x830 @2x, sky is at most 12 %
+// of the screen on a straight at speed (GDD 1.13.1).
 // Usage: node tests/camera_tuning.test.js [path/to/index.html]   (needs Playwright + Chromium)
 const path = require('path');
 const { chromium } = require('playwright');
@@ -20,13 +22,21 @@ const UNIT = { a: DEG, bike: 0.01, fade: 0.01 }; // display unit -> TILT value
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   page.on('pageerror', e => { console.error('page error:', e.message); process.exitCode = 1; });
   let failed = 0, total = 0;
-  const check = (ok, name, info) => { total++; if (!ok) failed++; console.log(`${ok ? 'PASS' : 'FAIL'}  ${name.padEnd(44)} ${info || ''}`); };
+  const check = (ok, name, info) => { total++; if (!ok) failed++; console.log(`${ok ? 'PASS' : 'FAIL'}  ${name.padEnd(50)} ${info || ''}`); };
   const ready = () => page.waitForFunction(() => window.__sgp && document.getElementById('loading').hidden);
   const tilt = () => page.evaluate(() => Object.assign({}, window.__sgp.TILT));
   const near = (a, b) => Math.abs(a - b) < 1e-6;
   const isProf = (T, V) => Object.keys(V).every(k => near(T[k], V[k] * (UNIT[k] || 1)));
   const isDef = T => isProf(T, DEF);
-  const prof = () => page.evaluate(() => { const b = document.querySelector('#camProfile [aria-pressed="true"]'); return { name: window.__sgp.camProfX(), shown: b ? b.dataset.prof : null, chips: [...document.querySelectorAll('#camProfile button')].map(c => c.textContent) }; });
+  const isClose = T => isProf(T, CLOSE);
+  const st = () => page.evaluate(() => { const S = window.__sgp, t = document.getElementById('camTitle'), P = document.getElementById('pauseCam'), b = document.querySelector('#optCam [aria-pressed="true"]');
+    return { mode: S.CAM.mode, opt: S.UI.opts.cam, chip: b ? b.textContent : null, title: t ? t.textContent : null, panel: !!P && !P.hidden, cam: S.camNameX() }; });
+  const stored = k => page.evaluate(k => JSON.parse(localStorage.getItem(k) || 'null'), k);
+  const pauseCam = async cam => { // start practice with this camera (start-screen option) and pause with Escape
+    await page.evaluate(cam => { const S = window.__sgp; if (S.W.paused && S.UI.state === 'play') S.UI.togglePause(); S.UI.opts.cam = cam; S.UI.opts.train = 'off'; S.UI.launch('practice', {}); }, cam);
+    await page.keyboard.press('Escape'); await page.waitForFunction(() => window.__sgp.W.paused);
+  };
+  const slide = (k, v) => page.evaluate(([k, v]) => { const rg = document.getElementById('cam_' + k); rg.value = v; rg.dispatchEvent(new Event('input', { bubbles: true })); }, [k, v]);
   const fmt = T => `tilt ${(T.a / DEG).toFixed(1)}°  zoom max ${T.zMax}`;
   // start practice with the Behind camera and pause it the way a player does (Escape)
   const pauseBehind = async () => {
@@ -81,39 +91,71 @@ const UNIT = { a: DEG, bike: 0.01, fade: 0.01 }; // display unit -> TILT value
   T = await tilt();
   check(isDef(T), 'defaults kept after a reload', fmt(T));
 
-  // f) profile list: Standard / Close / Custom, Standard after Reset to defaults
-  await pauseBehind();
-  let pr = await prof();
-  check(pr.chips.join() === 'Standard,Close,Custom' && pr.shown === 'standard' && pr.name === 'standard', 'profile list, Standard selected', `chips ${pr.chips.join('/')}  selected ${pr.shown}`);
+  // f) Behind panel title
+  await pauseCam('behind');
+  let S0 = await st();
+  check(S0.title === 'Camera tuning (Behind)', 'panel title for Behind', `title "${S0.title}"`);
+  await page.evaluate(() => window.__sgp.UI.togglePause());
 
-  // g) Close sets all values (and a bigger main canvas for near quality 1.5 on a 2x screen is tested by tilt_seam)
-  await page.locator('#camProfile button', { hasText: 'Close' }).click();
-  T = await tilt(); pr = await prof();
-  const shownA = await page.$eval('#cam_a', el => +el.value);
-  check(isProf(T, CLOSE) && pr.shown === 'close' && shownA === CLOSE.a, 'Close sets all 12 values', `${fmt(T)}  tilt slider ${shownA}  selected ${pr.shown}`);
-
-  // h) moving a slider afterwards shows Custom
-  await page.evaluate(() => { const rg = document.getElementById('cam_zK'); rg.value = 0.8; rg.dispatchEvent(new Event('input', { bubbles: true })); });
-  pr = await prof(); T = await tilt();
-  check(pr.shown === 'custom' && pr.name === 'custom' && near(T.zK, 0.8), 'moved slider shows Custom', `selected ${pr.shown}  zoom speed factor ${T.zK}`);
-
-  // i) profile kept after a reload
-  await page.locator('#camProfile button', { hasText: 'Close' }).click();
+  // g) CLOSE chosen on the start screen, kept after a reload, starts with the Close values
+  await page.evaluate(() => window.__sgp.UI.toMenu());
+  await page.locator('#optCam button', { hasText: 'CLOSE' }).click();
   await page.reload(); await ready();
-  await pauseBehind();
-  T = await tilt(); pr = await prof();
-  check(pr.name === 'close' && pr.shown === 'close' && isProf(T, CLOSE), 'Close profile kept after a reload', `profile ${pr.name}  ${fmt(T)}`);
+  S0 = await st();
+  check(S0.opt === 'close' && S0.chip === 'CLOSE', 'CLOSE chosen on the start screen, kept after reload', `option ${S0.opt}  pressed "${S0.chip}"`);
+  await pauseCam('close');
+  T = await tilt(); S0 = await st();
+  check(S0.mode === 'close' && isClose(T), 'CLOSE starts with the Close values', `camera ${S0.mode}  ${fmt(T)}  depth ${T.hk}  far ${T.farQ}`);
+  check(S0.panel && S0.title === 'Camera tuning (CLOSE)', 'panel shown for CLOSE with its title', `title "${S0.title}"`);
 
-  // j) Reset to defaults gives Standard
+  // h) values tuned on CLOSE do not change Behind and are kept after a reload ('sgp_cam_close')
+  await slide('zK', 0.8);
+  T = await tilt();
+  const sc = await stored('sgp_cam_close'), sb = await stored('sgp_cam');
+  check(near(T.zK, 0.8) && sc && near(sc.zK, 0.8) && (!sb || near(sb.zK, DEF.zK)), 'CLOSE value saved in sgp_cam_close only', `zoom speed factor ${T.zK}  sgp_cam_close ${sc && sc.zK}  sgp_cam ${sb ? sb.zK : 'none'}`);
+  await page.reload(); await ready();
+  await pauseCam('close'); const Tc = await tilt();
+  await pauseCam('behind'); const Tb = await tilt();
+  check(near(Tc.zK, 0.8) && isDef(Tb), 'CLOSE value kept after reload, Behind unchanged', `CLOSE zK ${Tc.zK}  Behind ${isDef(Tb) ? 'defaults' : fmt(Tb)}`);
+
+  // i) C cycles Behind -> CLOSE -> Top-down -> Behind in a session; in the pause menu C switches the panel
+  const seq = [];
+  for (let k = 0; k < 3; k++) { await page.keyboard.press('KeyC'); const x = await st(); seq.push(`${x.mode}/${x.opt}/${x.panel ? x.title.replace('Camera tuning ', '') : '-'}`); }
+  check(seq.join() === 'close/close/(CLOSE),chase/chase/-,behind/behind/(Behind)', 'C cycles cameras in a session (paused)', seq.join('  '));
+  await page.evaluate(() => window.__sgp.UI.togglePause());
+  const seqLive = [];
+  for (let k = 0; k < 3; k++) { await page.keyboard.press('KeyC'); seqLive.push((await st()).mode); }
+  check(seqLive.join() === 'close,chase,behind', 'C cycles cameras while riding', seqLive.join(' -> '));
+
+  // j) Reset to defaults per camera
+  await pauseCam('close'); await slide('a', 45); await slide('zK', 0.9);
   await page.locator('#pauseCam button', { hasText: 'Reset to defaults' }).click();
-  T = await tilt(); pr = await prof();
-  check(pr.name === 'standard' && pr.shown === 'standard' && isDef(T), 'Reset to defaults gives Standard', `profile ${pr.name}  ${fmt(T)}`);
+  T = await tilt();
+  check(isClose(T), 'Reset on CLOSE gives the Close values', fmt(T));
+  await pauseCam('behind'); await slide('a', 33);
+  await page.locator('#pauseCam button', { hasText: 'Reset to defaults' }).click();
+  T = await tilt();
+  check(isDef(T), 'Reset on Behind gives the Behind values', fmt(T));
+  await page.evaluate(() => window.__sgp.UI.togglePause());
 
-  // k) data saved by 1.12.0 (no profile name): defaults load as Standard, other values as Custom
-  const old = async v => { await page.evaluate(v => localStorage.setItem('sgp_cam', JSON.stringify(v)), v); await page.reload(); await ready(); return page.evaluate(() => [window.__sgp.camProfX(), window.__sgp.TILT.a]); };
-  const o1 = await old(DEF), o2 = await old(Object.assign({}, DEF, { a: 50 }));
-  check(o1[0] === 'standard' && o2[0] === 'custom' && near(o2[1], 50 * DEG), 'old saved data loads (Standard / Custom)', `defaults -> ${o1[0]}  tilt 50 -> ${o2[0]}`);
-  await page.evaluate(() => localStorage.removeItem('sgp_cam')); await page.reload(); await ready();
+  // k) replay: starts with the start-screen camera, C cycles all three
+  await page.evaluate(() => {
+    const S = window.__sgp; S.UI.opts.cam = 'behind'; S.UI.opts.train = 'off'; S.UI.launch('practice', {});
+    const W = S.W, b = W.player; b.autopilot = true; W.paused = true; let g = 0;
+    while (b.laps.length < 1 && g < 120 * 900) { S.simStep(S.SUB); g++; }
+    W.paused = false; S.UI.toMenu(); S.UI.opts.cam = 'close'; S.RP.open([S.Lib.data[S.Lib.meta[0].id]], 'menu');
+  });
+  const r0 = (await st()).mode, rs = [];
+  for (let k = 0; k < 3; k++) { await page.keyboard.press('KeyC'); rs.push((await st()).mode); }
+  check(r0 === 'close' && rs.join() === 'chase,behind,close', 'replay: start-screen camera, C cycles', `start ${r0}  then ${rs.join(' -> ')}`);
+  await page.evaluate(() => window.__sgp.RP.close());
+
+  // l) old data: sgp_cam saved by 1.13.x with the Close profile unchanged gives Behind its defaults; other values stay
+  const old = async v => { await page.evaluate(v => { localStorage.setItem('sgp_cam', JSON.stringify(v)); localStorage.removeItem('sgp_cam_close'); }, v); await page.reload(); await ready(); await pauseCam('behind'); return [await tilt(), await stored('sgp_cam')]; };
+  const [o1, s1] = await old(Object.assign({ profile: 'close' }, CLOSE)), [o2] = await old(Object.assign({ profile: 'custom' }, CLOSE, { zK: 0.8 })), [o3] = await old(Object.assign({}, DEF, { a: 50 }));
+  check(isDef(o1) && !('profile' in (s1 || {})), 'old Close profile: Behind starts from defaults', `Behind ${isDef(o1) ? 'defaults' : fmt(o1)}  profile field ${s1 && 'profile' in s1 ? 'kept' : 'gone'}`);
+  check(near(o2.zK, 0.8) && near(o2.a, 55 * DEG) && near(o3.a, 50 * DEG), 'other old saved values stay with Behind', `custom -> ${fmt(o2)}  1.12 tilt 50 -> ${(o3.a / DEG).toFixed(1)}°`);
+  await page.evaluate(() => { window.__sgp.UI.togglePause(); localStorage.removeItem('sgp_cam'); localStorage.removeItem('sgp_cam_close'); }); await page.reload(); await ready();
 
   // e) hidden with the Top-down camera (panel built first in a Behind pause, then a Top-down session paused)
   await pauseBehind();
@@ -125,13 +167,13 @@ const UNIT = { a: DEG, bike: 0.01, fade: 0.01 }; // display unit -> TILT value
   const pauseOpen = await page.$eval('#pause', el => !el.hidden);
   check(pauseOpen && !p.visible, 'panel hidden in the Top-down pause menu', `pause menu ${pauseOpen ? 'open' : 'closed'}  panel ${p.exists ? (p.visible ? 'visible' : 'hidden') : 'not built'}`);
 
-  // l) Close on a straight at speed (1470x830 @2x): sky rows at the top are at most 12 % of the screen (GDD 1.13.1)
+  // m) CLOSE on a straight at speed (1470x830 @2x): sky rows at the top are at most 12 % of the screen (GDD 1.13.1)
   const p2 = await browser.newPage({ viewport: { width: 1470, height: 830 }, deviceScaleFactor: 2 });
   p2.on('pageerror', e => { console.error('page error:', e.message); process.exitCode = 1; });
   await p2.goto(FILE); await p2.waitForFunction(() => window.__sgp && document.getElementById('loading').hidden);
   const v0 = await p2.evaluate(() => {
-    const S = window.__sgp; try { localStorage.removeItem('sgp_cam'); } catch (e) { }
-    S.UI.opts.cam = 'behind'; S.UI.opts.train = 'off'; S.UI.launch('practice', {}); S.setCamModeX('behind'); S.setCamProfileX('close');
+    const S = window.__sgp; try { localStorage.removeItem('sgp_cam'); localStorage.removeItem('sgp_cam_close'); } catch (e) { }
+    S.UI.opts.cam = 'close'; S.UI.opts.train = 'off'; S.UI.launch('practice', {});
     const W = S.W, b = W.player; b.autopilot = true; W.paused = true; let g = 0, hp = b.h, ok = 0;
     while (g < 120 * 300) { // drive until 0.5 s on a straight above 270 km/h
       S.simStep(S.SUB); g++; const yaw = Math.abs(((b.h - hp + 9 * Math.PI) % (2 * Math.PI)) - Math.PI) * 120; hp = b.h;
@@ -148,9 +190,9 @@ const UNIT = { a: DEG, bike: 0.01, fade: 0.01 }; // display unit -> TILT value
       let n = 0; for (let x = 0; x < c.width; x += 4) { const i = (y * c.width + x) * 4, R = d[i], G = d[i + 1], B = d[i + 2]; if (B > 150 && B >= G && G >= R - 5 && R > 90) n++; }
       if (n > c.width / 8) rows++; else break;
     }
-    return { sky: rows / c.height, v, prof: S.camProfX() };
+    return { sky: rows / c.height, v, cam: S.CAM.mode };
   }, v0);
-  check(sk.prof === 'close' && sk.v > 270 && sk.sky <= 0.12, 'Close: sky at most 12 % on a straight', `sky ${(sk.sky * 100).toFixed(1)} %  at ${sk.v.toFixed(0)} km/h`);
+  check(sk.cam === 'close' && sk.v > 270 && sk.sky <= 0.12, 'CLOSE: sky at most 12 % on a straight', `sky ${(sk.sky * 100).toFixed(1)} %  at ${sk.v.toFixed(0)} km/h`);
   await p2.close();
 
   await browser.close();

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Camera shake test (GDD 13): drives the real game loop with a fake animation-frame clock,
 // records the camera every frame and fails when the camera motion is not smooth.
-// Covers live riding and replay (0.25x, 1x, 4x), with the Behind and Top-down cameras.
+// Covers live riding and replay (0.25x, 1x, 4x), with the Behind, CLOSE (since 1.14.0) and Top-down cameras.
 // Usage: node tests/camera_shake.test.js [path/to/index.html]   (needs Playwright + Chromium)
 const path = require('path');
 const { chromium } = require('playwright');
@@ -68,7 +68,7 @@ const LIMITS = { pos: 0.02, rot: 0.08, dir: 0.08, scr: 2.0 }, WIN0 = 12;
     while (b.laps.length < 1 && g < 120 * 900) { S.simStep(S.SUB); g++; }
     W.paused = false;
   });
-  for (const cam of ['behind', 'chase']) {
+  for (const cam of ['behind', 'close', 'chase']) {
     // live riding: AI on the player's bike, through Copse and Maggotts/Becketts
     await page.evaluate(cam => { const S = window.__sgp; S.UI.opts.cam = cam; S.UI.opts.train = 'on'; S.UI.opts.trainS = 1450 * S.T.DS - 400; S.UI.opts.trainV = 250; S.UI.launch('practice', {}); const b = S.W.player; b.trainHold = false; b.autopilot = true; }, cam);
     await page.evaluate(() => window.__run(30));

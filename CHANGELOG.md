@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.19.2 (2026-10-28)
+- Tilt lean on phones (GDD 3a): the dead zone is 12 degrees (was 8).
+- Tilt sensitivity: Very low (full lean at 75 degrees), Low (60 degrees, default), High (35 degrees). The Normal option is removed.
+- Tests: the tilt check in tests/mobile_controls.test.js uses 45 degrees with the Low setting.
+
 ## v1.19.1 (2026-10-28)
 - Tilt lean on phones (GDD 3a): the dead zone is 8 degrees (was 3), so the bike stays straight until the phone is turned past 8 degrees, and then leans smoothly.
 - Tilt sensitivity has a new Very low option (full lean at 60 degrees). The default is Low (45 degrees) instead of Normal (35 degrees). Settings saved before this version keep their saved choice.

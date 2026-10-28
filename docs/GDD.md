@@ -1,6 +1,6 @@
 # Silverstone GP — Game Design Document
 
-**Version:** 1.19.1 · **Last updated:** 2026-10-28 · **Owner:** Petr
+**Version:** 1.19.2 · **Last updated:** 2026-10-28 · **Owner:** Petr
 
 This document is the source of truth for how the game should work. Every
 change starts here: update the GDD on a feature branch first, then change the
@@ -81,10 +81,10 @@ Used when the game runs on a phone or tablet (touch screen, no keyboard). The de
 - **Swap sides:** an option (§4) puts Throttle on the left and Brake on the right, for riders who want their hands the other way round.
 - **Both halves pressed:** Brake wins, so the bike never accelerates and brakes at once.
 - **Lean by tilt:**
-  - The lean target follows the phone's roll angle in landscape. Rolling it through the angle set by Tilt sensitivity reaches full lean (default 45°), which the rider aids (§4) still limit as on keyboard.
-  - A dead zone of 8° around the straight-up position (was 3°) stops small hand movements from leaning the bike. The bike starts to lean only past it, and the lean then grows smoothly up to full lean.
+  - The lean target follows the phone's roll angle in landscape. Rolling it through the angle set by Tilt sensitivity reaches full lean (default 60°), which the rider aids (§4) still limit as on keyboard.
+  - A dead zone of 12° around the straight-up position (was 8°) stops small hand movements from leaning the bike. The bike starts to lean only past it, and the lean then grows smoothly up to full lean.
   - The zero point is the phone's angle when the race or session starts. Pause and resume keep the same zero. The pause menu has **Re-centre** to set a new zero.
-  - Tilt sensitivity can be Very low (full lean at 60°), Low (45°, default), Normal (35°) or High (25°).
+  - Tilt sensitivity can be Very low (full lean at 75°), Low (60°, default) or High (35°).
 - **Landscape only:** in portrait the game shows a "Turn your phone sideways" screen and pauses. Landscape is needed because the tilt is read from the roll angle.
 - **Permission:** iPhone Safari asks for motion access the first time the player taps Start. If access is refused, lean is off and the message says so; brake and throttle still work.
 - **Layout:** the brake and throttle areas have a faint tint so the player can see where to press. The HUD sits at the same places as on desktop, and the bottom controls are kept clear of the speedometer and fuel.
@@ -99,7 +99,7 @@ Stored in `localStorage` key `sgp_opts`. The camera choice is remembered for all
 | Transmission | Manual / Automatic. On phones always Automatic and not shown (since 1.18.0) | Manual |
 | Controls (since 1.18.0) | Auto (touch on phones, keyboard elsewhere) / Touch / Keyboard. Touch shows the on-screen halves (§3a) | Auto |
 | Left side is (since 1.18.0, touch only) | Brake / Throttle | Brake |
-| Tilt sensitivity (since 1.18.0, phones) | Very low (full lean at 60°) / Low (45°) / Normal (35°) / High (25°) | Low |
+| Tilt sensitivity (since 1.18.0, phones) | Very low (full lean at 75°) / Low (60°) / High (35°) | Low |
 | Rider aids (lean limiter + traction control) | On / Off | On |
 | AI level | Rookie (0.905) / Pro (0.955) / Legend (0.99) of ideal pace | Pro |
 | Camera | Behind (tilted) / CLOSE (tilted, low and close, since 1.14.0) / Top-down | Behind |

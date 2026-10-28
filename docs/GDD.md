@@ -1,6 +1,6 @@
 # Silverstone GP — Game Design Document
 
-**Version:** 1.18.0 · **Last updated:** 2026-10-28 · **Owner:** Petr
+**Version:** 1.19.0 · **Last updated:** 2026-10-28 · **Owner:** Petr
 
 This document is the source of truth for how the game should work. Every
 change starts here: update the GDD on a feature branch first, then change the
@@ -172,6 +172,8 @@ Option, on by default, practice only.
   - the distance to the next braking point.
 - A coloured racing line drawn ~170 samples (~340 m) ahead of the bike: green accelerate, yellow lift, red brake.
 
+- Phones (since 1.19.0): the speed guide panel is removed. The coloured line on the track is an open question (§11g). The panel is still there on desktop.
+
 ## 10. Saved laps (records)
 
 Stored in `localStorage` key `sgp_records`, format `{v:1, laps, best, trace, traceT}`.
@@ -179,6 +181,7 @@ Stored in `localStorage` key `sgp_records`, format `{v:1, laps, best, trace, tra
 - Every completed player lap is saved (newest 300 kept) with the mode, time, sectors and date.
 - Best lap per mode is kept; the all-time best lap trace is kept for comparison.
 - Menu panel **"Your laps"** lists the best and recent laps, with a *Clear* button.
+- On phones (since 1.19.0) the in-session **"Your laps"** list is removed (§11g). The saved laps stay in the menu.
 - In practice, the timing tower shows an **ALL-TIME** best row.
 - Laps driven by autopilot (e.g. while the crew is servicing) are not saved.
 
@@ -453,6 +456,32 @@ Asked by Petr (2026-10-28): "Create blur effect in high speeds. High speed - blu
 - **Speed blur** On / Off on the start screen (§4), default **On**, saved in `sgp_opts` (`blur`). Off skips all of the above (no extra cost).
 - The Camera tuning panel in the pause menu (§11a) gets three more sliders for the current tilted camera, saved with its other values (`sgp_cam`, `sgp_cam_close`) and returned to defaults by Reset to defaults: **Blur start speed**, **Blur full speed**, **Blur strength** (values and ranges in §11a). Older saved values without these fields get the defaults. The view behind the pause menu shows the blur at the current speed, so changes can be seen live while moving the sliders (when paused at top speed).
 
+## 11g. Phone HUD (since 1.19.0)
+
+On phones (touch controls on, §3a) the HUD is made smaller and simpler. Desktop keeps the layout in §11. The phone layout is picked by the touch controls, not by the screen width, so a phone in landscape gets it.
+
+| Element | Desktop (§11) | Phone |
+|---|---|---|
+| Speedometer, bottom left | Speed, gear, rpm bar, lean and brake/gas bars | **Compact:** speed, gear and rpm bar. Lean as a small bar. The brake and gas bars are removed, because the touch halves already show them |
+| Fuel, engine, aero and chassis panel, bottom right | Shown | **Removed completely** |
+| Lap stopwatch | Top centre, with last/best, sectors and the position | **Top left**, compact: current lap time, last and best lap. Sectors and position move into the timing tower |
+| Next corner countdown (§11b) | Under the stopwatch, top centre | **Top centre**, compact: corner name, distance to it and the pictogram. The 300/200/100/50 marks stay |
+| Speed guide panel (§9) | Under the stopwatch | **Removed** |
+| "Your laps" list (§10) | Top left, in practice and the time attack | **Removed** |
+| Timing tower (race, §11) | Top left | Top left, under the stopwatch, with shorter rows so six riders fit |
+| Minimap | Top right, about 190 px | Top right, about 140 px |
+| Pit service panel, start lights, centre messages | As in §11 | Unchanged |
+
+- Nothing on the phone layout is drawn over the touch halves' labels at the bottom edge.
+- Fuel is not shown on the phone HUD. Pit decisions still need it, so a centre message warns when fewer than 3 laps of fuel are left (see open question 2).
+
+### Open questions for 1.19.0 (recommended answer in bold; the design above uses it)
+
+1. The coloured racing line on the track (§9) on phones: keep or remove? **Keep**, because it is on the track, not in the HUD. Remove the panel only.
+2. Fuel is removed from the HUD. How is a low tank warned? **Centre message "FUEL 3 LAPS" once when fewer than 3 laps are left**, and again at 1 lap.
+3. Minimap on phones: keep its size or make it smaller? **About 140 px**, so the timing tower and the minimap do not crowd the top corners.
+4. Lean as a number in the speedometer, or a bar? **A bar** (Petr, 2026-10-28), with the lean angle in degrees next to it.
+
 ## 12. Track and graphics
 
 - Centreline from the TUMFTM racetrack-database (LGPL-3.0), resampled every ~2 m (5 888 m, 2 944 points); start line at the real finish line.
@@ -528,7 +557,7 @@ After tagging, push `main`, the tag and the feature branch to GitHub (`p3trk/mot
 
 ## 16. Version history
 
-See `CHANGELOG.md`. Current: **1.18.0** (mobile controls: touch brake on the left half and throttle on the right, lean by rotating the phone, automatic gearbox only, in landscape; §3a).
+See `CHANGELOG.md`. Current: **1.19.0** (phone HUD: compact speedometer and stopwatch, next corner at the top centre, bottom-right panel, speed guide and "Your laps" removed on phones; §11g). Previous: **1.18.0** (mobile controls: touch brake on the left half and throttle on the right, lean by rotating the phone, automatic gearbox only, in landscape; §3a).
 
 ### Open questions for 1.18.0 (recommended answer in bold; the design above uses it)
 

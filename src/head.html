@@ -66,6 +66,9 @@ tr.me td.pos{color:var(--accent)}
 .center{min-height:100%;display:flex;align-items:center}
 .center .wrap{width:100%}
 .recs{display:flex;flex-wrap:wrap;gap:10px 28px}.rec{display:flex;flex-direction:column;gap:2px}.rec .lbl{font-family:var(--disp);font-weight:600;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--mute)}.rec b{font-family:var(--disp);font-size:26px;font-weight:800;font-style:italic;font-variant-numeric:tabular-nums}
+.chip{border:1px solid #3a4853;background:transparent;color:var(--fg);font-family:var(--disp);font-weight:700;font-size:14px;letter-spacing:.04em;text-transform:uppercase;padding:4px 10px;border-radius:3px;cursor:pointer}
+.chip[aria-pressed="true"]{background:#9fd8ff;border-color:#9fd8ff;color:#111}.chip:hover{filter:brightness(1.15)}.chip:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+#recList{max-height:330px;overflow:auto}
 .note{border-left:3px solid var(--accent);padding:6px 12px;color:#c9d2d8;font-size:14px;background:rgba(255,255,255,.03)}
 #loading{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;font-family:var(--disp);font-size:22px;letter-spacing:.1em;color:var(--mute);background:var(--ink);z-index:9}
 @media (max-width:520px){.btn{font-size:19px;padding:11px 18px}}
@@ -98,6 +101,7 @@ tr.me td.pos{color:var(--accent)}
       <div class="opt" id="optGridWrap"><label for="optGrid">Starting position</label><select id="optGrid"><option value="back">Back of the grid (P22)</option><option value="mid" selected>Midfield (P12)</option><option value="front">Front row (P3)</option><option value="pole">Pole position</option></select></div>
     </div>
     <div class="panel" style="display:flex;flex-direction:column;gap:12px"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><h2 style="font-size:22px">Your laps</h2><button class="btn ghost" id="btnClearRec" style="font-size:15px;padding:6px 12px" hidden>Clear saved laps</button></div><div id="records"></div></div>
+    <div class="panel" style="display:flex;flex-direction:column;gap:12px"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><h2 style="font-size:22px">Recordings &amp; ghosts</h2><div class="actions"><button class="btn ghost" id="btnImport" style="font-size:15px;padding:6px 12px">Import file…</button><button class="btn ghost" id="btnFolder" style="font-size:15px;padding:6px 12px">Open saved_tracks folder…</button><button class="btn ghost" id="btnReloadDir" style="font-size:15px;padding:6px 12px" hidden>Reload saved_tracks</button></div></div><span class="hint" id="recGhostHint"></span><div class="tablewrap" id="recList"></div><span class="small" id="recStatus" role="status"></span><input type="file" id="fileImport" accept=".json,application/json" multiple hidden><input type="file" id="dirImport" webkitdirectory multiple hidden></div>
     <div class="keys">
       <span><kbd>W</kbd>Gas</span><span><kbd>S</kbd>Brake</span><span><kbd>A</kbd><kbd>D</kbd>Lean left / right</span><span><kbd>O</kbd>Shift up</span><span><kbd>L</kbd>Shift down</span><span><kbd>Esc</kbd>Pause</span><span><kbd>C</kbd>Camera</span><span><kbd>M</kbd>Sound</span>
     </div>
@@ -109,7 +113,7 @@ tr.me td.pos{color:var(--accent)}
 <div id="pause" class="overlay" hidden>
   <div class="center"><div class="wrap" style="max-width:520px">
     <div class="eyebrow" id="pauseSub">Session paused</div><h2 style="font-size:44px">Paused</h2>
-    <div class="actions"><button class="btn" id="btnResume">Resume</button><button class="btn ghost" id="btnRestart">Restart session</button><button class="btn ghost" id="btnEndQ" hidden>End qualifying</button><button class="btn ghost" id="btnQuit">Quit to menu</button></div>
+    <div class="actions"><button class="btn" id="btnResume">Resume</button><button class="btn ghost" id="btnRestart">Restart session</button><button class="btn ghost" id="btnEndQ" hidden>End qualifying</button><button class="btn ghost" id="btnExport">Export session</button><button class="btn ghost" id="btnQuit">Quit to menu</button></div>
   </div></div>
 </div>
 

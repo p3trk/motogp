@@ -38,7 +38,7 @@ def jsesc(s):
 
 def main():
     js = (read('core.js').replace('__TRACK__', read('track.txt'))
-          + read('world.js') + read('render.js') + read('ui.js'))
+          + read('world.js') + read('replay.js') + read('render.js') + read('ui.js'))
     head = read('head.html')
     if '--utf8' in sys.argv:
         with open(sys.argv[sys.argv.index('--utf8') + 1], 'w', encoding='utf-8') as f:

@@ -5,6 +5,7 @@
 - Design: [docs/GDD.md](docs/GDD.md) (source of truth, updated before every change)
 - Changes: [CHANGELOG.md](CHANGELOG.md)
 - Build: `python3 tools/build.py` joins `src/` into `index.html`
+- Recordings: `saved_tracks/` holds exported sessions used as ghost opponents (see [saved_tracks/README.md](saved_tracks/README.md))
 
 Workflow: feature branch -> update GDD -> change code -> build and test -> merge to `main` with `--no-ff` -> tag `vX.Y.Z`.
 

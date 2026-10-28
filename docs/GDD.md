@@ -1,6 +1,6 @@
 # Silverstone GP — Game Design Document
 
-**Version:** 1.18.0 · **Last updated:** 2026-10-28 · **Owner:** Petr
+**Version:** 1.18.1 · **Last updated:** 2026-10-28 · **Owner:** Petr
 
 This document is the source of truth for how the game should work. Every
 change starts here: update the GDD on a feature branch first, then change the
@@ -191,6 +191,8 @@ Stored in `localStorage` key `sgp_records`, format `{v:1, laps, best, trace, tra
   - The player's own pit box is marked by a ring in the team's main colour that blinks every 0.3 s.
 - Centre messages for start, pit, flags and session events.
 - Screens: menu, loading, pause, results.
+  - **Race result order (since 1.18.1):** the results table ranks finishers by laps completed first, then by finish order (the order they crossed the line). Every rider on the winner's lap count is listed above every rider a lap down, so all `+NN.MMM` rows come before all `+N lap` rows.
+  - Bug before 1.18.1 (suspected cause, not yet reproduced in a run): after the chequered flag, a rider a lap down could cross the line first and was ranked above a lead-lap rider still on the last lap, because finish order alone set the rank. The "+1 lap" row then showed above a "+NN.MMM" row.
 - **Touch (phones, since 1.18.0):** a faint brake or throttle tint on each half of the screen, a pause button at the bottom centre between the two bottom panels, and a "Turn your phone sideways" screen in portrait (§3a). The minimap, timing tower and speed guide keep their places; the speedometer and fuel stay at the bottom and are not covered by the touch halves' tint.
 
 ## 11a. Camera
@@ -528,7 +530,7 @@ After tagging, push `main`, the tag and the feature branch to GitHub (`p3trk/mot
 
 ## 16. Version history
 
-See `CHANGELOG.md`. Current: **1.18.0** (mobile controls: touch brake on the left half and throttle on the right, lean by rotating the phone, automatic gearbox only, in landscape; §3a).
+See `CHANGELOG.md`. Current: **1.18.1** (fix: race result order lists riders a lap down below lead-lap riders; §11). Previous: **1.18.0** (mobile controls: touch brake on the left half and throttle on the right, lean by rotating the phone, automatic gearbox only, in landscape; §3a).
 
 ### Open questions for 1.18.0 (recommended answer in bold; the design above uses it)
 

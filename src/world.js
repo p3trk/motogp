@@ -148,9 +148,9 @@ function simStep(dt) {
   W.time += dt;
   const bikes = W.bikes;
   // race start procedure
-  if (W.mode === 'race' && W.phase === 'grid') { W.phaseT += dt; if (W.phaseT > 2.5) { W.phase = 'lights'; W.phaseT = 0; W.lightsHold = 0.6 + W.rand() * 1.8; } }
+  if (W.mode === 'race' && W.phase === 'grid') { W.phase = 'lights'; W.phaseT = 0; W.lightsHold = 0.6 + W.rand() * 1.8; } // no grid wait: lights start at once (GDD 1.7.2)
   else if (W.phase === 'lights') {
-    W.phaseT += dt; W.lights = Math.min(5, Math.floor(W.phaseT / 0.9) + 0);
+    W.phaseT += dt; W.lights = Math.min(5, Math.floor(W.phaseT / 0.9) + 1);
     if (W.phaseT > 4.5 + W.lightsHold) { W.phase = 'run'; W.lights = -1; W.raceStartT = W.time; for (const b of bikes) { b.lapStartT = W.time; b.secStart = W.time; if (b.isPlayer) b.held = false; else b.releaseAt = W.time + b.ai.react; } HUD.msg('GO!', '', '#3ad17a', 1.2); }
   }
   for (const b of bikes) if (b.held && b.releaseAt && W.time >= b.releaseAt) { b.held = false; b.releaseAt = 0; }

@@ -1,6 +1,6 @@
 # Silverstone GP — Game Design Document
 
-**Version:** 1.7.1 · **Last updated:** 2026-10-28 · **Owner:** Petr
+**Version:** 1.7.2 · **Last updated:** 2026-10-28 · **Owner:** Petr
 
 This document is the source of truth for how the game should work. Every
 change starts here: update the GDD on a feature branch first, then change the
@@ -28,7 +28,12 @@ Teams, riders and liveries are **fictional**; no real MotoGP names or branding.
 | **10 Lap Race** | 22 riders | 10 laps | Player picks the starting slot (pole / front row / mid-pack / back of the grid). |
 | **Grand Prix + Qualifying** | 22 riders | Qualifying, then 20 laps | Qualifying: out lap + 3 flying laps, best lap sets the grid. AI quali times are simulated from their pace. Player can end qualifying early from the pause menu. |
 
-Race flow: grid → start lights (the lights label shows the lap count) → race →
+Start lights (since 1.7.2): when a race starts or is restarted, the countdown begins immediately with no grid wait.
+- The first red light is on at once, and one more comes on every 0.9 s up to five.
+- After that, the lights go out following a random hold of 0.6–2.4 s.
+- The lights label shows the lap count.
+
+Race flow: grid → start lights → race →
 chequered flag → results table (positions, gaps, best laps, DNFs).
 
 ## 3. Controls
@@ -230,4 +235,4 @@ The repository is local only (no remote push).
 
 ## 16. Version history
 
-See `CHANGELOG.md`. Current: **1.7.1**.
+See `CHANGELOG.md`. Current: **1.7.2**.

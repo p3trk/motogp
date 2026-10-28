@@ -13,7 +13,7 @@ code to match (see [§14 Change process](#14-change-process)).
 | | |
 |---|---|
 | Genre | 2D top-down motorcycle racing sim |
-| Platform | Desktop browser, single self-contained HTML file (`motogp.html`), keyboard only |
+| Platform | Desktop browser, single self-contained HTML file (`index.html`), keyboard only |
 | Track | Silverstone Grand Prix circuit, 5.89 km, 18 turns |
 | Player fantasy | Ride a MotoGP prototype around a realistic Silverstone against a full grid, manage fuel and damage, and chase lap records |
 | Pillars | Believable physics · readable top-down racing · full race weekend feel · fast to start, nothing to install |
@@ -200,7 +200,7 @@ where the ideal speed drops by more than 80 km/h.
 ## 13. Technical design
 
 - Single HTML file; no external code, only Google Fonts (Saira Condensed, Barlow). The built file is ASCII-only so it opens correctly from disk.
-- Source in `src/` (`head.html`, `core.js`, `world.js`, `render.js`, `ui.js`, `track.txt`), joined by `tools/build.py` into `motogp.html`.
+- Source in `src/` (`head.html`, `core.js`, `world.js`, `render.js`, `ui.js`, `track.txt`), joined by `tools/build.py` into `index.html`.
 - Performance:
   - static world baked into 512 px tiles of 40 m (LRU cache of 160);
   - device pixel ratio capped at 1.5, dropping to 1 when frames are slow;

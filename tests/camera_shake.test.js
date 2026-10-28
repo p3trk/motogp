@@ -61,9 +61,10 @@ const LIMITS = { pos: 0.02, rot: 0.08, dir: 0.08, scr: 2.0 }, WIN0 = 12;
   };
   console.log(`limits: speed ${LIMITS.pos * 100}%, turn ${LIMITS.rot} rad/s, direction ${LIMITS.dir} rad/s, screen ${LIMITS.scr} px`);
 
-  // record one lap with the AI riding the player's bike (fast, outside the frame loop)
+  // record one lap with the AI riding the player's bike (fast, outside the frame loop); qualifying starts
+  // from the pit box as practice did before 1.16.0, so the replay checks cover the same part of the lap
   await page.evaluate(() => {
-    const S = window.__sgp; S.UI.opts.mode = 'practice'; S.UI.opts.train = 'off'; S.UI.launch('practice', {});
+    const S = window.__sgp; S.UI.opts.mode = 'practice'; S.UI.launch('quali', {});
     const W = S.W, b = W.player; b.autopilot = true; W.paused = true; let g = 0;
     while (b.laps.length < 1 && g < 120 * 900) { S.simStep(S.SUB); g++; }
     W.paused = false;

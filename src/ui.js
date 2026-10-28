@@ -6,12 +6,12 @@ const FD = '"Saira Condensed", "Arial Narrow", sans-serif';
 const HUD = {
   m: null, tick: [], shake: 0, secFlash: [], lapFlash: null, mini: null,
   reset() { this.m = null; this.tick = []; this.secFlash = []; this.lapFlash = null; this.shake = 0; },
-  msg(t, sub, col, dur) { this.m = { t, sub, col, dur, age: 0 }; },
+  msg(t, sub, col, dur, hold) { this.m = { t, sub, col, dur, age: 0, hold }; }, // hold: stays while the bike waits for the first input
   ticker(t) { this.tick.unshift({ t, age: 0 }); this.tick = this.tick.slice(0, 3); },
   sector(k, t, best) { this.secFlash[k] = { t, best, age: 0, pb: !best || t < best }; },
   lap(t, pb, rec) { this.lapFlash = { t, pb, rec, age: 0 }; },
   step(dt) {
-    if (this.m) { this.m.age += dt; if (this.m.age > this.m.dur) this.m = null; }
+    if (this.m) { this.m.age += dt; if (this.m.hold && W.player && W.player.trainHold) this.m.age = Math.min(this.m.age, 1); if (this.m.age > this.m.dur) this.m = null; }
     for (const q of this.tick) q.age += dt; this.tick = this.tick.filter(q => q.age < 6);
     if (this.lapFlash) { this.lapFlash.age += dt; if (this.lapFlash.age > 5) this.lapFlash = null; }
     this.shake = Math.max(0, this.shake - dt * 3);
@@ -95,7 +95,7 @@ function drawHUD(dt) {
     txt(W.mode === 'quali' ? 'QUALIFYING' : W.train ? 'CURVE TRAINING' : 'PRACTICE', cx + 16, cy + 26, 15, '#ffcf1f', 800, 'left', true);
     txt(b.outLap ? 'OUT LAP' : 'LAP ' + (b.laps.length + 1) + (W.mode === 'quali' ? '/3' : ''), cx + 16, cy + 54, 26, '#fff', 800, 'left', true);
   }
-  const cur = (b.outLap || (W.mode === 'race' && W.phase !== 'run')) ? 0 : W.time - b.lapStartT;
+  const cur = (b.outLap || b.trainHold || (W.mode === 'race' && W.phase !== 'run')) ? 0 : W.time - b.lapStartT;
   const tx = cx + cw / 2 + (W.mode === 'race' ? -10 : 30);
   txt(b.outLap ? '–:––.–––' : fmtTime(cur), tx, cy + 36, 26, '#fff', 700, 'center');
   // live delta to best lap
@@ -166,7 +166,7 @@ function drawHUD(dt) {
     ctx.fillStyle = 'rgba(30,60,90,.75)'; ctx.fillRect(sx - tw / 2, sy - 34, tw, 16); ctx.fillStyle = TEAMS[o.team].c1; ctx.fillRect(sx - tw / 2, sy - 34, 3, 16);
     txt(label, sx + 1, sy - 22, 12, '#bfe4ff', 700, 'center'); ctx.globalAlpha = 1;
   }
-  if (b.trainHold) { panel(VW / 2 - 190, VH * 0.36 + 44, 380, 34, 0.85); txt('Press W, S, A or D to go · R puts you back here', VW / 2, VH * 0.36 + 66, 15, '#e9edf0', 700, 'center'); }
+  if (b.trainHold) { panel(VW / 2 - 190, VH * 0.36 + 44, 380, 34, 0.85); txt('Press W, S, A or D to go · R puts you back ' + (W.gridStart ? 'on the grid' : 'here'), VW / 2, VH * 0.36 + 66, 15, '#e9edf0', 700, 'center'); }
   if (b.crashed) { txt('Recovering rider…', VW / 2, VH * 0.36 + 56, 15, '#c9d2d8', 600, 'center'); }
 }
 
@@ -321,7 +321,7 @@ function drawTower(st, me) {
   } else {
     let rows;
     if (W.mode === 'quali') rows = W.qualiAI.map(q => ({ short: q.name.split(' ').slice(-1)[0].toUpperCase().slice(0, 3), t: q.best, me: false, c: '#8d9aa4' })).concat([{ short: me.short, t: me.bestLap || 1e9, me: true }]).sort((a, c) => a.t - c.t);
-    else { rows = me.laps.slice(-12).map((t, k, arr) => ({ short: 'LAP ' + (me.laps.length - arr.length + k + 1), t, me: t === me.bestLap })); if (Records.d.traceT) rows.unshift({ short: 'ALL-TIME', t: Records.d.traceT, me: false, rec: true }); W.ghosts.forEach((g, k) => rows.splice(k + (Records.d.traceT ? 1 : 0), 0, { short: 'GHOST ' + g.short, t: g.recBest, me: false, gh: true })); }
+    else { rows = me.laps.slice(-12).map((t, k, arr) => ({ short: 'LAP ' + (me.laps.length - arr.length + k + 1), t, me: t === me.bestLap })); if (Records.d.traceT) rows.unshift({ short: 'ALL-TIME', t: Records.d.traceT, me: false, rec: true }); const gr = []; for (const g of W.ghosts) { gr.push({ short: 'GHOST ' + g.short, t: g.recBest || 1e9, me: false, gh: true }); if (g.sync === 'rec') g.laps.forEach((t, j) => gr.push({ short: g.short + ' LAP ' + (j + 1), t, me: false, gh: true })); } rows.splice(Records.d.traceT ? 1 : 0, 0, ...gr); }
     const maxRows = Math.max(6, Math.floor((VH - 200 - 56) / rowH)); let start = 0;
     if (rows.length > maxRows) { const mi = rows.findIndex(r => r.me); start = clamp(mi - Math.floor(maxRows / 2), 0, rows.length - maxRows); }
     const vis = rows.slice(start, start + maxRows);
@@ -412,7 +412,7 @@ window.addEventListener('keydown', e => {
     if (used) e.preventDefault(); return;
   }
   if (e.code === 'KeyC' && UI.state === 'play') camCycle();
-  if (e.code === 'KeyR' && UI.state === 'play' && W.train && !W.paused) UI.launch('practice', {});
+  if (e.code === 'KeyR' && UI.state === 'play' && W.mode === 'practice' && !W.paused) UI.launch('practice', {}); // back to the spot or the grid slot, ghosts re-synced (GDD 2a, 11d)
   if (e.code === 'Escape' && (UI.state === 'play')) UI.togglePause();
   if (e.code === 'KeyM') Sound.on = !Sound.on;
 });
@@ -458,6 +458,7 @@ const UI = {
     $('recList').addEventListener('click', e => {
       const bt = e.target.closest('button[data-act]'); if (!bt) return; const id = bt.dataset.id;
       if (bt.dataset.act === 'ghost') Lib.toggleGhost(id);
+      else if (bt.dataset.act === 'sync') Lib.setSync(id);
       else if (bt.dataset.act === 'replay') RP.open([Lib.data[id]], 'menu');
       else if (bt.dataset.act === 'cmp') { const k = Lib.cmp.indexOf(id); if (k >= 0) Lib.cmp.splice(k, 1); else if (Lib.cmp.length < RP_MAX) Lib.cmp.push(id); this.renderLib(); }
       else if (bt.dataset.act === 'export') Lib.get(id).then(R => Lib.export(R));
@@ -477,7 +478,7 @@ const UI = {
     const laps = o.mode === 'gp' ? 20 : 10; const L = PHYS.tank * o.fuel / 100; const range = L / 2.65;
     $('optFuelV').textContent = L.toFixed(1) + ' L';
     const stops = Math.max(0, Math.ceil(laps * 2.65 / PHYS.tank - 0.001) - 1); $('optFuelHint').textContent = o.mode === 'practice' ? 'Practice starts with a full tank.' : `About ${range.toFixed(1)} laps on this load. A ${laps} lap race needs at least ${stops} stop${stops === 1 ? '' : 's'} on a full tank. Less fuel is lighter and faster but means more stops.`;
-    $('optFuelWrap').hidden = o.mode === 'practice'; $('optGuideWrap').hidden = o.mode !== 'practice'; $('optTrainWrap').hidden = o.mode !== 'practice'; $('trainBox').hidden = o.train !== 'on'; this.renderTraining(); this.renderRecords(); $('optGridWrap').hidden = o.mode !== 'sprint';
+    $('optFuelWrap').hidden = o.mode === 'practice'; $('optGuideWrap').hidden = o.mode !== 'practice'; $('optTrainWrap').hidden = o.mode !== 'practice'; $('trainBox').hidden = o.train !== 'on'; this.renderTraining(); this.renderRecords(); $('optGridWrap').hidden = !(o.mode === 'sprint' || (o.mode === 'practice' && o.train !== 'on')); // one setting for the race and the practice grid start (GDD 2a)
     try { localStorage.setItem('sgp_opts', JSON.stringify(o)); } catch (e) { }
   },
   renderRecords() {
@@ -584,18 +585,32 @@ const UI = {
     const src = { auto: '', import: 'imported', folder: 'saved_tracks' };
     $('recStatus').textContent = Lib.status || (Lib.stored ? 'Your last 10 sessions are kept in this browser. Imported and saved_tracks files are loaded for this visit only.' : 'Browser storage is blocked here, recordings are kept until the page closes.');
     $('btnReloadDir').hidden = !Lib.dir; if (Lib.dir) $('btnReloadDir').textContent = 'Reload ' + Lib.dir.name;
-    $('recGhostHint').textContent = Lib.ghosts.length ? `${Lib.ghosts.length} ghost${Lib.ghosts.length === 1 ? '' : 's'} selected. They ride with you in Practice (also on Curve training timed laps) and in races (each one replaces a slow AI rider).` : 'Switch on Ghost to ride against a recording in Practice or a race (up to 4).';
+    $('recGhostHint').textContent = Lib.ghosts.length ? `${Lib.ghosts.length} ghost${Lib.ghosts.length === 1 ? '' : 's'} selected. They ride with you in Practice and in races (each one replaces a slow AI rider).` : 'Switch on Ghost to ride against a recording in Practice or a race (up to 4).';
+    if (Lib.ghosts.length) $('recGhostHint').textContent += ' In Practice they start with you on the grid or the curve-training spot; Sync picks the ghost that stands on the spot with you.';
     Lib.cmp = Lib.cmp.filter(id => Lib.meta.some(m => m.id === id));
     $('btnReplaySel').disabled = !Lib.cmp.length; $('btnReplaySel').textContent = Lib.cmp.length > 1 ? `Replay ${Lib.cmp.length} together` : 'Replay selected';
     if (!Lib.meta.length) { el.innerHTML = '<span class="small">No recordings yet. Every session with a completed lap or a race start is recorded automatically.</span>'; return; }
     el.innerHTML = '<table><thead><tr><th>Ghost</th><th>Replay</th><th>Rider</th><th>Session</th><th>Best lap</th><th>Laps</th><th>Result</th><th>When</th><th></th></tr></thead><tbody>' + Lib.meta.map(m => {
       const on = Lib.ghosts.includes(m.id);
       const res = m.raceStart ? (m.position ? 'P' + m.position + (m.finishT ? ' · ' + fmtTime(m.finishT) : '') : 'DNF') : '';
-      const cmp = Lib.cmp.includes(m.id);
-      return `<tr><td><button class="chip" data-act="ghost" data-id="${esc(m.id)}" aria-pressed="${on}">${on ? 'Ghost on' : 'Ghost'}</button></td><td><button class="chip" data-act="replay" data-id="${esc(m.id)}">Replay</button> <button class="chip" data-act="cmp" data-id="${esc(m.id)}" aria-pressed="${cmp}">${cmp ? '&#10003; Compare' : 'Compare'}</button></td><td>${sw(clamp(m.rider.team | 0, 0, TEAMS.length - 1))}#${m.rider.num | 0} ${esc(m.rider.name)}</td><td>${lbl[m.kind] || esc(m.mode)}${src[m.src] ? ' <span class="small">· ' + src[m.src] + '</span>' : ''}</td><td>${m.bestLap ? fmtTime(m.bestLap) : '–'}</td><td>${m.laps | 0}</td><td>${res}</td><td class="small">${new Date(m.date).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</td><td><button class="chip" data-act="export" data-id="${esc(m.id)}">Export</button> <button class="chip" data-act="del" data-id="${esc(m.id)}">Delete</button></td></tr>`;
+      const cmp = Lib.cmp.includes(m.id), ref = on && Lib.syncId() === m.id;
+      return `<tr><td><button class="chip" data-act="ghost" data-id="${esc(m.id)}" aria-pressed="${on}">${on ? 'Ghost on' : 'Ghost'}</button>${on ? ` <button class="chip" data-act="sync" data-id="${esc(m.id)}" aria-pressed="${ref}" title="Sync reference: stands on the curve-training spot with you">${ref ? '&#10003; Sync' : 'Sync'}</button>` : ''}</td><td><button class="chip" data-act="replay" data-id="${esc(m.id)}">Replay</button> <button class="chip" data-act="cmp" data-id="${esc(m.id)}" aria-pressed="${cmp}">${cmp ? '&#10003; Compare' : 'Compare'}</button></td><td>${sw(clamp(m.rider.team | 0, 0, TEAMS.length - 1))}#${m.rider.num | 0} ${esc(m.rider.name)}</td><td>${lbl[m.kind] || esc(m.mode)}${src[m.src] ? ' <span class="small">· ' + src[m.src] + '</span>' : ''}</td><td>${m.bestLap ? fmtTime(m.bestLap) : '–'}</td><td>${m.laps | 0}</td><td>${res}</td><td class="small">${new Date(m.date).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</td><td><button class="chip" data-act="export" data-id="${esc(m.id)}">Export</button> <button class="chip" data-act="del" data-id="${esc(m.id)}">Delete</button></td></tr>`;
     }).join('') + '</tbody></table>';
   },
-  hideAll() { for (const id of ['menu', 'pause', 'results']) $(id).hidden = true; this.trainIn(false); this.camIn(false); },
+  hideAll() { for (const id of ['menu', 'pause', 'results']) $(id).hidden = true; this.trainIn(false); this.camIn(false); this.syncIn(false); },
+  syncIn(show) { // "Sync ghosts to" in the practice pause menu, with 2 or more ghosts (GDD 11c, 11d)
+    let P = $('pauseSync');
+    if (!P && show) {
+      P = document.createElement('div'); P.id = 'pauseSync'; P.className = 'opts'; P.style.marginTop = '14px';
+      P.innerHTML = '<div class="opt" style="grid-column:1/-1"><label for="optSync">Sync ghosts to</label><select id="optSync"></select><span class="hint">This ghost stands on the curve-training spot with you; the others are placed by lap time relative to it. Applies from the next Restart, R or Go to spot.</span></div>';
+      $('pauseTrain').after(P);
+      $('optSync').addEventListener('change', e => { Lib.setSync(e.target.value); e.target.blur(); });
+    }
+    if (!P) return;
+    const recs = Lib.ghostRecs(); P.hidden = !show || recs.length < 2; if (P.hidden) return;
+    $('optSync').innerHTML = recs.map(R => `<option value="${esc(R.id)}">#${R.rider.num | 0} ${esc(R.rider.name)} · ${RP_LBL[R.kind] || esc(R.mode)} · ${R.bestLap ? fmtTime(R.bestLap) : 'no lap'}</option>`).join('');
+    $('optSync').value = Lib.syncId();
+  },
   trainIn(pause) { // the curve-training block moves between the main menu and the practice pause menu (GDD 11d)
     const el = $('optTrainWrap'), P = $('pauseTrain');
     if (pause) { P.appendChild(el); P.hidden = false; } else if (el.parentNode === P) { $('optGridWrap').before(el); P.hidden = true; }
@@ -636,7 +651,7 @@ const UI = {
   sessionOpts(extra) {
     const o = this.opts;
     const train = o.mode === 'practice' && o.train === 'on' ? { s: o.trainS, v: o.trainV / 3.6 } : null;
-    return Object.assign({ train, name: o.name, num: o.num, team: o.team, aids: o.aids === 'on', auto: o.trans === 'auto', level: o.ai, fuelPct: o.fuel / 100, gridPos: o.grid, guide: o.guide === 'on' }, extra);
+    return Object.assign({ train, syncId: Lib.syncId(), name: o.name, num: o.num, team: o.team, aids: o.aids === 'on', auto: o.trans === 'auto', level: o.ai, fuelPct: o.fuel / 100, gridPos: o.grid, guide: o.guide === 'on' }, extra);
   },
   launch(kind, extra) {
     Rec.stop(); this.hideAll(); this.state = 'play'; setCamMode(this.opts.cam); CAM.init = false;
@@ -648,8 +663,9 @@ const UI = {
   togglePause() {
     if (this.state !== 'play') return;
     W.paused = !W.paused; $('pause').hidden = !W.paused;
-    $('pauseSub').textContent = W.mode === 'race' ? `Lap ${Math.min(W.totalLaps, W.player.lap + 1)} of ${W.totalLaps}` : W.mode === 'quali' ? 'Qualifying' : W.train ? 'Curve training · restart puts you back on the spot' : 'Free practice';
+    $('pauseSub').textContent = W.mode === 'race' ? `Lap ${Math.min(W.totalLaps, W.player.lap + 1)} of ${W.totalLaps}` : W.mode === 'quali' ? 'Qualifying' : W.train ? 'Curve training · restart puts you back on the spot' : 'Free practice · restart puts you back on the grid';
     this.trainIn(W.paused && W.mode === 'practice');
+    this.syncIn(W.paused && W.mode === 'practice');
     this.camIn(W.paused && camTilted());
     if (W.paused) $('btnResume').focus();
   },

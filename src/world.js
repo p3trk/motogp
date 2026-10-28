@@ -83,9 +83,11 @@ function setupSession(kind, opts) {
     });
   }
   // ghost opponents (GDD 11c): in a race each one takes the place of one of the slowest AI riders;
-  // in practice, also curve training (GDD 11d), they only ride with the player's timed laps
+  // in practice they start with the player on the grid or on the curve-training spot (GDD 1.16.0)
   W.train = W.mode === 'practice' && opts.train ? opts.train : null;
-  Ghost.setup(opts.ghosts || []);
+  W.gridStart = W.mode === 'practice' && !W.train; W.startT = -1; W.lineT = -1;
+  W.gridSlot = W.gridStart ? GRID_SLOT[opts.gridPos] ?? 11 : -1;
+  Ghost.setup(opts.ghosts || [], opts.syncId);
   if (W.mode === 'race') for (const b of W.bikes.filter(b => !b.isPlayer).sort((a, b) => a.ai.pace - b.ai.pace).slice(0, W.ghosts.length)) W.bikes.splice(W.bikes.indexOf(b), 1);
   // box assignment: teammates share neighbouring boxes in team order
   const order = W.bikes.slice().sort((a, b) => a.team - b.team || a.id - b.id); order.forEach((b, k) => b.box = k);
@@ -96,26 +98,25 @@ function setupSession(kind, opts) {
     if (opts.qualiGrid) grid = opts.qualiGrid.map(id => W.bikes.find(b => b.id === id)).filter(Boolean);
     else {
       const ais = W.bikes.filter(b => !b.isPlayer).sort((a, b) => b.ai.pace - a.ai.pace + (W.rand() - 0.5) * 0.012);
-      const slot = { pole: 0, front: 2, mid: 11, back: 21 }[opts.gridPos] ?? 11;
+      const slot = GRID_SLOT[opts.gridPos] ?? 11;
       ais.splice(slot, 0, pBike); grid = ais;
     }
     grid.forEach((b, k) => {
-      const r = Math.floor(k / 3), c = k % 3;
-      const sr = -8 - r * 9.5 - c * 2.4; const i = T.idx(sr); const d = (1 - c) * 3.9;
-      const [x, y] = T.pt(i, d);
+      const { sr, i, d } = gridPose(k), [x, y] = T.pt(i, d);
       Object.assign(b, { x, y, h: T.H[i], i, s: T.wrapS(sr), d, prevS: T.wrapS(sr), held: true, gridCross: true, lap: 0, gear: 1, grid: k + 1 });
       b.fuel = b.isPlayer ? PHYS.tank * opts.fuelPct : aiStartFuel(b);
       b.fuelLapStart = b.fuel;
     });
     W.phase = 'grid'; W.lights = 0; W.phaseT = 0;
   } else {
-    // practice / qualifying: start from the box
+    // qualifying: start from the box; practice: on the chosen grid slot or the curve-training spot (GDD 2a, 11d)
     const b = pBike; const sr = T.PIT.boxS(b.box); const i = T.idx(sr);
     const [x, y] = T.pt(i, T.PIT.boxD - 0.5);
     Object.assign(b, { x, y, h: T.H[i], i, s: T.wrapS(sr), d: T.PIT.boxD - 0.5, prevS: T.wrapS(sr), outLap: true, lap: 0 });
     b.fuel = W.mode === 'quali' ? 12 : PHYS.tank; b.fuelLapStart = b.fuel;
     if (W.train) placeTraining(b, W.train);
-    W.phase = 'run';
+    else if (W.gridStart) placeGrid(b, W.gridSlot);
+    W.phase = 'run'; W.lights = 0;
     if (W.mode === 'quali') W.qualiAI = simulateQualiAI(opts);
   }
   const nb = Math.ceil((Math.max(W.totalLaps, 1) + 3) * T.L / 10) + 200;
@@ -124,9 +125,18 @@ function setupSession(kind, opts) {
   W.bestTrace = Records.d.trace && Records.d.trace.length === W.curTrace.length ? Float32Array.from(Records.d.trace) : null; W.bestTraceT = Records.d.traceT || 0;
   W.guide = W.mode === 'practice' && opts.guide; W.recordMsg = '';
   HUD.reset();
-  if (W.train) HUD.msg('CURVE TRAINING', T.cornerAt(W.train.s) + ' · ' + Math.round(W.train.v * 3.6) + ' km/h', '#ffcf1f', 2.5);
-  else if (W.mode === 'practice') HUD.msg('FREE PRACTICE', 'Leave the box with W. Pit lane limiter is automatic.', '#ffcf1f', 4);
+  const ref = W.syncRef; // the start message names the reference ghost's speed at the spot (GDD 11c)
+  if (W.train) HUD.msg('CURVE TRAINING', T.cornerAt(W.train.s) + ' · ' + Math.round(W.train.v * 3.6) + ' km/h' + (ref ? ' · ghost ' + ref.short + ' ' + Math.round(ref.vSpot * 3.6) + ' km/h' : ''), '#ffcf1f', 3, true);
+  else if (W.mode === 'practice') HUD.msg('FREE PRACTICE', 'P' + (W.gridSlot + 1) + ' on the grid · press W, S, A or D to go', '#ffcf1f', 4, true);
   if (W.mode === 'quali') HUD.msg('QUALIFYING', 'Out lap, then 3 flying laps. Best lap sets your grid slot.', '#ffcf1f', 4);
+}
+// grid slot k (0 = pole): 3 bikes per row, the same boxes in a race and in practice (GDD 2a)
+const GRID_SLOT = { pole: 0, front: 2, mid: 11, back: 21 };
+function gridPose(k) { const r = Math.floor(k / 3), c = k % 3, sr = -8 - r * 9.5 - c * 2.4; return { sr, i: T.idx(sr), d: (1 - c) * 3.9 }; }
+// practice grid start (GDD 2a): standing on the slot, frozen until the first input; lap 1 is a standing-start lap
+function placeGrid(b, k) {
+  const { sr, i, d } = gridPose(k), [x, y] = T.pt(i, d), s = T.wrapS(sr);
+  Object.assign(b, { x, y, h: T.H[i], i, s, d, prevS: s, v: 0, gear: 1, outLap: false, gridCross: true, lap: 0, grid: k + 1, trainHold: true });
 }
 // curve training (GDD 11d): centre of the road at the chosen spot, frozen until the first input
 function placeTraining(b, tr) {
@@ -184,6 +194,7 @@ function simStep(dt) {
   for (const b of bikes) {
     const pd = b.d;
     if (b.trainHold) { const K = Input.k; if (K.KeyW || K.KeyS || K.KeyA || K.KeyD || K.ArrowUp || K.ArrowDown || K.ArrowLeft || K.ArrowRight) b.trainHold = false; else continue; }
+    if (b.isPlayer && W.startT < 0 && W.mode === 'practice') startMoment(b);
     stepBike(b, dt, W);
     if (b.crashed || b.dnf) continue;
     T.project(b.x, b.y, b.i, b);
@@ -198,6 +209,13 @@ function simStep(dt) {
   collide(bikes);
   FX.step(dt);
   for (const b of bikes) if (b.crashed) { b.prevS = b.s; }
+}
+
+// the first input on the grid or the spot: lap 1 is timed from here and the ghosts start moving (GDD 2a, 11c)
+function startMoment(b) {
+  W.startT = W.time;
+  if (W.gridStart) { b.lapStartT = W.time; b.secStart = W.time; }
+  if (Rec.cur) Rec.cur.start.t = r2(W.time, 1000);
 }
 
 function playerControl(b, dt) {
@@ -278,6 +296,7 @@ function endService(b) {
 function timing(b) {
   const L = T.L, prev = b.prevS, s = b.s; const ds = s - prev;
   if (ds < -L / 2) { // crossed the line forwards
+    if (b.isPlayer) W.lineT = W.time; // practice ghosts start a best lap at every crossing (GDD 11c)
     if (b.gridCross) { b.gridCross = false; b.cp = 0; }
     else if (b.outLap) { b.outLap = false; b.lapStartT = W.time; b.secStart = W.time; b.cp = 0; b.fuelLapStart = b.fuel; if (b.isPlayer) { HUD.msg('TIMED LAP', '', '#ffcf1f', 1.2); W.curTrace.fill(-1); } }
     else if (b.cp >= 2) completeLap(b);

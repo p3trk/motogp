@@ -508,6 +508,7 @@ const Touch = {
   angle() { return screen.orientation ? screen.orientation.angle : 0; },
   press(e) {
     e.preventDefault();
+    const sel = getSelection(); if (sel && sel.rangeCount) sel.removeAllRanges(); // a selection that slipped through is cleared (GDD 3a)
     if (UI.state === 'replay') { const f = e.clientX / innerWidth; if (f < 1 / 3) RP.seek(RP.t - 5); else if (f > 2 / 3) RP.seek(RP.t + 5); else RP.toggle(); return; }
     if (UI.state !== 'play' || W.paused) return;
     this.pts.set(e.pointerId, this.zone(e.clientX)); this.refresh();
@@ -576,6 +577,11 @@ const UI = {
     $('btnResume').addEventListener('click', () => this.togglePause());
     $('btnCentre').addEventListener('click', () => Touch.recentre());
     $('touch').addEventListener('pointerdown', e => Touch.press(e));
+    // iPhone WebKit (Safari, Brave) runs its long-press selection, magnifier and double-tap / pinch zoom unless the touch
+    // events themselves are cancelled; a cancelled pointerdown is not enough. Pointer events still fire (GDD 3a, 1.19.7)
+    for (const t of ['touchstart', 'touchmove', 'touchend']) $('touch').addEventListener(t, e => { if (e.cancelable) e.preventDefault(); }, { passive: false });
+    const inGame = () => this.state === 'play' || this.state === 'replay';
+    for (const t of ['selectstart', 'contextmenu']) document.addEventListener(t, e => { if (inGame() && !e.target.closest('input,textarea,select')) e.preventDefault(); });
     addEventListener('pointerup', e => Touch.release(e)); addEventListener('pointercancel', e => Touch.release(e));
     $('touchPause').addEventListener('click', () => this.togglePause());
     $('btnRestart').addEventListener('click', () => { this.hideAll(); this.launch(W.kind === 'quali' ? 'quali' : this.opts.mode, W.kind === 'gp' ? { qualiGrid: W.opts.qualiGrid } : {}); });

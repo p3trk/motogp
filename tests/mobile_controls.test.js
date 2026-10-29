@@ -66,6 +66,26 @@ const FILE = 'file://' + path.resolve(process.argv[2] || path.join(__dirname, '.
   check('left half: brake pressed', c.brk > 0.5 && c.thr < 0.01, c);
   await release(1); await step(60);
 
+  // during play (GDD 3a, since 1.19.7): the touch layer cancels the touch events themselves, which is what stops iPhone
+  // WebKit's long-press selection and double-tap / pinch zoom; text selection and the long-press menu are blocked
+  const play = await page.evaluate(() => {
+    const el = document.getElementById('touch'), r = {};
+    for (const t of ['touchstart', 'touchmove', 'touchend']) {
+      const tc = new Touch({ identifier: 9, target: el, clientX: 600, clientY: 200 });
+      const ev = new TouchEvent(t, { cancelable: true, bubbles: true, touches: t === 'touchend' ? [] : [tc], changedTouches: [tc] });
+      el.dispatchEvent(ev); r[t] = ev.defaultPrevented;
+    }
+    const sel = new Event('selectstart', { cancelable: true, bubbles: true }); el.dispatchEvent(sel); r.selectstart = sel.defaultPrevented;
+    const cm = new MouseEvent('contextmenu', { cancelable: true, bubbles: true }); el.dispatchEvent(cm); r.contextmenu = cm.defaultPrevented;
+    r.callout = getComputedStyle(document.body).webkitTouchCallout;
+    return r;
+  });
+  check('play: touch events cancelled (no iPhone selection or zoom)', play.touchstart && play.touchmove && play.touchend, play);
+  check('play: text selection and long-press menu blocked', play.selectstart && play.contextmenu, play);
+  await press(1, 100); await step(30); c = await ctl();
+  check('play: brake still works with touch events cancelled', c.brk > 0.5, c);
+  await release(1); await step(60);
+
   // right half throttles
   await press(2, 700); await step(60);
   c = await ctl();

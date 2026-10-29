@@ -291,6 +291,21 @@ const T = {};
   };
   const prof = T.speedProfile(PHYS.mu * 0.97);
   T.VP = prof.V; T.refLap = prof.lapTime;
+  // Long Lap loop (GDD 6a): a 6 m lane in the tarmac run-off on the outside of Stowe, 70 m either side of the apex
+  {
+    const c = T.corners.find(q => q.name === 'Stowe'); let k = c.i, mn = 1e9;
+    for (let o = -60; o <= 60; o++) { const q = (c.i + o + N) % N; if (T.VP[q] < mn) { mn = T.VP[q]; k = q; } }
+    const sg = KS[k] > 0 ? -1 : 1, side = sg > 0 ? 0 : 1, sM = k * DS, w = 6, depth = 22;
+    const LL = { sA: sM - 70, sM, sB: sM + 70, sg, side, w, name: c.name };
+    LL.cps = [LL.sA + 28, sM, LL.sB - 28];
+    LL.off = function (s) { // lane centre: distance from the centre line, outwards
+      const i = T.idx(s), u = clamp((s - LL.sA) / (LL.sB - LL.sA), 0, 1), base = EDGE[side][i] + KERB[side][i] + w / 2;
+      const room = EDGE[side][i] + KERB[side][i] + (RT[side][i] === SURF.RUN ? RUN[side][i] : 0) - w / 2 - 0.5;
+      return Math.max(base, Math.min(base + depth * Math.sin(Math.PI * u) ** 2, room));
+    };
+    T.LL = LL;
+    T.inLL = (s, d) => s >= LL.sA && s <= LL.sB && Math.sign(d) === sg && Math.abs(Math.abs(d) - LL.off(s)) <= w / 2;
+  }
   // braking boards: big decelerations ahead of corners
   T.boards = []; T.zones = []; // zones: one per braking corner, boards measured to zi (GDD 11b)
   for (let i = 0; i < N; i++) {
@@ -339,7 +354,7 @@ function makeBike(o) {
     crashed: false, crash: null, held: false, dnf: false, finished: false, finishT: 0, crashes: 0, pits: 0,
     pitPlan: false, pitFill: 0, service: false, serviceT: 0, inPitLane: false, limiter: false, box: 0, needRelease: false,
     ai: null, fuelLapStart: PHYS.tank, fuelPerLap: 2.6, progress: 0, msgs: [],
-    offT: -1, offS: 0, offCr: 0, lapInv: false, lapsInv: [], pen: 0
+    offT: -1, offS: 0, offCr: 0, lapInv: false, lapsInv: [], pen: 0, tl: 0, llPend: [], llRun: null, llGiven: 0, dropBehind: null, dropPen: 0
   }, o);
 }
 const Pj = { i: 0, s: 0, d: 0 };

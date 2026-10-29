@@ -561,6 +561,9 @@ function drawWorldLayer(Ly, sx, sy) {
     }
     ctx.globalAlpha = 1;
   }
+  if (W.mode === 'race' && W.player && W.player.llPend?.length && vis(T.X[T.idx(T.LL.sM)], T.Y[T.idx(T.LL.sM)], 120)) { // Long Lap pending (GDD 6a)
+    if (!GEO.llPath) GEO.llPath = llPath(); ctx.strokeStyle = 'rgba(255,207,31,.95)'; ctx.lineWidth = 0.4; ctx.setLineDash([2, 1.5]); ctx.stroke(GEO.llPath); ctx.setLineDash([]);
+  }
   ctx.lineCap = 'butt';
   drawPitBoxes(vis, false);
   drawBuildings(vis, false);
@@ -604,12 +607,22 @@ function drawTrackPaint(vis) {
     ctx.scale(0.05, 0.05); ctx.fillStyle = '#111'; ctx.font = '800 17px "Saira Condensed", Arial Narrow, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(String(bd.dist), 0, 1);
     ctx.restore();
   }
+  // Long Lap loop (GDD 6a): dashed white lane edges and LONG LAP on the tarmac
+  { const LL = T.LL, i = T.idx(LL.sM); if (vis(T.X[i], T.Y[i], 120)) {
+    ctx.strokeStyle = 'rgba(245,245,245,.85)'; ctx.lineWidth = 0.25; ctx.setLineDash([2, 1.5]); ctx.stroke(llPath()); ctx.setLineDash([]);
+    groundText('LONG LAP', ...P(i, LL.sg * LL.off(LL.sM)), T.H[i], 2.4, 'rgba(255,255,255,.75)');
+  } }
   // corner names painted on run-off
   for (const c of T.corners) {
     if (/Straight/.test(c.name)) continue; const i = c.i; const sg = T.KS[i] > 0 ? -1 : 1; const side = sg > 0 ? 0 : 1;
     const [x, y] = P(i, sg * (T.EDGE[side][i] + T.KERB[side][i] + Math.min(6, T.RUN[side][i] * 0.4 + 2))); if (!vis(x, y, 20)) continue;
     groundText(c.name.toUpperCase(), x, y, T.H[i], 2.6, 'rgba(255,255,255,.55)');
   }
+}
+function llPath() { // both edges of the Long Lap lane
+  const LL = T.LL, p = new Path2D();
+  for (const e of [-1, 1]) for (let s = LL.sA, j = 0; s <= LL.sB + 0.01; s += 2, j++) { const [x, y] = T.pt(T.idx(s), LL.sg * (LL.off(s) + e * LL.w / 2)); j ? p.lineTo(x, y) : p.moveTo(x, y); }
+  return p;
 }
 function groundText(txt, x, y, ang, size, col) {
   ctx.save(); ctx.translate(x, y); ctx.rotate(ang + Math.PI / 2); ctx.scale(size / 40, size / 40);

@@ -67,15 +67,17 @@ Without 1 and 2 a swap changes nothing, so they come first.
 **Recordings, ghosts and replay**
 - Recordings already include pit stops (GDD §11c). A swap is recorded the same way, plus the tyre type, so a ghost shows the right bike after its swap.
 
-## 5. Open questions (recommended answer in bold)
+## 5. Open questions (all answered; Petr's answer in bold)
 
-1. Swap time standing still in the box? **About 3 s**, the rider getting off and on. Plus the time lost in the pit lane, which the game already has. Tune it after measuring a full pit lane pass at Silverstone in the game.
+On 2026-10-29 Petr decided questions 2 and 8 and confirmed the recommended answers for all the others.
+
+1. Swap time standing still in the box? **Decided: About 3 s**, the rider getting off and on. Plus the time lost in the pit lane, which the game already has. Tune it after measuring a full pit lane pass at Silverstone in the game.
 2. When are the second bike's tyres prepared? **Decided: before the race starts.** Default is the opposite of the start tyre; the player can pick slick or wet for each bike in the pre-race menu. (Replaces the earlier idea of the team picking tyres automatically during the race.)
-3. Allow a swap in a dry race? **No**, as in the real rules. The box does nothing until the race is declared wet.
-4. Mandatory swap race (as Phillip Island 2013)? **Later, as an optional race rule**: one swap between two given laps, disqualification if missed. This is the only form that would work without weather, but on its own it adds little, since both bikes would be the same.
-5. Should the second bike repair damage? **Yes**, it is a different bike. This makes a swap after a crash attractive, which is also true in real racing.
-6. Qualifying in the wet? **Swaps allowed at any time**, as in real practice and qualifying.
-7. Judge pit lane speeding? **No**, the limiter is automatic (GDD §7).
+3. Allow a swap in a dry race? **Decided: No**, as in the real rules. The box does nothing until the race is declared wet.
+4. Mandatory swap race (as Phillip Island 2013)? **Decided: Later, as an optional race rule**: one swap between two given laps, disqualification if missed. This is the only form that would work without weather, but on its own it adds little, since both bikes would be the same.
+5. Should the second bike repair damage? **Decided: Yes**, it is a different bike. This makes a swap after a crash attractive, which is also true in real racing.
+6. Qualifying in the wet? **Decided: Swaps allowed at any time**, as in real practice and qualifying.
+7. Judge pit lane speeding? **Decided: No**, the limiter is automatic (GDD §7).
 8. After a swap, is the bike left in the box prepared again? **Decided: yes, after a preparation time of about 1 lap**, with the tyre the team expects next (in real racing mechanics can work on it while the race goes on). Coming in before it is ready gives the bike with its old tyres. Alternative: no re-preparation, so each bike keeps its pre-race tyres all race.
 
 ## 6. Rough phases

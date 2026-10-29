@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.22.0 (2026-10-29)
+- No refuelling (GDD 7). Fuel use is about 1.0 L per lap (was 2.6), so a full 22 L tank covers the 20 lap Grand Prix. The starting fuel hint shows the least fuel that finishes the race (10 lap race 50 %, Grand Prix 95 %).
+- Pit stop kept: stopping in your box holds the bike until you press W. A stop neither refuels nor repairs; the stop timer and BOX message stay. AI riders never pit.
+- Tests: no new test; npm test passes.
+
 ## v1.21.0 (2026-10-29)
 - Track limits, Phase 2 (GDD 6a). In races each trip beyond the kerb that lost less than 0.5 s is one infraction: TRACK LIMITS 1/5 on the HUD, a warning at the 3rd, a Long Lap at the 5th (10 lap race: 2nd and 3rd, the real Sprint numbers). Time gained by a cut is given back at once as a time penalty, and a gain of 1 s or more gives a Long Lap at once. This replaces the fixed 2 s penalty from 1.20.0.
 - Long Lap loop on the outside of Stowe: a 6 m lane in the tarmac run-off, 140 m long and about 22 m out at the apex, with dashed lines and LONG LAP painted on it. Yellow lines, a blinking minimap ring and a board above the dashboard while one is pending. Serve it within 3 laps; it always costs at least 2.5 s (top-up), not serving it costs 5 s, and with fewer than 3 laps left it is 3 s at once.

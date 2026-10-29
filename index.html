@@ -116,12 +116,12 @@ tr.me td.pos{color:var(--accent)}
   <div class="wrap">
     <div style="display:flex;flex-direction:column;gap:10px">
       <div class="eyebrow">British Grand Prix &#xB7; Silverstone Circuit &#xB7; Northamptonshire</div>
-      <h1>Silverstone <span>GP</span> <span class="ver">v1.21.0</span></h1>
+      <h1>Silverstone <span>GP</span> <span class="ver">v1.22.0</span></h1>
       <div class="facts"><span><b>5.891</b>km lap</span><span><b>18</b>turns</span><span><b>22</b>riders</span><span><b>20</b>laps race distance</span><span><b>Hangar</b>straight, 330+ km/h</span></div>
     </div>
     <div class="modes" role="group" aria-label="Race mode">
       <button class="mode" data-mode="practice" aria-pressed="false"><span class="tag">Free practice</span><span class="t">Practice</span><span class="d">Leave your box and lap Silverstone on your own. Lap times, sectors and pit stops, no time limit.</span></button>
-      <button class="mode" data-mode="sprint" aria-pressed="true"><span class="tag">Race &#xB7; 10 laps</span><span class="t">10 Lap Race</span><span class="d">Full 22-rider grid. Choose your starting slot, fuel strategy decides when you pit.</span></button>
+      <button class="mode" data-mode="sprint" aria-pressed="true"><span class="tag">Race &#xB7; 10 laps</span><span class="t">10 Lap Race</span><span class="d">Full 22-rider grid. Choose your starting slot and how much fuel to start with. No refuelling.</span></button>
       <button class="mode" data-mode="gp" aria-pressed="false"><span class="tag">Qualifying + race &#xB7; 20 laps</span><span class="t">Grand Prix</span><span class="d">Qualify against the field (out lap + 3 flying laps), then start the official 20 lap race from your grid slot.</span></button>
     </div>
     <div class="opts">
@@ -146,7 +146,7 @@ tr.me td.pos{color:var(--accent)}
     <div class="keys">
       <span><kbd>W</kbd>Gas</span><span><kbd>S</kbd>Brake</span><span><kbd>A</kbd><kbd>D</kbd>Lean left / right</span><span><kbd>O</kbd>Shift up</span><span><kbd>L</kbd>Shift down</span><span><kbd>Esc</kbd>Pause</span><span><kbd>C</kbd>Camera</span><span><kbd>R</kbd>Back to training spot</span><span><kbd>M</kbd>Sound</span>
     </div>
-    <div class="note">Pit lane is on the right after Club. Ride into your box (marked in your team colour, flashing on the map), stop, and the crew refuels and repairs. Press <b>W</b> to leave. Pit lane limiter is 60 km/h and engages on its own.</div>
+    <div class="note">Pit lane is on the right after Club. Ride into your box (marked in your team colour, flashing on the map), stop. Press <b>W</b> to leave. A pit stop does not refuel or repair. Pit lane limiter is 60 km/h and engages on its own.</div>
     <div class="actions"><button class="btn" id="btnStart">Go to track</button><span class="hint">Keyboard or touch screen. Sound starts when you press Go.</span></div>
   </div>
 </div>
@@ -202,7 +202,7 @@ const PHYS = {
   gears: [0, 135, 178, 220, 260, 302, 345].map(k => k / 3.6), // top speed per gear at redline
   CdA: 0.30, rho: 1.2, roll: 0.015,
   mu: 1.68, brakeMax: 1.55 * G, wheelie: 1.02 * G, maxLean: 64 * DEG,
-  pitLimit: 60 / 3.6, refuelRate: 2.6, fuelK: 0.052,
+  pitLimit: 60 / 3.6, fuelK: 0.02, lapFuel: 1.0, // lapFuel: litres per lap at race pace (GDD 7); no refuelling since 1.22.0
   VS: 1.35 // visual scale of bike sprites (collision uses same footprint)
 };
 const SURF = { ASPH: 0, KERB: 1, RUN: 2, GRAVEL: 3, GRASS: 4, PIT: 5, WALL: 6 };
@@ -534,8 +534,8 @@ function makeBike(o) {
     i: 0, s: 0, d: 0, surf: 0, prevS: 0,
     lap: 0, gridCross: false, cp: 0, lapStartT: 0, lastLap: 0, bestLap: 0, laps: [], secStart: 0, sectors: [0, 0, 0], bestSec: [0, 0, 0], lastSec: [0, 0, 0], sec: 0,
     crashed: false, crash: null, held: false, dnf: false, finished: false, finishT: 0, crashes: 0, pits: 0,
-    pitPlan: false, pitFill: 0, service: false, serviceT: 0, inPitLane: false, limiter: false, box: 0, needRelease: false,
-    ai: null, fuelLapStart: PHYS.tank, fuelPerLap: 2.6, progress: 0, msgs: [],
+    service: false, serviceT: 0, inPitLane: false, limiter: false, box: 0, needRelease: false,
+    ai: null, fuelLapStart: PHYS.tank, fuelPerLap: PHYS.lapFuel, progress: 0, msgs: [],
     offT: -1, offS: 0, offCr: 0, lapInv: false, lapsInv: [], pen: 0, tl: 0, llPend: [], llRun: null, llGiven: 0, dropBehind: null, dropPen: 0
   }, o);
 }
@@ -691,13 +691,6 @@ function aiControl(b, dt, W) {
   if (b.crashed || b.dnf) return;
   const sr = T.rel(b.s);
   A.think -= dt;
-  // fuel strategy: decide before Stowe whether to box at the end of this lap
-  if (W.mode !== 'quali' && !b.pitPlan && b.s > T.L - 1500 && b.s < T.L - 1300 && !b.finished && !W.flag) {
-    const lapsLeft = W.totalLaps - b.lap - 1;
-    const per = Math.max(1.6, b.fuelPerLap);
-    if (lapsLeft > 0 && b.fuel < per * 1.15 + 0.4) { b.pitPlan = true; b.pitFill = Math.min(PHYS.tank, per * lapsLeft * 1.08 + 0.9); }
-    if (b.dmg.a > 0.55 || b.dmg.c > 0.55) { b.pitPlan = lapsLeft > 1 || b.pitPlan; b.pitFill = Math.max(b.pitFill, Math.min(PHYS.tank, per * lapsLeft * 1.08 + 0.9)); }
-  }
   // traffic awareness: nearest rider ahead in my lane, riders alongside
   if (A.think <= 0) {
     A.think = 0.08 + W.rand() * 0.06;
@@ -729,13 +722,12 @@ function aiControl(b, dt, W) {
   const look = 6 + v * 0.42; const j = (b.i + Math.round(look / DS)) % N;
   let dT = T.lat[j] + A.off;
   const sj = T.rel(j * DS);
-  const pitting = b.pitPlan || b.inPitLane;
+  const pitting = b.inPitLane;
   if (pitting) {
     if (sj > PIT.sIn - 260 && sj < PIT.sIn + 2) dT = T.WR[j] - 2.2;
     const pc = PIT.center(sj);
     if (pc !== null) dT = pc;
-    if (b.pitPlan && pc !== null) { const bs = PIT.boxS(b.box); if (sj > bs - 45 && sj < bs + 10) dT = lerp(PIT.d, PIT.boxD, sstep((sj - (bs - 45)) / 30)); }
-    if (!b.pitPlan && b.inPitLane && sj > PIT.flatOut) dT = pc !== null ? pc : dT;
+    if (b.inPitLane && sj > PIT.flatOut) dT = pc !== null ? pc : dT;
   }
   dT = clamp(dT, -(T.WL[j] - 0.9), pitting ? 30 : T.WR[j] - 0.9);
   const tx = T.X[j] + T.NX[j] * dT, ty = T.Y[j] + T.NY[j] * dT;
@@ -757,16 +749,13 @@ function aiControl(b, dt, W) {
     const lim = PHYS.pitLimit - 0.4;
     if (sr > PIT.limIn - 140 && sr < PIT.limIn) vt = Math.min(vt, Math.sqrt(lim * lim + 2 * 9 * Math.max(0, PIT.limIn - sr)));
     if (b.inPitLane && sr >= PIT.limIn && sr <= PIT.limOut) vt = Math.min(vt, lim);
-    if (b.pitPlan) { const bs = PIT.boxS(b.box); if (sr > bs - 80 && sr < bs + 3) vt = Math.min(vt, Math.sqrt(2 * 5 * Math.max(0, bs - sr - 0.3))); }
   }
-  if (b.service) vt = 0;
   if (W.flag && b.finished) vt = Math.min(vt, 30);
   // mistakes: occasional late braking for lower-consistency riders
   if (A.mistake > 0) { A.mistake -= dt; vt *= 1.06; } else if (W.rand() < dt * 0.004 * (1 - A.cons)) A.mistake = 0.6;
   if (v < vt - 0.2) { c.thr = clamp((vt - v) * 0.6 + 0.25, 0, 1); c.brk = 0; }
   else if (v > vt + 0.4) { c.thr = 0; c.brk = clamp((v - vt) * 0.3, 0, 1); }
   else { c.thr = 0.35; c.brk = 0; }
-  if (b.service) { c.thr = 0; c.brk = 1; }
 }
 
 // ---------------------------------------------------------------------------
@@ -918,12 +907,8 @@ function placeTraining(b, tr) {
   b.rpm = b.rpmVis = Math.max(PHYS.idle, rpmFor(tr.v, gear));
 }
 function aiStartFuel(b) {
-  // AI strategies: most start full and stop once / twice; some start light
-  const laps = W.totalLaps, per = 2.65;
-  const need = laps * per; if (need <= PHYS.tank) return Math.min(PHYS.tank, need + 0.6);
-  const stops = Math.ceil(need / PHYS.tank) - 1;
-  const light = W.rand() < 0.35;
-  return light ? Math.min(PHYS.tank, need / (stops + 1) + 1.2) : PHYS.tank;
+  // AI riders never refuel (GDD 7): start with just enough fuel to finish
+  return Math.min(PHYS.tank, W.totalLaps * PHYS.lapFuel + 0.6);
 }
 function simulateQualiAI(opts) {
   const rr = mulberry(1234);
@@ -1049,23 +1034,16 @@ function pitLogic(b, dt) {
   b.limiter = b.inPitLane && sr >= P.limIn && sr <= P.limOut;
   if (!b.inPitLane) b.serviceDone = false;
   const bs = P.boxS(b.box);
-  if (!b.service && !b.serviceDone && b.inPitLane && Math.abs(sr - bs) < 5 && Math.abs(b.d - P.boxD) < 3.6 && b.v < 1.5 && ((b.isPlayer && !b.autopilot) || b.pitPlan)) {
-    b.service = true; b.serviceT = 0; b.needRelease = true; b.v = 0; b.pits++; b.serviceFuel0 = b.fuel;
-    if (b.isPlayer) { HUD.msg('BOX', 'Crew refuelling. Press W to leave.', '#ffcf1f', 2); Sound.pit(); }
+  // pit stop (GDD 7): the player stops in the box and holds until W; no refuelling and no repairs since 1.22.0
+  if (!b.service && !b.serviceDone && b.inPitLane && Math.abs(sr - bs) < 5 && Math.abs(b.d - P.boxD) < 3.6 && b.v < 1.5 && b.isPlayer && !b.autopilot) {
+    b.service = true; b.serviceT = 0; b.needRelease = true; b.v = 0; b.pits++;
+    HUD.msg('BOX', 'Pit stop. Press W to leave.', '#ffcf1f', 2); Sound.pit();
   }
-  if (b.service) {
-    b.v = 0; b.vs = 0; b.serviceT += dt;
-    const target = b.isPlayer && !b.autopilot ? PHYS.tank : Math.max(b.pitFill, b.fuel);
-    if (b.serviceT > 1.2) {
-      if (b.fuel < target) b.fuel = Math.min(target, b.fuel + PHYS.refuelRate * dt);
-      b.dmg.a = Math.max(0, b.dmg.a - 0.09 * dt); b.dmg.c = Math.max(0, b.dmg.c - 0.07 * dt); b.dmg.e = Math.max(0, b.dmg.e - 0.03 * dt);
-    }
-    if ((!b.isPlayer || b.autopilot) && b.serviceT > 2 && b.fuel >= target - 0.01 && b.dmg.a < 0.2 && b.dmg.c < 0.2) endService(b);
-  }
+  if (b.service) { b.v = 0; b.vs = 0; b.serviceT += dt; }
 }
 function endService(b) {
-  b.service = false; b.serviceDone = true; b.pitPlan = false; b.fuelLapStart = b.fuel; b.pittedThisLap = true;
-  if (b.isPlayer) HUD.msg('GO GO GO', `Fuel ${b.fuel.toFixed(1)} L`, '#3ad17a', 1.5);
+  b.service = false; b.serviceDone = true; b.fuelLapStart = b.fuel;
+  HUD.msg('GO GO GO', '', '#3ad17a', 1.5);
 }
 
 function timing(b) {
@@ -1174,8 +1152,8 @@ function completeLap(b) {
   if (b.isPlayer) Rec.lap(W.time - lt, W.time, lt, b.autopilot, inv);
   b.lastLap = lt; b.laps.push(lt); b.lapsInv.push(inv); const pb = !inv && (!b.bestLap || lt < b.bestLap); if (pb) b.bestLap = lt;
   b.lap++; b.lapStartT = W.time; b.secStart = W.time; b.cp = 0; b.lapInv = b.offT >= 0;
-  const used = b.fuelLapStart - b.fuel; if (!b.pittedThisLap && used > 0.8 && used < 6) b.fuelPerLap = lerp(b.fuelPerLap, used, b.laps.length > 1 ? 0.5 : 0.8);
-  b.fuelLapStart = b.fuel; b.pittedThisLap = false;
+  const used = b.fuelLapStart - b.fuel; if (used > 0.3 && used < 3) b.fuelPerLap = lerp(b.fuelPerLap, used, b.laps.length > 1 ? 0.5 : 0.8);
+  b.fuelLapStart = b.fuel;
   if (b.isPlayer) {
     let rec = { allPb: false };
     if (!b.autopilot) rec = Records.add(W.mode, lt, b, W.curTrace, inv);
@@ -2475,7 +2453,7 @@ function drawTags(b, rx, ry, rw) {
 // fuel warning on phones, where the fuel panel is gone (GDD 11g): a centre message at 3 laps and at 1 lap left
 function fuelWarn(b) {
   const left = b.fuel / Math.max(1, b.fuelPerLap), w = b.fuelWarned || (b.fuelWarned = {});
-  if (left > 3.5) { w.three = false; w.one = false; return; } // refuelled
+  if (left > 3.5) { w.three = false; w.one = false; return; } // fuel back above 3.5 laps (a restart)
   if (left < 1 && !w.one) { w.one = true; HUD.msg('FUEL', left.toFixed(1) + ' LAP LEFT', '#e3312a', 3); }
   else if (left < 3 && !w.three) { w.three = true; HUD.msg('FUEL', '3 LAPS LEFT', '#ffcf1f', 3); }
 }
@@ -2636,9 +2614,7 @@ function drawHUD(dt) {
     panel(px, py, pw, 70, 0.9);
     txt('PIT STOP', px + 14, py + 24, 16, '#ffcf1f', 800, 'left', true);
     txt(b.serviceT.toFixed(1) + ' s', px + pw - 14, py + 24, 16, '#fff', 700, 'right');
-    ctx.fillStyle = 'rgba(255,255,255,.08)'; ctx.fillRect(px + 14, py + 34, pw - 28, 9); ctx.fillStyle = '#3ad17a'; ctx.fillRect(px + 14, py + 34, (pw - 28) * b.fuel / PHYS.tank, 9);
-    const full = b.fuel >= PHYS.tank - 0.01;
-    txt(full ? 'Tank full. Press W to go.' : `Refuelling ${b.fuel.toFixed(1)} / ${PHYS.tank} L \u00B7 press W to leave now`, px + 14, py + 61, 13, '#c9d2d8', 600);
+    txt('Press W to leave now', px + 14, py + 61, 13, '#c9d2d8', 600);
   }
   // ---- messages
   if (HUD.m) {
@@ -3067,9 +3043,9 @@ const UI = {
     document.querySelectorAll('.mode').forEach(m => m.setAttribute('aria-pressed', String(m.dataset.mode === o.mode)));
     for (const [id, key] of [['optTrans', 'trans'], ['optAids', 'aids'], ['optAI', 'ai'], ['optCam', 'cam'], ['optGuide', 'guide'], ['optBlur', 'blur'], ['optTrain', 'train'], ['optCtl', 'controls'], ['optSide', 'side'], ['optTilt', 'tilt']]) $(id).querySelectorAll('button').forEach(bt => bt.setAttribute('aria-pressed', String(bt.dataset.v === o[key])));
     $('optFuel').value = o.fuel; $('optGrid').value = o.grid; $('optTeam').value = o.team; $('optName').value = o.name; $('optNum').value = o.num;
-    const laps = o.mode === 'gp' ? 20 : 10; const L = PHYS.tank * o.fuel / 100; const range = L / 2.65;
+    const laps = o.mode === 'gp' ? 20 : 10; const L = PHYS.tank * o.fuel / 100; const range = L / PHYS.lapFuel;
     $('optFuelV').textContent = L.toFixed(1) + ' L';
-    const stops = Math.max(0, Math.ceil(laps * 2.65 / PHYS.tank - 0.001) - 1); $('optFuelHint').textContent = o.mode === 'practice' ? 'Practice starts with a full tank.' : `About ${range.toFixed(1)} laps on this load. A ${laps} lap race needs at least ${stops} stop${stops === 1 ? '' : 's'} on a full tank. Less fuel is lighter and faster but means more stops.`;
+    const minPct = Math.ceil(laps * PHYS.lapFuel / PHYS.tank * 20) * 5; $('optFuelHint').textContent = o.mode === 'practice' ? 'Practice starts with a full tank.' : `About ${range.toFixed(1)} laps on this load. A ${laps} lap race needs at least ${minPct} % of the tank, since there is no refuelling. Less fuel is lighter and faster but risks running dry.`;
     $('optFuelWrap').hidden = o.mode === 'practice'; $('optGuideWrap').hidden = o.mode !== 'practice'; $('optTrainWrap').hidden = o.mode !== 'practice'; $('trainBox').hidden = o.train !== 'on'; this.renderTraining(); this.renderRecords(); $('optGridWrap').hidden = !(o.mode === 'sprint' || (o.mode === 'practice' && o.train !== 'on')); // one setting for the race and the practice grid start (GDD 2a)
     Touch.opts();
     try { localStorage.setItem('sgp_opts', JSON.stringify(o)); } catch (e) { }

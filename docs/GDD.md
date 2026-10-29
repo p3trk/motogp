@@ -1,6 +1,6 @@
 # Silverstone GP — Game Design Document
 
-**Version:** 1.21.0 · **Last updated:** 2026-10-29 · **Owner:** Petr
+**Version:** 1.22.0 · **Last updated:** 2026-10-29 · **Owner:** Petr
 
 This document is the source of truth for how the game should work. Every
 change starts here: update the GDD on a feature branch first, then change the
@@ -24,7 +24,7 @@ Teams, riders and liveries are **fictional**; no real MotoGP names or branding.
 
 | Mode | Grid | Length | Notes |
 |---|---|---|---|
-| **Practice** | Player alone | Unlimited | Since 1.16.0 starts on a grid slot the player picks, the same way as for the 10 lap race (§2a), or from a chosen spot with Curve training (§11d). No start lights. Lap and sector times, pit stops, optional speed guide (§9). Laps are saved (§10). |
+| **Practice** | Player alone | Unlimited | Since 1.16.0 starts on a grid slot the player picks, the same way as for the 10 lap race (§2a), or from a chosen spot with Curve training (§11d). No start lights. Lap and sector times, optional speed guide (§9). Laps are saved (§10). |
 | **10 Lap Race** | 22 riders | 10 laps | Player picks the starting slot (pole / front row / mid-pack / back of the grid). |
 | **Grand Prix + Qualifying** | 22 riders | Qualifying, then 20 laps | Qualifying: out lap + 3 flying laps, best lap sets the grid. AI quali times are simulated from their pace. Player can end qualifying early from the pause menu. |
 
@@ -45,7 +45,7 @@ Before 1.16.0 normal practice started in the pit box, and the player had to ride
 - **Hold until the first input:** the bike stands still on the slot until the player presses W, S, A or D (the same hold as Curve training, §11d). "FREE PRACTICE · P12 on the grid · press W, S, A or D to go" is shown meanwhile. The moment of that first input is the **start moment** of the session: lap 1 is timed from it, and ghosts start moving at it (§11c).
 - **Lap 1 is a timed standing-start lap**, as in the race: it runs from the start moment to the first time the line is crossed after a full lap (crossing the line just ahead of the grid does not count). It is saved like any other lap (§10). There is no out lap.
 - Full tank, cold tyres, as at a race start.
-- **The pit box is still usable:** pit in at any time to refuel; W leaves the box as before. The box marker on the minimap stays (§11).
+- **The pit box is still usable:** stop in it for a pit stop (§7); W leaves the box as before. Since 1.22.0 a stop neither refuels nor repairs. The box marker on the minimap stays (§11).
 - **Restart session** (pause menu) and **R** put the bike back on the same grid slot, held, with the ghosts re-synced (§11c). With Curve training On, Restart and R go to the training spot instead (§11d).
 - Qualifying still starts from the pit box (out lap + 3 flying laps).
 
@@ -53,7 +53,7 @@ Before 1.16.0 normal practice started in the pit box, and the player had to ride
 
 | Key | Action |
 |---|---|
-| W | Throttle (also leaves the pit box after service) |
+| W | Throttle (also leaves the pit box after a pit stop) |
 | S | Brake |
 | A / D | Lean left / right |
 | O / L | Shift up / down (ignored in automatic) |
@@ -108,7 +108,7 @@ Stored in `localStorage` key `sgp_opts`. The camera choice is remembered for all
 | Camera | Behind (tilted) / CLOSE (tilted, low and close, since 1.14.0) / Top-down | Behind |
 | Speed guide (practice only) | On / Off | On |
 | Curve training (practice only) | Off / On toggle, plus spot on track and start speed 0–300 km/h | **On** (since 1.10.0), spot 350 m before Abbey, guide speed |
-| Starting fuel (races) | 25–100 % of tank, step 5 | 100 % |
+| Starting fuel (races) | 25–100 % of tank, step 5. Since 1.22.0 the race has no refuelling (§7), so this must cover the whole race | 100 % |
 | Starting position (10 lap race and, since 1.16.0, Practice with Curve training Off) | Pole / Front row / Mid-pack / Back. One setting shared by both modes | Mid-pack |
 | Speed blur (since 1.17.0) | On / Off. Blurs the surroundings at top speed in the Behind and CLOSE cameras (§11f) | On |
 | Sync ghosts to (since 1.16.0) | One of the selected ghosts (§11c) | The first selected ghost |
@@ -148,7 +148,7 @@ Model: point-mass bike on a 2D plane, integrated per frame with fixed sub-steps.
   - **Engine** — up to −40 % power. At 100 % the rider is out (DNF).
   - **Aero** — up to +35 % drag.
   - **Chassis** — up to −13 % grip and −20 % lean rate.
-- Damage is never repaired in the pits (fuel only). AI with heavy aero/chassis damage pits early to top up and drives more cautiously.
+- Damage is never repaired in the pits: since 1.22.0 a pit stop neither refuels nor repairs (§7). AI with heavy aero/chassis damage drives more cautiously.
 
 ## 6a. Track limits (since 1.20.0)
 
@@ -215,11 +215,12 @@ This replaces the Phase 1 rule (a fixed 2 s penalty for every cut).
 
 ## 7. Fuel and pit stops
 
-- Tank 22 L. Consumption ≈ 2.6 L per lap at race pace (scales with throttle and rpm), so a 20-lap race needs one stop and a 10-lap race needs a full tank.
+- Tank 22 L. Consumption ≈ 1.0 L per lap at race pace (scales with throttle and rpm), so a full tank covers the 20-lap Grand Prix with fuel to spare. Since 1.22.0 this is the only fuel the race has: there is no refuelling (see open question 1).
 - **Out of fuel:** engine stops (HUD *NO FUEL*), the bike coasts.
 - **Pit lane:** on the right of the Hamilton straight. Speed limiter 60 km/h is enforced automatically inside the lane (HUD *PIT LIMITER*).
-- **Box:** each team has a box with crew and garage. Stopping in your box starts refuelling at 2.6 L/s; press W to leave whenever you want.
-- **AI strategy:** AI start fuel and stop lap are planned from the race length and their consumption, with a safety margin; they refuel just enough to finish.
+- **Box:** each team has a box with crew and garage. Stopping in your box starts a pit stop: the bike is held until you press W. The stop does not refuel and does not repair.
+- **AI strategy:** AI riders do not pit. They start with enough fuel to finish, and a stop would gain them nothing (see open question 4).
+- **Menu:** Starting fuel shows the least fuel that finishes the chosen race (10 lap race 50 %, Grand Prix 95 %, in steps of 5). Less fuel is lighter and faster but risks running dry.
 
 ## 8. AI riders
 
@@ -542,10 +543,10 @@ On phones (touch controls on, §3a) the HUD is made smaller and simpler. Desktop
 | "Your laps" list (§10) | Top left, in practice and the time attack | **Removed** |
 | Timing tower (race, §11) | Top left | Top left, under the stopwatch, with shorter rows so six riders fit |
 | Minimap | Top right, about 190 px | Top right, about 140 px |
-| Pit service panel, start lights, centre messages | As in §11 | Unchanged |
+| Start lights, centre messages | As in §11 | Unchanged |
 
 - Nothing on the phone layout is drawn over the touch halves' labels at the bottom edge.
-- Fuel is not shown on the phone HUD. Pit decisions still need it, so a centre message warns when fewer than 3 laps of fuel are left (see open question 2).
+- Fuel is not shown on the phone HUD. A race has no refuelling, so a centre message warns when fewer than 3 laps of fuel are left (see open question 2 of 1.19.0).
 
 ### Open questions for 1.19.0 (recommended answer in bold; the design above uses it)
 
@@ -633,7 +634,6 @@ After tagging, push `main`, the tag and the feature branch to GitHub (`p3trk/mot
 ## 15. Deviations from real MotoGP (intentional)
 
 - Fictional teams and riders.
-- Mid-race refuelling (real MotoGP has no pit refuelling).
 - No tyre compound choice or flag-to-flag bike swap.
 - Track limits (§6a) are simplified: only the player is judged; an infraction is decided by time lost against a reference, not by Race Direction; an unserved Long Lap is a fixed 5 s time penalty.
 - No weather.
@@ -641,7 +641,16 @@ After tagging, push `main`, the tag and the feature branch to GitHub (`p3trk/mot
 
 ## 16. Version history
 
-See `CHANGELOG.md`. Current: **1.21.0** (track limits, Phase 2: infraction count, warning, Long Lap loop at Stowe, last lap position drop; §6a). Previous: **1.20.0** (track limits, Phase 1: invalid laps in practice and qualifying, time penalty for cuts in races; §6a). Previous: **1.19.8** (phone emulation tests; §13). Previous: **1.19.7** (fix: no text selection or zoom while playing on iPhone browsers, Brave included; §3a). Previous: **1.19.6** (version number shown next to the menu title; §11). Previous: **1.19.5** (fix: no double-tap zoom or text selection on menus and overlays in iPhone browsers, Brave included; §3a). Previous: **1.19.4** (fix: race result order lists riders a lap down below lead-lap riders; §11). Previous: **1.19.3** (no browser zoom on phones; §3a). Before that: **1.19.2** (tilt dead zone 12 degrees; §3a).
+See `CHANGELOG.md`. Current: **1.22.0** (no refuelling, pit stop kept; consumption about 1.0 L per lap; §7). Previous: **1.21.0** (track limits, Phase 2: infraction count, warning, Long Lap loop at Stowe, last lap position drop; §6a). Previous: **1.20.0** (track limits, Phase 1: invalid laps in practice and qualifying, time penalty for cuts in races; §6a). Previous: **1.19.8** (phone emulation tests; §13). Previous: **1.19.7** (fix: no text selection or zoom while playing on iPhone browsers, Brave included; §3a). Previous: **1.19.6** (version number shown next to the menu title; §11). Previous: **1.19.5** (fix: no double-tap zoom or text selection on menus and overlays in iPhone browsers, Brave included; §3a). Previous: **1.19.4** (fix: race result order lists riders a lap down below lead-lap riders; §11). Previous: **1.19.3** (no browser zoom on phones; §3a). Before that: **1.19.2** (tilt dead zone 12 degrees; §3a).
+
+### Open questions for 1.22.0 (recommended answer in bold; the design above uses it)
+
+1. How does a race finish with no refuelling? At 2.6 L per lap a 10 lap race needs 26 L and a 20 lap Grand Prix about 52 L, more than the 22 L tank. **Cut consumption to about 1.0 L per lap**, so a full tank covers the Grand Prix and the 10 lap race uses under half. The other options are a bigger tank (about 55 L, so about 40 kg more fuel at the start and a retune of the lap times) or a tank sized per race.
+2. What happens to the pit stop? **Keep it, without refuelling**: the bike stops in its box and W leaves. The box is also the qualifying start (§2). The pit lane keeps its 60 km/h limiter, even though a stop has no fuel reason now.
+3. Does a stop repair damage? **No:** damage is never repaired in the pits. The 1.21.0 code repairs damage during a stop; 1.22.0 removes that along with the refuelling.
+4. Do AI riders still pit for heavy damage? **No.** A stop no longer repairs or refuels, so AI riders never enter the box. Alternative: keep the AI damage stop as a visual only, which costs time for nothing.
+5. Starting fuel: keep 25–100 %? **Yes**, with the menu showing the least fuel that finishes the chosen race. Less fuel is lighter and faster but risks running dry.
+6. Fuel warning on phones (§3a)? **Keep it**: 3 laps and 1 lap left, since the race cannot be refuelled.
 
 ### Open questions for 1.21.0 (recommended answer in bold; the design above uses it)
 

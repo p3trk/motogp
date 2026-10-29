@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Track limits test (GDD 6a, since 1.20.0): practice laps with a trip beyond the kerb are invalid and never a best;
-// kerbs and the strip beside the pit lane are legal; in a race a cut gives a time penalty that counts in the result order.
+// kerbs and the strip beside the pit lane are legal. Races (Phase 2, GDD 1.21.0): the count, the warning thresholds, the
+// Long Lap loop at Stowe (geometry, serving, 2.5 s top-up, not served), the gain given back and the last lap drop.
 // Usage: node tests/track_limits.test.js [path/to/index.html]   (needs Playwright + Chromium)
 const path = require('path');
 const { chromium } = require('playwright');
@@ -46,28 +47,78 @@ const FILE = 'file://' + path.resolve(process.argv[2] || path.join(__dirname, '.
   check('a clean lap is valid and becomes the best', !p.inv2 && Math.abs(p.best2 - 131) < 0.01 && Math.abs(p.trace2 - 131) < 0.01, p);
   check('lap list marks the invalid lap', JSON.stringify(p.lapsInv) === '[true,false]', p);
 
-  // race: a cut, a slow run wide, a crash; then the result order with the penalty
-  await page.evaluate(() => { window.__sgp.UI.launch('sprint', {}); });
-  await page.waitForFunction(() => window.__sgp.UI.state === 'play');
-  const r = await page.evaluate(() => {
-    const { W, T, SURF, trackLimitsX, limitRefX, standings } = window.__sgp;
-    const b = W.player; W.phase = 'run'; b.finished = false; b.autopilot = false;
+  // race (Phase 2, since 1.21.0): count, warning, Long Lap, gain given back, last lap drop
+  const race = async (kind, fn) => {
+    await page.evaluate(k => { window.__sgp.UI.launch(k, {}); }, kind);
+    await page.waitForFunction(() => window.__sgp.UI.state === 'play');
+    return page.evaluate(fn);
+  };
+  const r = await race('sprint', () => {
+    const { W, T, SURF, trackLimitsX, limitRefX } = window.__sgp;
+    const b = W.player; W.phase = 'run'; b.finished = false; b.autopilot = false; b.lap = 2;
     const at = (surf, s, d, t) => { W.time = t; b.surf = surf; b.s = s; b.d = d; trackLimitsX(b); };
-    const s0 = 1000, out = { ref: limitRefX(s0, s0 + 100) };
-    at(SURF.GRASS, s0, -20, 100); at(SURF.ASPH, s0 + 100, 0, 100 + out.ref * 0.5); out.cut = b.pen;
-    at(SURF.RUN, 2000, -20, 200); at(SURF.ASPH, 2020, 0, 205); out.wide = b.pen;
-    at(SURF.GRAVEL, 3000, -20, 300); b.crashes++; at(SURF.ASPH, 3200, 0, 300.5); out.crash = b.pen;
-    const a = W.bikes.find(x => !x.isPlayer); const L = W.totalLaps;
-    a.finished = true; a.lap = L; a.finishT = 1300.5; b.finished = true; b.lap = L; b.finishT = 1300; W.finishOrder = [b, a];
-    const st = standings(); out.aFirst = st.indexOf(a) < st.indexOf(b);
+    const ref = limitRefX(1000, 1100), out = { ref };
+    const cut = (t0, lostBy) => { at(SURF.GRASS, 1000, -20, t0); at(SURF.ASPH, 1100, 0, t0 + ref + lostBy); };
+    cut(100, 0.2); out.c1 = { tl: b.tl, pen: b.pen, ll: b.llPend.length };            // lost 0.2 s: counted, no time
+    cut(200, 0.8); out.wide = { tl: b.tl, pen: b.pen };                                 // lost 0.8 s: not counted
+    cut(300, -0.4); out.c2 = { tl: b.tl, pen: b.pen, ll: b.llPend.length };           // gained 0.4 s: counted, +0.4 s
+    cut(400, 0); out.c3 = { tl: b.tl, pen: b.pen, ll: b.llPend.length, until: b.llPend[0] && b.llPend[0].until }; // 3rd: Long Lap
+    cut(500, -1.25); out.adv = { tl: b.tl, pen: b.pen, ll: b.llPend.length };         // clear advantage: Long Lap at once
+    at(SURF.GRAVEL, 3000, -20, 600); b.crashes++; at(SURF.ASPH, 3200, 0, 600.5); out.crash = { tl: b.tl, pen: b.pen };
+    b.lap = W.totalLaps - 2; const p0 = b.pen, n0 = b.llPend.length; cut(700, -1.5); out.late = { pen: b.pen - p0, ll: b.llPend.length - n0 };
     return out;
   });
-  const want = Math.ceil((2 + r.ref * 0.5) * 10 - 1e-6) / 10;
+  const rnd = x => Math.round(x * 10) / 10;
   check('reference time is positive', r.ref > 0, r);
-  check('a cut gives 2 s + the time gained', Math.abs(r.cut - want) < 1e-9, { ...r, want });
-  check('a slow run wide gives no penalty', r.wide === r.cut, r);
-  check('a crash and respawn is not judged', r.crash === r.cut, r);
-  check('the penalty counts in the result order', r.aFirst, r);
+  check('an infraction that lost under 0.5 s is counted without time', r.c1.tl === 1 && r.c1.pen === 0 && r.c1.ll === 0, r.c1);
+  check('a slow run wide is not counted', r.wide.tl === 1 && r.wide.pen === 0, r.wide);
+  check('a gain is given back as time and counted', r.c2.tl === 2 && rnd(r.c2.pen) === 0.4, r.c2);
+  check('10 lap race: the 3rd infraction gives a Long Lap and resets the count', r.c3.tl === 0 && r.c3.ll === 1 && r.c3.until === 5, r.c3);
+  check('a clear advantage gives a Long Lap at once, not counted', r.adv.tl === 0 && r.adv.ll === 2 && rnd(r.adv.pen) === 1.7, r.adv);
+  check('a crash and respawn is not judged', r.crash.tl === 0 && rnd(r.crash.pen) === 1.7, r.crash);
+  check('a Long Lap with fewer than 3 laps left is 3 s at once', rnd(r.late.pen) === 4.5 && r.late.ll === 0, r.late);
+
+  const g = await race('gp', () => {
+    const { W, T, SURF, trackLimitsX, limitRefX } = window.__sgp;
+    const b = W.player; W.phase = 'run'; b.finished = false; b.autopilot = false; b.lap = 2;
+    const ref = limitRefX(1000, 1100), seen = [];
+    for (let k = 0; k < 5; k++) { W.time = 100 * k + 100; b.surf = SURF.GRASS; b.s = 1000; b.d = -20; trackLimitsX(b); W.time += ref; b.surf = SURF.ASPH; b.s = 1100; b.d = 0; trackLimitsX(b); seen.push(b.tl + ':' + b.llPend.length); }
+    return seen;
+  });
+  check('Grand Prix: Long Lap at the 5th infraction', JSON.stringify(g) === '["1:0","2:0","3:0","4:0","0:1"]', g);
+
+  const l = await race('sprint', () => {
+    const { W, T, SURF, PHYS, trackLimitsX, longLapX, limitRefX, completeLapX } = window.__sgp;
+    const b = W.player, LL = T.LL; W.phase = 'run'; b.finished = false; b.autopilot = false; b.lap = 2;
+    const out = { len: LL.sB - LL.sA, side: LL.sg };
+    // the lane lies on tarmac run-off from end to end, starts and ends at the kerb, and is about 22 m out at the apex
+    let onRun = true; for (let s = LL.sA; s <= LL.sB; s += 2) { const i = T.idx(s); if (T.surface(i, s, LL.sg * LL.off(s)) !== SURF.RUN) onRun = false; }
+    const i0 = T.idx(LL.sA); out.onRun = onRun; out.endGap = LL.off(LL.sA) - LL.w / 2 - T.EDGE[LL.side][i0] - T.KERB[LL.side][i0];
+    out.depth = LL.off(LL.sM) - LL.off(LL.sA);
+    // pass through the lane in dur seconds
+    const pass = (dur, dOff) => { const t0 = 1000; let tA = -1, tB = -1, prev = LL.sA - 6; for (let k = 0; k <= 160; k++) { const s = LL.sA - 6 + k * (LL.sB - LL.sA + 12) / 160; b.prevS = prev; b.s = s; b.d = LL.sg * (s >= LL.sA && s <= LL.sB ? LL.off(s) + (dOff || 0) : 0); b.surf = T.surface(T.idx(s), s, b.d); W.time = t0 + dur * k / 160; if (tA < 0 && prev < LL.sA && s >= LL.sA) tA = W.time; if (tB < 0 && prev < LL.sB && s >= LL.sB) tB = W.time; longLapX(b); trackLimitsX(b); prev = s; } return tB - tA; };
+    const ref = limitRefX(LL.sA, LL.sB); out.ref = ref;
+    b.llPend = [{ until: 5 }]; pass(ref + 4); out.slow = { left: b.llPend.length, pen: b.pen, off: b.offT, tl: b.tl };
+    b.llPend = [{ until: 5 }]; b.pen = 0; const tf = pass(ref + 1); out.fast = { left: b.llPend.length, pen: b.pen, want: Math.ceil((2.5 - (tf - ref)) * 10 - 1e-6) / 10 };
+    b.llPend = [{ until: 5 }]; b.pen = 0; pass(ref + 4, 8); out.missed = { left: b.llPend.length, pen: b.pen };
+    b.llPend = [{ until: 3 }]; b.pen = 0; W.time = b.lapStartT + 130; completeLapX(b); out.due = { left: b.llPend.length, pen: b.pen };
+    return out;
+  });
+  check('Long Lap lane is on tarmac run-off from end to end', l.onRun, l);
+  check('Long Lap lane starts at the kerb and swings out about 22 m', Math.abs(l.endGap) < 0.6 && l.depth > 15, l);
+  check('riding the lane serves the Long Lap and is not a track limits trip', l.slow.left === 0 && l.slow.pen === 0 && l.slow.tl === 0 && l.slow.off < 0, l.slow);
+  check('a Long Lap always costs 2.5 s (top-up)', l.fast.left === 0 && l.fast.want > 1 && Math.abs(l.fast.pen - l.fast.want) < 1e-9, l.fast);
+  check('missing the lane does not serve it', l.missed.left === 1, l.missed);
+  check('a Long Lap not served in its 3 laps is 5 s', l.due.left === 0 && l.due.pen === 5, l.due);
+
+  const d = await race('sprint', () => {
+    const { W, applyDropX, standings } = window.__sgp;
+    const b = W.player, a = W.bikes.find(x => !x.isPlayer), L = W.totalLaps;
+    a.finished = true; a.lap = L; a.finishT = 1300.3; b.finished = true; b.lap = L; b.finishT = 1300; W.finishOrder = [b, a];
+    b.dropBehind = a; applyDropX(b); const st = standings();
+    return { aFirst: st.indexOf(a) < st.indexOf(b), drop: b.dropPen };
+  });
+  check('last lap: the player is placed behind the rival', d.aFirst && d.drop > 0.29 && d.drop < 0.31, d);
 
   await browser.close();
   if (fails.length) { console.log('\n' + fails.length + ' failed'); process.exit(1); }

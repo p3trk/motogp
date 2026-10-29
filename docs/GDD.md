@@ -1,6 +1,6 @@
 # Silverstone GP — Game Design Document
 
-**Version:** 1.20.0 · **Last updated:** 2026-10-29 · **Owner:** Petr
+**Version:** 1.21.0 · **Last updated:** 2026-10-29 · **Owner:** Petr
 
 This document is the source of truth for how the game should work. Every
 change starts here: update the GDD on a feature branch first, then change the
@@ -152,7 +152,7 @@ Model: point-mass bike on a 2D plane, integrated per frame with fixed sub-steps.
 
 ## 6a. Track limits (since 1.20.0)
 
-Based on the real MotoGP rules (FIM Grand Prix Regulations Art. 1.21 and the Race Direction track limits and shortcut protocols). This is Phase 1: invalid laps in practice and qualifying, and time penalties for cuts in races. Phase 2 (later) adds warnings, a count of trips off track and the Long Lap loop.
+Based on the real MotoGP rules (FIM Grand Prix Regulations Art. 1.21 and the Race Direction track limits and shortcut protocols). Phase 1 (1.20.0): invalid laps in practice and qualifying, time penalties for cuts in races. Phase 2 (1.21.0): a count of infractions in races, a warning, the Long Lap loop and the last lap position drop.
 
 **Legal and illegal**
 
@@ -162,7 +162,7 @@ Based on the real MotoGP rules (FIM Grand Prix Regulations Art. 1.21 and the Rac
 | The pit lane (surface `PIT`), and the strip between the track and the pit lane inside the pit zone | |
 
 - The check uses the bike's centre point (the game has no separate wheels). A **trip off track** starts when the centre moves onto run-off, gravel or grass, and ends when it is back on asphalt, kerb or pit lane.
-- Phase 1 judges the **player only**. AI riders follow their line and are not judged.
+- Only the **player** is judged. AI riders follow their line and are not judged.
 - Not judged: the out lap, the grid crossing before the first timed lap, laps driven by autopilot, and a trip that ends in a crash (the respawn puts the bike back on track, which is not a rejoin).
 
 **Practice, Curve training and qualifying: the lap is invalid**
@@ -175,17 +175,43 @@ Based on the real MotoGP rules (FIM Grand Prix Regulations Art. 1.21 and the Rac
   - a best sector time (its sector splits are shown, but are not compared or stored as best).
 - Qualifying: an invalid lap still uses up one of the 3 flying laps. If all of them are invalid, the player has no time and starts from the back of the grid.
 
-**Races: time penalty for a cut**
+**Races: count, warning and Long Lap (since 1.21.0, Phase 2)**
+
+This replaces the Phase 1 rule (a fixed 2 s penalty for every cut).
+
 - When a trip off track ends, the game compares its time with a **reference time** over the same stretch of track (from the point where the bike left the track to the point where it rejoined):
   - the player's best lap trace (`W.bestTrace`, 10 m steps), if it has times for both points;
   - otherwise the ideal speed profile at the speed guide pace (96 %, §9).
 - **Time lost** = trip time − reference time.
-  - Lost **0.5 s or more:** no penalty. The rider ran wide and paid for it already, as in the real rules.
-  - Lost **less than 0.5 s** (or gained time): this is a **cut**. Penalty = **2 s + the time gained** (gain = reference − trip time, at least 0), rounded up to 0.1 s.
-  - So a cut always leaves the rider at least 1.5 s worse off than staying on track.
-- The HUD shows **TRACK LIMITS · +2.3 s** (the penalty for that cut) in red. A small **PEN +x.x s** tag next to the lap stopwatch shows the total.
-- Penalties add up and are added to the player's race time at the finish. The results table (§11) ranks finishers by laps completed, then by race time **including penalties**, and shows the penalty in its own column. So a penalty can cost positions at the finish.
-- The timing tower shows live gaps without penalties during the race (as in real timing), with the **PEN** tag on the player's row.
+  - Lost **0.5 s or more:** not counted. The rider ran wide and paid for it already, as in the real rules.
+  - Otherwise the trip is **one track limits infraction**, and it is counted.
+  - If the rider **gained** time (time lost below 0), the gain is also added at once as a **time penalty** (rounded up to 0.1 s), so the cut never pays.
+  - If the gain is **1 s or more** (a clear advantage), the rider gets a **Long Lap at once** as well, for that single infraction. This trip is not added to the count.
+- **Count and thresholds** (as in real MotoGP, the 10 lap race uses the Sprint numbers):
+
+| Race | Warning | Long Lap |
+|---|---|---|
+| Grand Prix (20 laps) | 3rd infraction | 5th infraction |
+| 10 lap race | 2nd infraction | 3rd infraction |
+
+- Each counted infraction shows **TRACK LIMITS 2/5** in amber. At the warning it shows **TRACK LIMITS WARNING** in red (the dashboard message riders get in real races).
+- When a Long Lap is given, the count starts again from 0, so 5 more infractions (3 in a 10 lap race) give the next one.
+- **Last lap:** an infraction on the last lap while a rival is less than **0.5 s behind** (the real "striking distance") is not counted. Instead the player **drops one position**: in the result the player is placed directly behind that rival, if the rival finishes. The HUD shows **TRACK LIMITS · drop one position**.
+
+**The Long Lap loop**
+- A marked loop in the tarmac run-off on the **outside of Stowe**. That corner comes after the longest braking zone of the lap, with 38 m of tarmac run-off on the left, and is slow enough (apex about 120 km/h) for a safe detour.
+- Shape: a 6 m wide lane that leaves the track edge (outside the kerb) about 70 m before the apex, swings out to about 22 m from the track edge at the apex, and joins the track edge again about 70 m after it. It is drawn with dashed white edge lines and **LONG LAP** painted on the tarmac, always visible. While a Long Lap is pending, its lines turn yellow and it blinks on the minimap.
+- **Serving:** the rider rides through the lane: the bike's centre must be inside it at three checkpoints (entry, apex, exit) on the same pass. Then the HUD shows **LONG LAP SERVED** in green.
+- **Cost:** a Long Lap always costs at least **2.5 s**. The time through the loop is compared with the reference time for the same stretch of track (as above). If the loop cost less than 2.5 s, the difference is added as a time penalty, so riding the loop well never makes it cheap.
+- Riding the loop to serve a Long Lap is not a track limits trip. Riding it without a Long Lap pending counts as a normal trip off track.
+- **Window:** 3 laps. A panel under the lap stopwatch shows **LONG LAP · Stowe · 3 laps** and counts down at every line crossing. The real rule gives 3 laps too.
+- **Not served** in time: **5 s time penalty** (more than the loop costs, so it never pays to ignore it), message **LONG LAP NOT SERVED · +5 s**.
+- Given with **fewer than 3 laps left:** changed to a **3 s time penalty** at once (in real races the stewards change it to a time penalty).
+- Two Long Laps pending: they are served one per pass of the loop, the oldest first, each with its own window.
+
+**HUD and results**
+- The total time penalty shows as **PEN +x.x s** next to the lap stopwatch and on the player's row in the timing tower (as in Phase 1). Time penalties are added to the race time at the finish and count in the result order.
+- The results table's **Pen** column shows the time penalty and the Long Laps, for example `+1.4 s · 1 LL`. A position drop shows as `−1 pos`.
 
 ## 7. Fuel and pit stops
 
@@ -579,7 +605,7 @@ On phones (touch controls on, §3a) the HUD is made smaller and simpler. Desktop
   - v1.16.0 fails it (no blur at top speed).
 - Since 1.17.0 `tilt_seam.test.js` and `camera_shake.test.js` run with Speed blur Off, so their measurements stay as before; `camera_tuning.test.js` expects 15 sliders (the three blur sliders added) and checks that they are saved per camera and reset by Reset to defaults.
 - `npm test` runs all tests (needs `npm install` and `npx playwright install chromium` once).
-- Tests (since 1.20.0): `node tests/track_limits.test.js [index.html]` checks §6a: kerbs and the strip beside the pit lane are legal; gravel makes a practice lap invalid; the invalid lap is saved with `inv` and never becomes a best lap, mode best or all-time trace; the next lap starts valid; in a race a cut gives 2 s + the time gained, a slow run wide and a crash give no penalty, and the penalty counts in the result order.
+- Tests (since 1.20.0): `node tests/track_limits.test.js [index.html]` checks §6a: kerbs and the strip beside the pit lane are legal; gravel makes a practice lap invalid; the invalid lap is saved with `inv` and never becomes a best lap, mode best or all-time trace; the next lap starts valid; in a race a cut gives 2 s + the time gained, a slow run wide and a crash give no penalty, and the penalty counts in the result order. Since 1.21.0 the race part checks Phase 2: the count (10 lap race 2/3, Grand Prix 3/5), the gain given back, the clear advantage Long Lap, the 3 s change with fewer than 3 laps left, the Long Lap lane geometry (on tarmac run-off end to end, starts at the kerb, about 22 m out), serving it, the 2.5 s top-up, a missed lane, the 5 s penalty when not served, and the last lap position drop.
 - Tests (since 1.19.8, Phase 1): `node tests/phone_emulation.test.js [index.html]` runs the phone checks in emulated phones on the Mac, with no real device or account. It uses Playwright device profiles:
   - **iPhone** in WebKit (the engine of Safari, but not Safari itself) and **Pixel** in Chromium (the engine of Chrome on Android), both in landscape with touch, at the sizes of a current phone.
   - **Layout:** the phone HUD (§11g) is shown, the bottom-right panel and speed guide are absent, the pause button and both touch halves are visible, the menu shows the gearbox row hidden and the side and tilt rows shown.
@@ -608,14 +634,24 @@ After tagging, push `main`, the tag and the feature branch to GitHub (`p3trk/mot
 
 - Fictional teams and riders.
 - Mid-race refuelling (real MotoGP has no pit refuelling).
-- No tyre compound choice, flag-to-flag bike swap or Long Lap penalty.
-- Track limits (§6a) are simplified: only the player is judged, races use a time penalty for a cut instead of the 3/5 warning count and Long Lap, and there is no last-lap position drop.
+- No tyre compound choice or flag-to-flag bike swap.
+- Track limits (§6a) are simplified: only the player is judged; an infraction is decided by time lost against a reference, not by Race Direction; an unserved Long Lap is a fixed 5 s time penalty.
 - No weather.
 - Simplified 2D physics: no suspension and no separate front/rear tyre model.
 
 ## 16. Version history
 
-See `CHANGELOG.md`. Current: **1.20.0** (track limits, Phase 1: invalid laps in practice and qualifying, time penalty for cuts in races; §6a). Previous: **1.19.8** (phone emulation tests; §13). Previous: **1.19.7** (fix: no text selection or zoom while playing on iPhone browsers, Brave included; §3a). Previous: **1.19.6** (version number shown next to the menu title; §11). Previous: **1.19.5** (fix: no double-tap zoom or text selection on menus and overlays in iPhone browsers, Brave included; §3a). Previous: **1.19.4** (fix: race result order lists riders a lap down below lead-lap riders; §11). Previous: **1.19.3** (no browser zoom on phones; §3a). Before that: **1.19.2** (tilt dead zone 12 degrees; §3a).
+See `CHANGELOG.md`. Current: **1.21.0** (track limits, Phase 2: infraction count, warning, Long Lap loop at Stowe, last lap position drop; §6a). Previous: **1.20.0** (track limits, Phase 1: invalid laps in practice and qualifying, time penalty for cuts in races; §6a). Previous: **1.19.8** (phone emulation tests; §13). Previous: **1.19.7** (fix: no text selection or zoom while playing on iPhone browsers, Brave included; §3a). Previous: **1.19.6** (version number shown next to the menu title; §11). Previous: **1.19.5** (fix: no double-tap zoom or text selection on menus and overlays in iPhone browsers, Brave included; §3a). Previous: **1.19.4** (fix: race result order lists riders a lap down below lead-lap riders; §11). Previous: **1.19.3** (no browser zoom on phones; §3a). Before that: **1.19.2** (tilt dead zone 12 degrees; §3a).
+
+### Open questions for 1.21.0 (recommended answer in bold; the design above uses it)
+
+1. Where is the Long Lap loop? **Outside of Stowe** (38 m tarmac run-off, after the longest braking zone, apex about 120 km/h). Alternatives with enough tarmac: outside of Copse (39 m, apex about 100 km/h) or Woodcote (31 m).
+2. How is the 2.5 s cost guaranteed? **The loop shape plus a top-up time penalty** when the loop was ridden faster than that. A speed limit in the loop would feel artificial.
+3. Thresholds for the 10 lap race: **the Sprint numbers (warning 2, Long Lap 3)**, because its length is close to a real Sprint. The Grand Prix uses 3 and 5.
+4. A cut that gains time: **give back the gain as a time penalty and count it; a clear advantage (1 s or more) gives a Long Lap at once.** This replaces the fixed 2 s penalty from Phase 1.
+5. A Long Lap not served: **5 s**; given with fewer than 3 laps left: **3 s at once**.
+6. Last lap: **drop one position if a rival is less than 0.5 s behind**, as in the real rules.
+7. Judge AI riders too? **Not yet.** They only leave the track after contact.
 
 ### Open questions for 1.20.0 (recommended answer in bold; the design above uses it)
 

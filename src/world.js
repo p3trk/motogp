@@ -204,7 +204,7 @@ function simStep(dt) {
     if (b.surf === SURF.WALL) { wallHit(b); if (b.crashed) continue; T.project(b.x, b.y, b.i, b); b.surf = T.surface(b.i, b.s, b.d); if (b.surf === SURF.WALL) b.surf = SURF.GRASS; }
     pitWall(b, pd);
     pitLogic(b, dt);
-    if (b.isPlayer) trackLimits(b);
+    if (b.isPlayer) { longLap(b); trackLimits(b); }
     timing(b);
     effects(b, dt);
   }
@@ -322,6 +322,7 @@ function timing(b) {
 // track limits (GDD 6a): run-off, gravel and grass beyond the kerb; the strip beside the pit lane is not judged
 function overLimit(b) {
   const sf = b.surf; if (sf !== SURF.RUN && sf !== SURF.GRAVEL && sf !== SURF.GRASS) return false;
+  if (W.mode === 'race' && b.llPend?.length && T.inLL(b.s, b.d)) return false; // serving a Long Lap
   return !(b.d >= 0 && T.PIT.inZone(T.rel(b.s)));
 }
 function trackLimits(b) {
@@ -337,9 +338,49 @@ function trackLimits(b) {
   if (!race || !judged || crashed) return; // a crash and respawn is not a rejoin
   const ref = limitRef(s0, b.s); if (ref === null) return;
   const lost = t - ref; if (lost >= 0.5) return; // ran wide and paid for it already
-  const pen = Math.ceil((2 + Math.max(0, -lost)) * 10 - 1e-6) / 10;
-  b.pen += pen; HUD.msg('TRACK LIMITS', '+' + pen.toFixed(1) + ' s time penalty', '#e3312a', 2);
+  const gain = Math.max(0, -lost), back = Math.ceil(gain * 10 - 1e-6) / 10; // a cut never pays: the gain comes back at once
+  if (back > 0) b.pen += back;
+  const plus = back > 0 ? '+' + back.toFixed(1) + ' s · ' : '';
+  if (gain >= 1) { giveLongLap(b, plus + 'clear advantage'); return; }
+  if (b.lap === W.totalLaps - 1) { // last lap: a rival within striking distance takes the place
+    const st = standings(), o = st[st.indexOf(b) + 1];
+    if (o && !o.dnf && !b.dropBehind && gapOf(o) - gapOf(b) < 0.5) { b.dropBehind = o; HUD.msg('TRACK LIMITS', plus + 'drop one position', '#e3312a', 2.5); return; }
+  }
+  const L = TL_LIMITS[W.kind] || TL_LIMITS.sprint; b.tl++;
+  if (b.tl >= L.ll) { b.tl = 0; giveLongLap(b, plus + L.ll + ' infractions'); return; }
+  if (b.tl >= L.warn) HUD.msg('TRACK LIMITS WARNING', plus + b.tl + '/' + L.ll, '#e3312a', 2.5);
+  else HUD.msg('TRACK LIMITS ' + b.tl + '/' + L.ll, plus.slice(0, -3), '#ffcf1f', 2);
 }
+const TL_LIMITS = { gp: { warn: 3, ll: 5 }, sprint: { warn: 2, ll: 3 } }; // 10 lap race uses the Sprint numbers (GDD 6a)
+function giveLongLap(b, why) {
+  if (W.totalLaps - b.lap < 3) { b.pen += 3; HUD.msg('LONG LAP · +3 s', why + ' · too few laps left', '#e3312a', 3); return; }
+  b.llPend.push({ until: b.lap + 3 }); b.llGiven++;
+  HUD.msg('LONG LAP', why + ' · ride the loop at ' + T.LL.name + ' within 3 laps', '#e3312a', 3);
+}
+// Long Lap (GDD 6a): through the lane at entry, apex and exit on one pass; it costs at least 2.5 s
+function longLap(b) {
+  if (W.mode !== 'race' || b.finished || !b.llPend.length) { b.llRun = null; return; }
+  const LL = T.LL, p = b.prevS, s = b.s, crossed = x => p < x && s >= x;
+  if (crossed(LL.sA)) b.llRun = { t0: W.time, ok: 0 };
+  const R = b.llRun; if (!R) return;
+  LL.cps.forEach((c, k) => { if (crossed(c) && T.inLL(s, b.d)) R.ok |= 1 << k; });
+  if (!crossed(LL.sB)) return;
+  b.llRun = null; if (R.ok !== 7) return;
+  b.llPend.shift();
+  const top = Math.ceil((2.5 - (W.time - R.t0 - limitRef(LL.sA, LL.sB))) * 10 - 1e-6) / 10;
+  if (top > 0) b.pen += top;
+  HUD.msg('LONG LAP SERVED', top > 0 ? '+' + top.toFixed(1) + ' s to make it 2.5 s' : '', '#3ad17a', 2);
+}
+// a Long Lap not served in its 3 laps: 5 s (called at the line)
+function longLapDue(b) {
+  while (b.llPend.length && b.lap >= b.llPend[0].until) { b.llPend.shift(); b.pen += 5; HUD.msg('LONG LAP NOT SERVED', '+5 s time penalty', '#e3312a', 3); }
+}
+// last lap drop (GDD 6a): the player is placed directly behind the rival, if the rival finished on the same lap
+function applyDrop(b) {
+  const o = b.dropBehind; b.dropPen = 0; if (!o || !b.finished || !o.finished || o.lap !== b.lap) return;
+  const mine = b.finishT + b.pen, theirs = o.finishT + (o.pen || 0); if (mine <= theirs) b.dropPen = theirs - mine + 0.001;
+}
+const penT = b => (b.pen || 0) + (b.dropPen || 0);
 // reference time from s0 to s1: the best lap trace if it covers both points, else the speed guide pace (GDD 6a, 9)
 function limitRef(s0, s1) {
   let ds = s1 - s0; if (ds < -T.L / 2) ds += T.L; if (ds > T.L / 2) ds -= T.L;
@@ -371,6 +412,7 @@ function completeLap(b) {
     if (!inv && (rec.allPb || !W.bestTrace)) { W.bestTrace = Float32Array.from(W.curTrace); W.bestTraceT = lt; }
     W.curTrace.fill(-1);
     HUD.lap(lt, pb, rec.allPb, inv);
+    if (W.mode === 'race') longLapDue(b);
   }
   if (W.mode === 'race') {
     if (!b.finished && (b.lap >= W.totalLaps || W.flag)) {
@@ -439,7 +481,7 @@ function standings() {
     return bikes.sort((a, b) => {
       if (a.dnf !== b.dnf) return a.dnf ? 1 : -1;
       // laps first, so a rider a lap down is always below the lead-lap riders (GDD 11, since 1.19.4)
-      if (a.finished && b.finished) return (b.lap - a.lap) || ((a.finishT + (a.pen || 0)) - (b.finishT + (b.pen || 0))) || (W.finishOrder.indexOf(a) - W.finishOrder.indexOf(b)); // penalties count (GDD 6a)
+      if (a.finished && b.finished) return (b.lap - a.lap) || ((a.finishT + penT(a)) - (b.finishT + penT(b))) || (W.finishOrder.indexOf(a) - W.finishOrder.indexOf(b)); // penalties count (GDD 6a)
       if (a.finished !== b.finished) return a.finished ? -1 : 1;
       return b.progress - a.progress;
     });

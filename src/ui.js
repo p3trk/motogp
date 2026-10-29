@@ -45,6 +45,7 @@ function fuelWarn(b) {
 // phone HUD (GDD 11g, since 1.19.0): compact speedometer with an rpm bar and a lean bar
 function drawPhoneDash(b) {
   const PAD = 16, dw = 190, dh = 84, dx = PAD, dy = VH - dh - PAD;
+  drawLongLapBoard(b, dy);
   panel(dx, dy, dw, dh);
   const rpm = b.rpmVis, segs = 26, sw = (dw - 20) / segs;
   const shiftNow = rpm > 17300;
@@ -99,6 +100,7 @@ function drawHUD(dt) {
   if (ph) drawPhoneDash(b); else {
   // ---- dashboard (bottom-left)
   const dw = small ? 270 : 330, dh = 138, dx = PAD, dy = VH - dh - PAD;
+  drawLongLapBoard(b, dy);
   panel(dx, dy, dw, dh);
   const rpm = b.rpmVis, segs = 26, sw = (dw - 28) / segs;
   const shiftNow = rpm > 17300;
@@ -404,11 +406,22 @@ function drawTower(st, me) {
     });
   }
 }
+// results Pen column (GDD 6a): time penalty, Long Laps given, last lap position drop
+function penCell(b) { const p = []; if (b.pen > 0) p.push('+' + b.pen.toFixed(1) + ' s'); if (b.llGiven) p.push(b.llGiven + ' LL'); if (b.dropBehind && b.dropPen > 0) p.push('−1 pos'); return p.join(' · '); }
+// Long Lap board (GDD 6a): above the dashboard while a Long Lap is pending
+function drawLongLapBoard(b, dashTop) {
+  if (W.mode !== 'race' || !b.llPend?.length || b.finished) return;
+  const x = 16, w = 190, y = dashTop - 46, left = b.llPend[0].until - b.lap;
+  panel(x, y, w, 38, 0.88); ctx.fillStyle = '#e3312a'; ctx.fillRect(x, y, 4, 38);
+  txt('LONG LAP' + (b.llPend.length > 1 ? ' ×' + b.llPend.length : ''), x + 12, y + 16, 14, '#ffcf1f', 800, 'left', true);
+  txt(T.LL.name + ' · ' + left + ' lap' + (left > 1 ? 's' : '') + ' left', x + 12, y + 32, 12, '#e9edf0', 600);
+}
 function drawMinimap(me) {
   const M = HUD.mini; if (!M) return; const S = VW < 760 || Touch.on ? 140 : M.S; const x = VW - S - 16, y = 16;
   panel(x, y, S, S, 0.7); ctx.drawImage(M.c, x, y, S, S); const k = S / M.S;
   const by = T.PIT.boxS(me.box); const [bx0, by0] = M.tf(...T.pt(T.idx(by), T.PIT.boxD * 0.6));
   if ((performance.now() / 300 | 0) % 2) { ctx.strokeStyle = TEAMS[me.team].c1; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x + bx0 * k, y + by0 * k, 5, 0, TAU); ctx.stroke(); }
+  if (W.mode === 'race' && me.llPend?.length && (performance.now() / 300 | 0) % 2) { const [lx, ly] = M.tf(...T.pt(T.idx(T.LL.sM), T.LL.sg * T.LL.off(T.LL.sM))); ctx.strokeStyle = '#ffcf1f'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x + lx * k, y + ly * k, 6, 0, TAU); ctx.stroke(); } // Long Lap pending (GDD 6a)
   for (const o of W.bikes) {
     if (o.dnf) continue; const px = o.crashed && o.crash ? o.crash.bk.x : o.x, py = o.crashed && o.crash ? o.crash.bk.y : o.y;
     const [mx, my] = M.tf(px, py); ctx.fillStyle = o === me ? '#ffcf1f' : TEAMS[o.team].c1; ctx.strokeStyle = '#000'; ctx.lineWidth = 1;
@@ -833,12 +846,13 @@ const UI = {
     const rec = Rec.stop();
     W.player.autopilot = true;
     let guard = 0; while ((W.bikes.some(b => !b.finished && !b.dnf) || W.ghosts.some(g => !g.finished && !g.dnf)) && guard < 120 * 240) { simStep(SUB); guard++; }
+    applyDrop(W.player); // last lap position drop (GDD 6a)
     const st = standings(); const win = st[0];
     const me = W.player; const myPos = st.indexOf(me) + 1;
     let fl = null; for (const b of st) if (b.bestLap && (!fl || b.bestLap < fl.bestLap)) fl = b;
     this.results('Race result', 'British Grand Prix · ' + W.totalLaps + ' laps', me.dnf ? 'You did not finish.' : `You finished P${myPos} of ${st.length}. Fastest lap: #${fl.num} ${fl.name} ${fmtTime(fl.bestLap)}`,
       ['Pos', '#', 'Rider', 'Team', 'Time / gap', 'Best lap', 'Pits', 'Pen'],
-      st.map((b, k) => ({ me: b === me, cells: [b.dnf ? 'DNF' : k + 1, b.num, b.ghost ? b.name.replace(' (ghost)', '') + ' · GHOST' : b.name, sw(b.team) + TEAMS[b.team].name, b.dnf ? 'Retired' : k === 0 ? fmtTime(b.finishT + (b.pen || 0)) : (b.lap < win.lap ? '+' + (win.lap - b.lap) + ' lap' + (win.lap - b.lap > 1 ? 's' : '') : '+' + (b.finishT + (b.pen || 0) - win.finishT - (win.pen || 0)).toFixed(3)), b.bestLap ? (b === fl ? '<span class="pb">' + fmtTime(b.bestLap) + '</span>' : fmtTime(b.bestLap)) : '–', b.ghost ? '–' : b.pits, b.pen > 0 ? '+' + b.pen.toFixed(1) + ' s' : ''] })),
+      st.map((b, k) => ({ me: b === me, cells: [b.dnf ? 'DNF' : k + 1, b.num, b.ghost ? b.name.replace(' (ghost)', '') + ' · GHOST' : b.name, sw(b.team) + TEAMS[b.team].name, b.dnf ? 'Retired' : k === 0 ? fmtTime(b.finishT + penT(b)) : (b.lap < win.lap ? '+' + (win.lap - b.lap) + ' lap' + (win.lap - b.lap > 1 ? 's' : '') : '+' + (b.finishT + penT(b) - win.finishT - penT(win)).toFixed(3)), b.bestLap ? (b === fl ? '<span class="pb">' + fmtTime(b.bestLap) + '</span>' : fmtTime(b.bestLap)) : '–', b.ghost ? '–' : b.pits, penCell(b)] })),
       [['Race again', () => this.launch(W.kind, W.kind === 'gp' ? { qualiGrid: W.opts.qualiGrid } : {})], ...(rec ? [['Watch replay', () => RP.open([rec], 'results'), true], ['Export session', () => Lib.export(rec), true]] : []), ['Back to menu', () => this.toMenu(), true]]);
   },
   results(eyebrow, title, sub, head, rows, actions) {
@@ -899,5 +913,5 @@ function boot() {
   requestAnimationFrame(t => { last = t; requestAnimationFrame(frame); });
   setInterval(() => { if (UI.state === 'menu') { for (let k = 0; k < 4; k++) simStep(SUB); } }, 1000 / 30);
 }
-window.__sgp = { Touch, tiltProjectX: draw => { for (const Ly of LAYERS) { const g = Ly.g; g.setTransform(Ly.dpr, 0, 0, Ly.dpr, 0, 0); g.translate(-Ly.x0, -Ly.y0); draw(g, RW, RH); } projectTilted(); return { VW, VH, RW, RH }; }, worldToScreenX: (x, y) => worldToScreen(x, y), worldToCanvasX: (x, y) => worldToCanvas(x, y), frameX: t => frame(t), setCamModeX: m => setCamMode(m), CAM, RP, Rec, Lib, Ghost, W, T, PHYS, Input, FX, Records, completeLapX: b => completeLap(b), trackLimitsX: b => trackLimits(b), limitRefX: (s0, s1) => limitRef(s0, s1), SURF, drawWorldX: () => drawWorld(), speedBlurX: () => speedBlur(), camNameX: () => TILT_CAM, setupSession, simStep, standings, UI, SUB, TILT, setAIReal: v => { AI_REAL = v; } };
+window.__sgp = { Touch, tiltProjectX: draw => { for (const Ly of LAYERS) { const g = Ly.g; g.setTransform(Ly.dpr, 0, 0, Ly.dpr, 0, 0); g.translate(-Ly.x0, -Ly.y0); draw(g, RW, RH); } projectTilted(); return { VW, VH, RW, RH }; }, worldToScreenX: (x, y) => worldToScreen(x, y), worldToCanvasX: (x, y) => worldToCanvas(x, y), frameX: t => frame(t), setCamModeX: m => setCamMode(m), CAM, RP, Rec, Lib, Ghost, W, T, PHYS, Input, FX, Records, completeLapX: b => completeLap(b), trackLimitsX: b => trackLimits(b), longLapX: b => longLap(b), applyDropX: b => applyDrop(b), limitRefX: (s0, s1) => limitRef(s0, s1), SURF, drawWorldX: () => drawWorld(), speedBlurX: () => speedBlur(), camNameX: () => TILT_CAM, setupSession, simStep, standings, UI, SUB, TILT, setAIReal: v => { AI_REAL = v; } };
 if (document.fonts && document.fonts.ready) { Promise.race([document.fonts.ready, new Promise(r => setTimeout(r, 1500))]).then(boot).catch(e => { console.error("boot failed", e && e.stack); }); } else boot();

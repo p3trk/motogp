@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.19.7 (2026-10-29)
+- Fix: on iPhone browsers, including Brave, holding or double-tapping the brake and throttle halves no longer selects text, shows the magnifier or zooms the page, during play or in replay. The touch layer now cancels the touch events themselves; iPhone WebKit ignored the cancelled pointer press. Text selection and the long-press menu are blocked while playing (GDD 3a).
+- Tests: tests/mobile_controls.test.js checks that the touch events are cancelled and the brake still works. The iPhone behaviour itself still needs a check on a phone.
+
 ## v1.19.6 (2026-10-29)
 - The version number shows next to the menu title (GDD 11). It is read from the newest heading in this file when `tools/build.py` writes `index.html`, so it always matches the changelog. Not shown during play, pause or results.
 - Tests: tests/menu_version.test.js checks the menu label against this file; it is in `npm test`.

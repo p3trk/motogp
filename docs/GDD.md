@@ -1,6 +1,6 @@
 # Silverstone GP — Game Design Document
 
-**Version:** 1.19.6 · **Last updated:** 2026-10-28 · **Owner:** Petr
+**Version:** 1.19.7 · **Last updated:** 2026-10-28 · **Owner:** Petr
 
 This document is the source of truth for how the game should work. Every
 change starts here: update the GDD on a feature branch first, then change the
@@ -87,6 +87,7 @@ Used when the game runs on a phone or tablet (touch screen, no keyboard). The de
   - Tilt sensitivity can be Very low (full lean at 75°), Low (60°, default) or High (35°).
 - **No zoom:** on phones the browser must not zoom or scroll the page while playing. Pinch zoom, double-tap zoom and drag-to-scroll are off for the whole game. Pressing the throttle or brake halves never zooms the page. Menus still scroll with a finger, but do not zoom.
 - **Brave and other iPhone browsers (since 1.19.5):** every iPhone browser on iOS uses the same WebKit engine, so the rules above apply to Brave too. The menus, overlays and pause screen must also block double-tap zoom: the overlay layer allows it today, so a double tap on a menu zooms the page. Text on the page cannot be selected by a press or long press, on any screen. The game surface keeps its current rules.
+- **No zoom or selection while playing (since 1.19.7):** on iPhone browsers (Safari, Brave and the others, which all use WebKit) holding a brake or throttle half is a long press, and two quick presses are a double tap. Neither may select text, show the magnifier or copy menu, or zoom the page, during play or in replay. The touch layer cancels the browser's own handling of every touch it gets (start, move and end), not only the pointer press, because iPhone WebKit ignores a cancelled pointer press for its zoom and selection gestures. Two thumbs at once must not pinch zoom. Any text selection that appears during play is cleared. Brake, throttle, pause and replay seeking work as before.
 - **Landscape only:** in portrait the game shows a "Turn your phone sideways" screen and pauses. Landscape is needed because the tilt is read from the roll angle.
 - **Permission:** iPhone Safari asks for motion access the first time the player taps Start. If access is refused, lean is off and the message says so; brake and throttle still work.
 - **Layout:** the brake and throttle areas have a faint tint so the player can see where to press. The HUD sits at the same places as on desktop, and the bottom controls are kept clear of the speedometer and fuel.
@@ -197,6 +198,7 @@ Stored in `localStorage` key `sgp_records`, format `{v:1, laps, best, trace, tra
 - Centre messages for start, pit, flags and session events.
 - Screens: menu, loading, pause, results.
   - **Version on the menu (since 1.19.6):** the version number shows next to the menu title, "Silverstone GP", as a small label (for example `v1.19.6`). The number is read from the newest `## vX.Y.Z` heading in `CHANGELOG.md` when `tools/build.py` writes `index.html`, so there is one source of truth and no version to edit by hand. It is shown on the menu only, not in play, pause or results.
+  - **Zoom and selection during play (since 1.19.7):** bug before 1.19.7 (suspected cause, found by reading the code, not reproduced here: the headless test browser is not iPhone WebKit): the touch layer only cancels `pointerdown`. iPhone WebKit still runs its long-press selection and double-tap zoom unless `touchstart`/`touchend` are cancelled with a non-passive listener.
   - **Zoom and selection on menus (since 1.19.5):** the overlay layer and the page body allow double-tap zoom and text selection. Bug before 1.19.5 (suspected cause, found by reading the CSS, not yet reproduced on a phone): `.overlay` sets `touch-action: pan-y`, which lets double-tap zoom through, and no rule stops text selection outside the game surface.
   - **Race result order (since 1.19.4):** the results table ranks finishers by laps completed first, then by finish order (the order they crossed the line). Every rider on the winner's lap count is listed above every rider a lap down, so all `+NN.MMM` rows come before all `+N lap` rows.
   - Bug before 1.19.4 (suspected cause, not yet reproduced in a run): after the chequered flag, a rider a lap down could cross the line first and was ranked above a lead-lap rider still on the last lap, because finish order alone set the rank. The "+1 lap" row then showed above a "+NN.MMM" row.
@@ -563,7 +565,7 @@ After tagging, push `main`, the tag and the feature branch to GitHub (`p3trk/mot
 
 ## 16. Version history
 
-See `CHANGELOG.md`. Current: **1.19.6** (version number shown next to the menu title; §11). Previous: **1.19.5** (fix: no double-tap zoom or text selection on menus and overlays in iPhone browsers, Brave included; §3a). Previous: **1.19.4** (fix: race result order lists riders a lap down below lead-lap riders; §11). Previous: **1.19.3** (no browser zoom on phones; §3a). Before that: **1.19.2** (tilt dead zone 12 degrees; §3a).
+See `CHANGELOG.md`. Current: **1.19.7** (fix: no text selection or zoom while playing on iPhone browsers, Brave included; §3a). Previous: **1.19.6** (version number shown next to the menu title; §11). Previous: **1.19.5** (fix: no double-tap zoom or text selection on menus and overlays in iPhone browsers, Brave included; §3a). Previous: **1.19.4** (fix: race result order lists riders a lap down below lead-lap riders; §11). Previous: **1.19.3** (no browser zoom on phones; §3a). Before that: **1.19.2** (tilt dead zone 12 degrees; §3a).
 
 ### Open questions for 1.18.0 (recommended answer in bold; the design above uses it)
 

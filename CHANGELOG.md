@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.20.0 (2026-10-29)
+- Track limits, Phase 1 (GDD 6a), based on the real MotoGP rules. Run-off, gravel and grass beyond the kerb are over the limit. Kerbs, the pit lane and the strip beside it are legal. Only the player is judged.
+- Practice, Curve training and qualifying: a trip beyond the kerb makes the lap invalid (red LAP INVALID message, red stopwatch). The lap is still listed, marked INV, but never becomes a session best, best per mode, PB, all-time trace, best sector or ghost lap. In qualifying it uses up a flying lap.
+- Races: when the rider rejoins, the trip is compared with the best lap trace (or the speed guide pace). Losing less than 0.5 s is a cut: time penalty 2 s + the time gained. Penalties show as PEN on the HUD and the timing tower, are added to the race time, and count in the result order (new Pen column).
+- Tests: new tests/track_limits.test.js, in npm test.
+
 ## v1.19.8 (2026-10-29)
 - Tests: new tests/phone_emulation.test.js (in npm test, GDD 13). It runs the phone checks in an emulated iPhone (WebKit) and Pixel (Chromium): viewport and touch rules, the phone layout and touch halves, tilt, zoom (two-finger pinch and double tap, Chromium only), and the portrait prompt (Chromium only). Real phones are not covered.
 - Test-only change: no game code changed.

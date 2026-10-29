@@ -28,10 +28,10 @@ const Rec = {
     const m = (k) => q && f < 1 ? q[k] + (c[k] - q[k]) * f : c[k];
     S.x.push(r2(m('x'), 100)); S.y.push(r2(m('y'), 100)); S.h.push(r2(q && f < 1 ? q.h + angWrap(c.h - q.h) * f : c.h, 1000)); S.v.push(r2(m('v'), 100)); S.lean.push(r2(m('lean'), 1000)); S.s.push(r2(f < 1 ? c.s : c.s, 10)); S.p.push(r2(m('p'), 10));
   },
-  lap(start, end, t, ap) { if (this.cur) this.cur.laps.push(ap ? { start: r2(start, 1000), end: r2(end, 1000), time: r2(t, 1000), ap: 1 } : { start: r2(start, 1000), end: r2(end, 1000), time: r2(t, 1000) }); },
+  lap(start, end, t, ap, inv) { if (!this.cur) return; const l = { start: r2(start, 1000), end: r2(end, 1000), time: r2(t, 1000) }; if (ap) l.ap = 1; if (inv) l.inv = 1; this.cur.laps.push(l); },
   snapshot() { // finished copy of the session so far
     const R = this.cur; if (!R) return null; const b = W.player;
-    const own = R.laps.filter(l => !l.ap), pool = own.length ? own : R.laps;
+    const pool = bestPool(R);
     R.bestLap = pool.length ? Math.min(...pool.map(l => l.time)) : 0;
     if (W.mode === 'race') { R.raceStart = W.raceStartT > 0 ? r2(W.raceStartT, 1000) : 0; R.start.t = R.raceStart; R.finishT = b.finished ? r2(b.finishT, 1000) : 0; R.position = b.dnf ? 0 : standings().indexOf(b) + 1; }
     R.pits = b.pits;
@@ -260,8 +260,10 @@ function recAt(R, t) { // sample at recording time t
   const p = jump ? (f < 0.5 ? S.p[k] : S.p[j]) : L(S.p);
   return { x: B(S.x), y: B(S.y), h: hB, v: B(S.v), lean: B(S.lean), p, dv: S.v[j] - S.v[k] };
 }
+// laps that can be a best or ghost lap: own laps first, autopilot laps if there are none, never invalid laps (GDD 6a, 10)
+function bestPool(R) { const ok = R.laps.filter(l => !l.inv), own = ok.filter(l => !l.ap); return own.length ? own : ok; }
 function makeGhost(R) {
-  const rd = R.rider; const own = R.laps.filter(l => !l.ap); const pool = own.length ? own : R.laps;
+  const rd = R.rider; const pool = bestPool(R);
   const best = pool.slice().sort((a, b) => a.time - b.time)[0] || null;
   const chain = R.laps.filter(l => l.time > 0 && l.end > l.start);
   return {
@@ -350,7 +352,7 @@ const Ghost = {
 // Replay viewer: one or several recordings on one timeline (GDD 11e)
 // ---------------------------------------------------------------------------
 const RP_SPEEDS = [-8, -4, -2, -1, 0.25, 0.5, 1, 2, 4, 8], RP_MAX = 6;
-function rpBestLap(R) { const own = R.laps.filter(l => !l.ap), pool = own.length ? own : R.laps; return pool.slice().sort((a, b) => a.time - b.time)[0] || null; }
+function rpBestLap(R) { const pool = bestPool(R); return pool.slice().sort((a, b) => a.time - b.time)[0] || null; }
 function rpDist(R) { // continuous distance along the track for every sample (line crossings and invalid laps unwrapped)
   const p = R.samples.p, c = new Float64Array(p.length); for (let k = 1; k < p.length; k++) { let d = p[k] - p[k - 1]; if (d < -T.L / 2) d += T.L; else if (d > T.L / 2) d -= T.L; c[k] = c[k - 1] + d; } return c;
 }

@@ -1,6 +1,6 @@
 # Silverstone GP — Game Design Document
 
-**Version:** 1.19.8 · **Last updated:** 2026-10-28 · **Owner:** Petr
+**Version:** 1.20.0 · **Last updated:** 2026-10-29 · **Owner:** Petr
 
 This document is the source of truth for how the game should work. Every
 change starts here: update the GDD on a feature branch first, then change the
@@ -150,6 +150,43 @@ Model: point-mass bike on a 2D plane, integrated per frame with fixed sub-steps.
   - **Chassis** — up to −13 % grip and −20 % lean rate.
 - Damage is never repaired in the pits (fuel only). AI with heavy aero/chassis damage pits early to top up and drives more cautiously.
 
+## 6a. Track limits (since 1.20.0)
+
+Based on the real MotoGP rules (FIM Grand Prix Regulations Art. 1.21 and the Race Direction track limits and shortcut protocols). This is Phase 1: invalid laps in practice and qualifying, and time penalties for cuts in races. Phase 2 (later) adds warnings, a count of trips off track and the Long Lap loop.
+
+**Legal and illegal**
+
+| Legal | Over the limit |
+|---|---|
+| Asphalt, the white edge line, the kerbs | Tarmac run-off, gravel and grass beyond the outer edge of the kerb |
+| The pit lane (surface `PIT`), and the strip between the track and the pit lane inside the pit zone | |
+
+- The check uses the bike's centre point (the game has no separate wheels). A **trip off track** starts when the centre moves onto run-off, gravel or grass, and ends when it is back on asphalt, kerb or pit lane.
+- Phase 1 judges the **player only**. AI riders follow their line and are not judged.
+- Not judged: the out lap, the grid crossing before the first timed lap, laps driven by autopilot, and a trip that ends in a crash (the respawn puts the bike back on track, which is not a rejoin).
+
+**Practice, Curve training and qualifying: the lap is invalid**
+- Any trip off track during a timed lap makes the whole lap invalid. This matches the real rule, where the lap time is cancelled.
+- The HUD shows a red **LAP INVALID · Track limits** message once, and the lap stopwatch turns red until the line.
+- An invalid lap is still timed and listed, marked **INV**. It does not count as:
+  - the session best or the best lap per mode (§10);
+  - the all-time best lap trace or the PB;
+  - a ghost lap (§11c), or the reference trace for the speed guide delta;
+  - a best sector time (its sector splits are shown, but are not compared or stored as best).
+- Qualifying: an invalid lap still uses up one of the 3 flying laps. If all of them are invalid, the player has no time and starts from the back of the grid.
+
+**Races: time penalty for a cut**
+- When a trip off track ends, the game compares its time with a **reference time** over the same stretch of track (from the point where the bike left the track to the point where it rejoined):
+  - the player's best lap trace (`W.bestTrace`, 10 m steps), if it has times for both points;
+  - otherwise the ideal speed profile at the speed guide pace (96 %, §9).
+- **Time lost** = trip time − reference time.
+  - Lost **0.5 s or more:** no penalty. The rider ran wide and paid for it already, as in the real rules.
+  - Lost **less than 0.5 s** (or gained time): this is a **cut**. Penalty = **2 s + the time gained** (gain = reference − trip time, at least 0), rounded up to 0.1 s.
+  - So a cut always leaves the rider at least 1.5 s worse off than staying on track.
+- The HUD shows **TRACK LIMITS · +2.3 s** (the penalty for that cut) in red. A small **PEN +x.x s** tag next to the lap stopwatch shows the total.
+- Penalties add up and are added to the player's race time at the finish. The results table (§11) ranks finishers by laps completed, then by race time **including penalties**, and shows the penalty in its own column. So a penalty can cost positions at the finish.
+- The timing tower shows live gaps without penalties during the race (as in real timing), with the **PEN** tag on the player's row.
+
 ## 7. Fuel and pit stops
 
 - Tank 22 L. Consumption ≈ 2.6 L per lap at race pace (scales with throttle and rpm), so a 20-lap race needs one stop and a 10-lap race needs a full tank.
@@ -187,6 +224,7 @@ Stored in `localStorage` key `sgp_records`, format `{v:1, laps, best, trace, tra
 - On phones (since 1.19.0) the in-session **"Your laps"** list is removed (§11g). The saved laps stay in the menu.
 - In practice, the timing tower shows an **ALL-TIME** best row.
 - Laps driven by autopilot (e.g. while the crew is servicing) are not saved.
+- Invalid laps (track limits, §6a, since 1.20.0) are saved with `inv: 1` and listed as **INV**, but never become a best lap, the all-time trace or a ghost lap. Session recordings mark them the same way.
 
 ## 11. HUD and screens
 
@@ -541,6 +579,7 @@ On phones (touch controls on, §3a) the HUD is made smaller and simpler. Desktop
   - v1.16.0 fails it (no blur at top speed).
 - Since 1.17.0 `tilt_seam.test.js` and `camera_shake.test.js` run with Speed blur Off, so their measurements stay as before; `camera_tuning.test.js` expects 15 sliders (the three blur sliders added) and checks that they are saved per camera and reset by Reset to defaults.
 - `npm test` runs all tests (needs `npm install` and `npx playwright install chromium` once).
+- Tests (since 1.20.0): `node tests/track_limits.test.js [index.html]` checks §6a: kerbs and the strip beside the pit lane are legal; gravel makes a practice lap invalid; the invalid lap is saved with `inv` and never becomes a best lap, mode best or all-time trace; the next lap starts valid; in a race a cut gives 2 s + the time gained, a slow run wide and a crash give no penalty, and the penalty counts in the result order.
 - Tests (since 1.19.8, Phase 1): `node tests/phone_emulation.test.js [index.html]` runs the phone checks in emulated phones on the Mac, with no real device or account. It uses Playwright device profiles:
   - **iPhone** in WebKit (the engine of Safari, but not Safari itself) and **Pixel** in Chromium (the engine of Chrome on Android), both in landscape with touch, at the sizes of a current phone.
   - **Layout:** the phone HUD (§11g) is shown, the bottom-right panel and speed guide are absent, the pause button and both touch halves are visible, the menu shows the gearbox row hidden and the side and tilt rows shown.
@@ -569,13 +608,22 @@ After tagging, push `main`, the tag and the feature branch to GitHub (`p3trk/mot
 
 - Fictional teams and riders.
 - Mid-race refuelling (real MotoGP has no pit refuelling).
-- No tyre compound choice, flag-to-flag bike swap, long-lap or track-limits penalties.
+- No tyre compound choice, flag-to-flag bike swap or Long Lap penalty.
+- Track limits (§6a) are simplified: only the player is judged, races use a time penalty for a cut instead of the 3/5 warning count and Long Lap, and there is no last-lap position drop.
 - No weather.
 - Simplified 2D physics: no suspension and no separate front/rear tyre model.
 
 ## 16. Version history
 
-See `CHANGELOG.md`. Current: **1.19.7** (fix: no text selection or zoom while playing on iPhone browsers, Brave included; §3a). Previous: **1.19.6** (version number shown next to the menu title; §11). Previous: **1.19.5** (fix: no double-tap zoom or text selection on menus and overlays in iPhone browsers, Brave included; §3a). Previous: **1.19.4** (fix: race result order lists riders a lap down below lead-lap riders; §11). Previous: **1.19.3** (no browser zoom on phones; §3a). Before that: **1.19.2** (tilt dead zone 12 degrees; §3a).
+See `CHANGELOG.md`. Current: **1.20.0** (track limits, Phase 1: invalid laps in practice and qualifying, time penalty for cuts in races; §6a). Previous: **1.19.8** (phone emulation tests; §13). Previous: **1.19.7** (fix: no text selection or zoom while playing on iPhone browsers, Brave included; §3a). Previous: **1.19.6** (version number shown next to the menu title; §11). Previous: **1.19.5** (fix: no double-tap zoom or text selection on menus and overlays in iPhone browsers, Brave included; §3a). Previous: **1.19.4** (fix: race result order lists riders a lap down below lead-lap riders; §11). Previous: **1.19.3** (no browser zoom on phones; §3a). Before that: **1.19.2** (tilt dead zone 12 degrees; §3a).
+
+### Open questions for 1.20.0 (recommended answer in bold; the design above uses it)
+
+1. Which surfaces are over the limit? **Everything beyond the kerb: tarmac run-off, gravel and grass.** Kerbs stay legal, as in real MotoGP.
+2. Judge AI riders too? **No, the player only in Phase 1.** The AI follows its line and only leaves the track after contact, where it gains nothing.
+3. Race threshold and penalty: **cut = lost less than 0.5 s; penalty 2 s + time gained.** The real shortcut protocol asks for 1 s lost, but that would punish small runs wide at fast corners such as Copse.
+4. An option to turn track limits off? **No option in Phase 1**, so saved laps and ghosts stay comparable. One can be added with Phase 2.
+5. Does an invalid qualifying lap use up a flying lap? **Yes**, as in real qualifying.
 
 ### Open questions for 1.18.0 (recommended answer in bold; the design above uses it)
 

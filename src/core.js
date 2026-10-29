@@ -338,7 +338,8 @@ function makeBike(o) {
     lap: 0, gridCross: false, cp: 0, lapStartT: 0, lastLap: 0, bestLap: 0, laps: [], secStart: 0, sectors: [0, 0, 0], bestSec: [0, 0, 0], lastSec: [0, 0, 0], sec: 0,
     crashed: false, crash: null, held: false, dnf: false, finished: false, finishT: 0, crashes: 0, pits: 0,
     pitPlan: false, pitFill: 0, service: false, serviceT: 0, inPitLane: false, limiter: false, box: 0, needRelease: false,
-    ai: null, fuelLapStart: PHYS.tank, fuelPerLap: 2.6, progress: 0, msgs: []
+    ai: null, fuelLapStart: PHYS.tank, fuelPerLap: 2.6, progress: 0, msgs: [],
+    offT: -1, offS: 0, offCr: 0, lapInv: false, lapsInv: [], pen: 0
   }, o);
 }
 const Pj = { i: 0, s: 0, d: 0 };

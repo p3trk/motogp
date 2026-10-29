@@ -116,7 +116,7 @@ tr.me td.pos{color:var(--accent)}
   <div class="wrap">
     <div style="display:flex;flex-direction:column;gap:10px">
       <div class="eyebrow">British Grand Prix &#xB7; Silverstone Circuit &#xB7; Northamptonshire</div>
-      <h1>Silverstone <span>GP</span> <span class="ver">v1.19.8</span></h1>
+      <h1>Silverstone <span>GP</span> <span class="ver">v1.20.0</span></h1>
       <div class="facts"><span><b>5.891</b>km lap</span><span><b>18</b>turns</span><span><b>22</b>riders</span><span><b>20</b>laps race distance</span><span><b>Hangar</b>straight, 330+ km/h</span></div>
     </div>
     <div class="modes" role="group" aria-label="Race mode">
@@ -520,7 +520,8 @@ function makeBike(o) {
     lap: 0, gridCross: false, cp: 0, lapStartT: 0, lastLap: 0, bestLap: 0, laps: [], secStart: 0, sectors: [0, 0, 0], bestSec: [0, 0, 0], lastSec: [0, 0, 0], sec: 0,
     crashed: false, crash: null, held: false, dnf: false, finished: false, finishT: 0, crashes: 0, pits: 0,
     pitPlan: false, pitFill: 0, service: false, serviceT: 0, inPitLane: false, limiter: false, box: 0, needRelease: false,
-    ai: null, fuelLapStart: PHYS.tank, fuelPerLap: 2.6, progress: 0, msgs: []
+    ai: null, fuelLapStart: PHYS.tank, fuelPerLap: 2.6, progress: 0, msgs: [],
+    offT: -1, offS: 0, offCr: 0, lapInv: false, lapsInv: [], pen: 0
   }, o);
 }
 const Pj = { i: 0, s: 0, d: 0 };
@@ -798,9 +799,11 @@ const Records = {
   load() { try { const r = JSON.parse(localStorage.getItem('sgp_records') || 'null'); if (r && r.v === 1) this.d = Object.assign(this.d, r); } catch (e) { } },
   save() { try { localStorage.setItem('sgp_records', JSON.stringify(this.d)); } catch (e) { } },
   allBest() { let b = 0; for (const k in this.d.best) if (this.d.best[k] && (!b || this.d.best[k].t < b)) b = this.d.best[k].t; return b; },
-  add(mode, t, b, trace) {
+  add(mode, t, b, trace, inv) {
     const e = { t: +t.toFixed(3), mode, at: Date.now(), aids: b.assist ? 1 : 0, auto: b.auto ? 1 : 0, s: b.lastSec.map(x => +x.toFixed(3)) };
+    if (inv) e.inv = 1;
     this.d.laps.push(e); if (this.d.laps.length > 300) this.d.laps.splice(0, this.d.laps.length - 300);
+    if (inv) { this.save(); return { pb: false, allPb: false }; } // track limits: listed, never a best (GDD 6a, 10)
     const cur = this.d.best[mode]; const pb = !cur || t < cur.t; if (pb) this.d.best[mode] = e;
     const allPb = !this.d.traceT || t < this.d.traceT;
     if (allPb && trace) { this.d.trace = Array.from(trace, x => Math.round(x * 100) / 100); this.d.traceT = e.t; }
@@ -956,6 +959,7 @@ function simStep(dt) {
     if (b.surf === SURF.WALL) { wallHit(b); if (b.crashed) continue; T.project(b.x, b.y, b.i, b); b.surf = T.surface(b.i, b.s, b.d); if (b.surf === SURF.WALL) b.surf = SURF.GRASS; }
     pitWall(b, pd);
     pitLogic(b, dt);
+    if (b.isPlayer) trackLimits(b);
     timing(b);
     effects(b, dt);
   }
@@ -1054,9 +1058,9 @@ function timing(b) {
   if (ds < -L / 2) { // crossed the line forwards
     if (b.isPlayer) W.lineT = W.time; // practice ghosts start a best lap at every crossing (GDD 11c)
     if (b.gridCross) { b.gridCross = false; b.cp = 0; }
-    else if (b.outLap) { b.outLap = false; b.lapStartT = W.time; b.secStart = W.time; b.cp = 0; b.fuelLapStart = b.fuel; if (b.isPlayer) { HUD.msg('TIMED LAP', '', '#ffcf1f', 1.2); W.curTrace.fill(-1); } }
+    else if (b.outLap) { b.outLap = false; b.lapStartT = W.time; b.secStart = W.time; b.cp = 0; b.fuelLapStart = b.fuel; b.lapInv = b.offT >= 0; if (b.isPlayer) { HUD.msg('TIMED LAP', '', '#ffcf1f', 1.2); W.curTrace.fill(-1); } }
     else if (b.cp >= 2) completeLap(b);
-    else { b.lapStartT = W.time; b.secStart = W.time; b.cp = 0; if (b.isPlayer) { HUD.msg('LAP INVALID', 'Missed a sector', '#e3312a', 1.5); W.curTrace.fill(-1); } }
+    else { b.lapStartT = W.time; b.secStart = W.time; b.cp = 0; b.lapInv = b.offT >= 0; if (b.isPlayer) { HUD.msg('LAP INVALID', 'Missed a sector', '#e3312a', 1.5); W.curTrace.fill(-1); } }
   } else if (ds > L / 2) { b.cp = -1; } // went backwards over the line
   else {
     if (b.cp === 0 && prev < L / 3 && s >= L / 3) sector(b, 0);
@@ -1070,26 +1074,58 @@ function timing(b) {
   }
   if (b.isPlayer && !b.outLap && !b.gridCross && W.curTrace) { const bin = Math.floor(s / 10); if (W.curTrace[bin] < 0) W.curTrace[bin] = W.time - b.lapStartT; }
 }
+// track limits (GDD 6a): run-off, gravel and grass beyond the kerb; the strip beside the pit lane is not judged
+function overLimit(b) {
+  const sf = b.surf; if (sf !== SURF.RUN && sf !== SURF.GRAVEL && sf !== SURF.GRASS) return false;
+  return !(b.d >= 0 && T.PIT.inZone(T.rel(b.s)));
+}
+function trackLimits(b) {
+  const race = W.mode === 'race', judged = !b.autopilot && !b.trainHold && (race ? W.phase === 'run' && !b.finished : !b.outLap);
+  if (overLimit(b)) {
+    if (b.offT >= 0) return;
+    b.offT = W.time; b.offS = b.s; b.offCr = b.crashes;
+    if (judged && !race && !b.lapInv) { b.lapInv = true; HUD.msg('LAP INVALID', 'Track limits', '#e3312a', 1.5); }
+    return;
+  }
+  if (b.offT < 0) return;
+  const t = W.time - b.offT, s0 = b.offS, crashed = b.crashes !== b.offCr; b.offT = -1;
+  if (!race || !judged || crashed) return; // a crash and respawn is not a rejoin
+  const ref = limitRef(s0, b.s); if (ref === null) return;
+  const lost = t - ref; if (lost >= 0.5) return; // ran wide and paid for it already
+  const pen = Math.ceil((2 + Math.max(0, -lost)) * 10 - 1e-6) / 10;
+  b.pen += pen; HUD.msg('TRACK LIMITS', '+' + pen.toFixed(1) + ' s time penalty', '#e3312a', 2);
+}
+// reference time from s0 to s1: the best lap trace if it covers both points, else the speed guide pace (GDD 6a, 9)
+function limitRef(s0, s1) {
+  let ds = s1 - s0; if (ds < -T.L / 2) ds += T.L; if (ds > T.L / 2) ds -= T.L;
+  if (ds <= 0) return null;
+  const B = W.bestTrace;
+  const at = (s) => { const f = s / 10, k = Math.floor(f), a = B[k], c = B[k + 1]; return a > 0 && c > 0 ? a + (c - a) * (f - k) : -1; };
+  if (B) { const a = at(s0), c = at(s1); if (a >= 0 && c >= 0) { const r = c - a + (c < a ? W.bestTraceT : 0); if (r > 0) return r; } }
+  let r = 0; const n = Math.round(ds / T.DS); for (let k = 0, i = T.idx(s0); k < n; k++, i = (i + 1) % T.N) r += T.DS / Math.max(5, T.VP[i] * GUIDE_K);
+  return r;
+}
 function sector(b, k) {
   const t = W.time - b.secStart; b.secStart = W.time; b.lastSec[k] = t; b.cp = k + 1;
   if (b.isPlayer) { const best = b.bestSec[k]; HUD.sector(k, t, best); }
-  if (!b.bestSec[k] || t < b.bestSec[k]) b.bestSec[k] = t;
+  if (!b.lapInv && (!b.bestSec[k] || t < b.bestSec[k])) b.bestSec[k] = t;
 }
 function completeLap(b) {
   const lt = W.time - b.lapStartT; const t3 = W.time - b.secStart; b.lastSec[2] = t3;
+  const inv = b.lapInv; // track limits (GDD 6a)
   if (b.isPlayer) HUD.sector(2, t3, b.bestSec[2]);
-  if (!b.bestSec[2] || t3 < b.bestSec[2]) b.bestSec[2] = t3;
-  if (b.isPlayer) Rec.lap(W.time - lt, W.time, lt, b.autopilot);
-  b.lastLap = lt; b.laps.push(lt); const pb = !b.bestLap || lt < b.bestLap; if (pb) b.bestLap = lt;
-  b.lap++; b.lapStartT = W.time; b.secStart = W.time; b.cp = 0;
+  if (!inv && (!b.bestSec[2] || t3 < b.bestSec[2])) b.bestSec[2] = t3;
+  if (b.isPlayer) Rec.lap(W.time - lt, W.time, lt, b.autopilot, inv);
+  b.lastLap = lt; b.laps.push(lt); b.lapsInv.push(inv); const pb = !inv && (!b.bestLap || lt < b.bestLap); if (pb) b.bestLap = lt;
+  b.lap++; b.lapStartT = W.time; b.secStart = W.time; b.cp = 0; b.lapInv = b.offT >= 0;
   const used = b.fuelLapStart - b.fuel; if (!b.pittedThisLap && used > 0.8 && used < 6) b.fuelPerLap = lerp(b.fuelPerLap, used, b.laps.length > 1 ? 0.5 : 0.8);
   b.fuelLapStart = b.fuel; b.pittedThisLap = false;
   if (b.isPlayer) {
     let rec = { allPb: false };
-    if (!b.autopilot) rec = Records.add(W.mode, lt, b, W.curTrace);
-    if (rec.allPb || !W.bestTrace) { W.bestTrace = Float32Array.from(W.curTrace); W.bestTraceT = lt; }
+    if (!b.autopilot) rec = Records.add(W.mode, lt, b, W.curTrace, inv);
+    if (!inv && (rec.allPb || !W.bestTrace)) { W.bestTrace = Float32Array.from(W.curTrace); W.bestTraceT = lt; }
     W.curTrace.fill(-1);
-    HUD.lap(lt, pb, rec.allPb);
+    HUD.lap(lt, pb, rec.allPb, inv);
   }
   if (W.mode === 'race') {
     if (!b.finished && (b.lap >= W.totalLaps || W.flag)) {
@@ -1158,7 +1194,7 @@ function standings() {
     return bikes.sort((a, b) => {
       if (a.dnf !== b.dnf) return a.dnf ? 1 : -1;
       // laps first, so a rider a lap down is always below the lead-lap riders (GDD 11, since 1.19.4)
-      if (a.finished && b.finished) return (b.lap - a.lap) || (W.finishOrder.indexOf(a) - W.finishOrder.indexOf(b));
+      if (a.finished && b.finished) return (b.lap - a.lap) || ((a.finishT + (a.pen || 0)) - (b.finishT + (b.pen || 0))) || (W.finishOrder.indexOf(a) - W.finishOrder.indexOf(b)); // penalties count (GDD 6a)
       if (a.finished !== b.finished) return a.finished ? -1 : 1;
       return b.progress - a.progress;
     });
@@ -1203,10 +1239,10 @@ const Rec = {
     const m = (k) => q && f < 1 ? q[k] + (c[k] - q[k]) * f : c[k];
     S.x.push(r2(m('x'), 100)); S.y.push(r2(m('y'), 100)); S.h.push(r2(q && f < 1 ? q.h + angWrap(c.h - q.h) * f : c.h, 1000)); S.v.push(r2(m('v'), 100)); S.lean.push(r2(m('lean'), 1000)); S.s.push(r2(f < 1 ? c.s : c.s, 10)); S.p.push(r2(m('p'), 10));
   },
-  lap(start, end, t, ap) { if (this.cur) this.cur.laps.push(ap ? { start: r2(start, 1000), end: r2(end, 1000), time: r2(t, 1000), ap: 1 } : { start: r2(start, 1000), end: r2(end, 1000), time: r2(t, 1000) }); },
+  lap(start, end, t, ap, inv) { if (!this.cur) return; const l = { start: r2(start, 1000), end: r2(end, 1000), time: r2(t, 1000) }; if (ap) l.ap = 1; if (inv) l.inv = 1; this.cur.laps.push(l); },
   snapshot() { // finished copy of the session so far
     const R = this.cur; if (!R) return null; const b = W.player;
-    const own = R.laps.filter(l => !l.ap), pool = own.length ? own : R.laps;
+    const pool = bestPool(R);
     R.bestLap = pool.length ? Math.min(...pool.map(l => l.time)) : 0;
     if (W.mode === 'race') { R.raceStart = W.raceStartT > 0 ? r2(W.raceStartT, 1000) : 0; R.start.t = R.raceStart; R.finishT = b.finished ? r2(b.finishT, 1000) : 0; R.position = b.dnf ? 0 : standings().indexOf(b) + 1; }
     R.pits = b.pits;
@@ -1435,8 +1471,10 @@ function recAt(R, t) { // sample at recording time t
   const p = jump ? (f < 0.5 ? S.p[k] : S.p[j]) : L(S.p);
   return { x: B(S.x), y: B(S.y), h: hB, v: B(S.v), lean: B(S.lean), p, dv: S.v[j] - S.v[k] };
 }
+// laps that can be a best or ghost lap: own laps first, autopilot laps if there are none, never invalid laps (GDD 6a, 10)
+function bestPool(R) { const ok = R.laps.filter(l => !l.inv), own = ok.filter(l => !l.ap); return own.length ? own : ok; }
 function makeGhost(R) {
-  const rd = R.rider; const own = R.laps.filter(l => !l.ap); const pool = own.length ? own : R.laps;
+  const rd = R.rider; const pool = bestPool(R);
   const best = pool.slice().sort((a, b) => a.time - b.time)[0] || null;
   const chain = R.laps.filter(l => l.time > 0 && l.end > l.start);
   return {
@@ -1525,7 +1563,7 @@ const Ghost = {
 // Replay viewer: one or several recordings on one timeline (GDD 11e)
 // ---------------------------------------------------------------------------
 const RP_SPEEDS = [-8, -4, -2, -1, 0.25, 0.5, 1, 2, 4, 8], RP_MAX = 6;
-function rpBestLap(R) { const own = R.laps.filter(l => !l.ap), pool = own.length ? own : R.laps; return pool.slice().sort((a, b) => a.time - b.time)[0] || null; }
+function rpBestLap(R) { const pool = bestPool(R); return pool.slice().sort((a, b) => a.time - b.time)[0] || null; }
 function rpDist(R) { // continuous distance along the track for every sample (line crossings and invalid laps unwrapped)
   const p = R.samples.p, c = new Float64Array(p.length); for (let k = 1; k < p.length; k++) { let d = p[k] - p[k - 1]; if (d < -T.L / 2) d += T.L; else if (d > T.L / 2) d -= T.L; c[k] = c[k - 1] + d; } return c;
 }
@@ -2338,7 +2376,7 @@ const HUD = {
   msg(t, sub, col, dur, hold) { this.m = { t, sub, col, dur, age: 0, hold }; }, // hold: stays while the bike waits for the first input
   ticker(t) { this.tick.unshift({ t, age: 0 }); this.tick = this.tick.slice(0, 3); },
   sector(k, t, best) { this.secFlash[k] = { t, best, age: 0, pb: !best || t < best }; },
-  lap(t, pb, rec) { this.lapFlash = { t, pb, rec, age: 0 }; },
+  lap(t, pb, rec, inv) { this.lapFlash = { t, pb, rec, inv, age: 0 }; },
   step(dt) {
     if (this.m) { this.m.age += dt; if (this.m.hold && W.player && W.player.trainHold) this.m.age = Math.min(this.m.age, 1); if (this.m.age > this.m.dur) this.m = null; }
     for (const q of this.tick) q.age += dt; this.tick = this.tick.filter(q => q.age < 6);
@@ -2403,7 +2441,8 @@ function drawPhoneTop(b, st, pos) {
   panel(x, PAD, w, 58);
   txt(race ? 'P' + pos + '  LAP ' + Math.min(W.totalLaps, b.lap + 1) + '/' + W.totalLaps : b.outLap ? 'OUT LAP' : 'LAP ' + (b.laps.length + 1) + (W.mode === 'quali' ? '/3' : ''), x + 8, PAD + 15, 12, '#ffcf1f', 800, 'left', true);
   const cur = (b.outLap || b.trainHold || (race && W.phase !== 'run')) ? 0 : W.time - b.lapStartT;
-  txt(b.outLap ? '\u2013:\u2013\u2013.\u2013\u2013\u2013' : fmtTime(cur), x + 8, PAD + 38, 20, '#fff', 700, 'left');
+  txt(b.outLap ? '\u2013:\u2013\u2013.\u2013\u2013\u2013' : fmtTime(cur), x + 8, PAD + 38, 20, b.lapInv && !race ? '#e3312a' : '#fff', 700, 'left');
+  if (race && b.pen > 0) txt('PEN +' + b.pen.toFixed(1), x + w - 8, PAD + 15, 11, '#e3312a', 800, 'right'); // GDD 6a
   if (W.bestTrace && !b.outLap) { const bin = Math.floor(b.s / 10); const bt = W.bestTrace[bin], ct = W.curTrace[bin]; if (bt > 0 && ct > 0) { const dlt = ct - bt; txt((dlt >= 0 ? '+' : '\u2212') + Math.abs(dlt).toFixed(2), x + w - 8, PAD + 38, 13, dlt <= 0 ? '#3ad17a' : '#e3312a', 800, 'right'); } }
   txt('B ' + (b.bestLap ? fmtTime(b.bestLap) : '\u2013') + '   L ' + (b.lastLap ? fmtTime(b.lastLap) : '\u2013'), x + 8, PAD + 52, 10, '#8d9aa4', 600);
   const cz = !b.crashed && !b.inPitLane ? cornerAhead(b) : null;
@@ -2414,7 +2453,7 @@ function drawPhoneTop(b, st, pos) {
     if (ahead && !ahead.dnf) txt('\u25B2 ' + ahead.short + ' ' + Math.max(0, g0 - gapOf(ahead)).toFixed(3), VW / 2 - 60, PAD + 74, 11, '#c9d2d8', 600, 'center');
     if (behind && !behind.dnf && !b.finished) txt('\u25BC ' + behind.short + ' ' + Math.max(0, gapOf(behind) - g0).toFixed(3), VW / 2 + 60, PAD + 74, 11, '#c9d2d8', 600, 'center');
   }
-  if (HUD.lapFlash) { const f = HUD.lapFlash; ctx.globalAlpha = Math.max(0, Math.min(1, (5 - f.age) * 2)); txt((f.rec ? 'NEW ALL-TIME BEST  ' : f.pb ? 'SESSION BEST  ' : 'LAP  ') + fmtTime(f.t), VW / 2, PAD + 96, 20, f.pb ? '#b46bff' : '#fff', 800, 'center', true); ctx.globalAlpha = 1; }
+  if (HUD.lapFlash) { const f = HUD.lapFlash; ctx.globalAlpha = Math.max(0, Math.min(1, (5 - f.age) * 2)); txt((f.inv ? 'INVALID  ' : f.rec ? 'NEW ALL-TIME BEST  ' : f.pb ? 'SESSION BEST  ' : 'LAP  ') + fmtTime(f.t), VW / 2, PAD + 96, 20, f.inv ? '#e3312a' : f.pb ? '#b46bff' : '#fff', 800, 'center', true); ctx.globalAlpha = 1; }
 }
 function drawHUD(dt) {
   const b = W.player; if (!b) return;
@@ -2488,7 +2527,8 @@ function drawHUD(dt) {
   }
   const cur = (b.outLap || b.trainHold || (W.mode === 'race' && W.phase !== 'run')) ? 0 : W.time - b.lapStartT;
   const tx = cx + cw / 2 + (W.mode === 'race' ? -10 : 30);
-  txt(b.outLap ? '\u2013:\u2013\u2013.\u2013\u2013\u2013' : fmtTime(cur), tx, cy + 36, 26, '#fff', 700, 'center');
+  txt(b.outLap ? '\u2013:\u2013\u2013.\u2013\u2013\u2013' : fmtTime(cur), tx, cy + 36, 26, b.lapInv && W.mode !== 'race' ? '#e3312a' : '#fff', 700, 'center');
+  if (W.mode === 'race' && b.pen > 0) txt('PEN +' + b.pen.toFixed(1) + ' s', cx + cw - 16, cy + 68, 11, '#e3312a', 800, 'right'); // GDD 6a
   // live delta to best lap
   if (W.bestTrace && !b.outLap) { const bin = Math.floor(b.s / 10); const bt = W.bestTrace[bin], ct = W.curTrace[bin]; if (bt > 0 && ct > 0) { const dlt = ct - bt; txt((dlt >= 0 ? '+' : '\u2212') + Math.abs(dlt).toFixed(2), tx, cy + 58, 16, dlt <= 0 ? '#3ad17a' : '#e3312a', 800, 'center'); } }
   txt('LAST ' + (b.lastLap ? fmtTime(b.lastLap) : '\u2013') + '   BEST ' + (b.bestLap ? fmtTime(b.bestLap) : '\u2013') + (Records.d.traceT ? '   PB ' + fmtTime(Records.d.traceT) : ''), tx, cy + 74, 12, '#8d9aa4', 600, 'center');
@@ -2507,7 +2547,7 @@ function drawHUD(dt) {
     if (ahead && !ahead.dnf) txt('\u25B2 ' + ahead.short + ' ' + Math.max(0, g0 - gapOf(ahead)).toFixed(3), VW / 2 - 70, cy + 128 + gOff, 13, '#c9d2d8', 600, 'center');
     if (behind && !behind.dnf && !b.finished) txt('\u25BC ' + behind.short + ' ' + Math.max(0, gapOf(behind) - g0).toFixed(3), VW / 2 + 70, cy + 128 + gOff, 13, '#c9d2d8', 600, 'center');
   }
-  if (HUD.lapFlash) { const f = HUD.lapFlash; ctx.globalAlpha = Math.max(0, Math.min(1, (5 - f.age) * 2)); txt((f.rec ? 'NEW ALL-TIME BEST  ' : f.pb ? 'SESSION BEST  ' : 'LAP  ') + fmtTime(f.t), VW / 2, cy + 152 + gOff, 20, f.pb ? '#b46bff' : '#fff', 800, 'center', true); ctx.globalAlpha = 1; }
+  if (HUD.lapFlash) { const f = HUD.lapFlash; ctx.globalAlpha = Math.max(0, Math.min(1, (5 - f.age) * 2)); txt((f.inv ? 'INVALID  ' : f.rec ? 'NEW ALL-TIME BEST  ' : f.pb ? 'SESSION BEST  ' : 'LAP  ') + fmtTime(f.t), VW / 2, cy + 152 + gOff, 20, f.inv ? '#e3312a' : f.pb ? '#b46bff' : '#fff', 800, 'center', true); ctx.globalAlpha = 1; }
   }
   // ---- timing tower (left)
   if (!tiny) { drawTower(st, b); drawMinimap(b); }
@@ -2706,6 +2746,7 @@ function drawTower(st, me) {
       ctx.fillStyle = TEAMS[o.team].c1; ctx.fillRect(x + 28, yy + 3, 4, rowH - 6);
       txt(o.short, x + 38, yy + 14, 14, o.ghost ? '#9fd8ff' : '#fff', 700);
       if (o.ghost) txt('G', x + 38 + ctx.measureText(o.short).width + 4, yy + 14, 10, '#9fd8ff', 800);
+      else if (o.pen > 0) txt('+' + o.pen.toFixed(0) + 's', x + 38 + ctx.measureText(o.short).width + 4, yy + 14, 10, '#e3312a', 800);
       let g = '';
       if (o.dnf) g = 'OUT'; else if (o.crashed) g = 'CRASH'; else if (o.inPitLane) g = 'PIT'; else if (o.finished) g = '\uD83C\uDFC1'.length ? 'FIN' : ''; else if (p === 1) g = 'Leader'; else { const lapsDown = st[0].lap - o.lap - (st[0].s < o.s ? 1 : 0); g = lapsDown >= 1 ? '+' + lapsDown + ' LAP' : '+' + ((gapOf(o) || 0) - lead).toFixed(1); }
       txt(g, x + w - 10, yy + 14, 13, g === 'PIT' ? '#ffcf1f' : (g === 'OUT' || g === 'CRASH') ? '#e3312a' : '#c9d2d8', 600, 'right');
@@ -2714,7 +2755,7 @@ function drawTower(st, me) {
     if (Touch.on && W.mode !== 'quali') return; // no lap list on phones (GDD 11g)
     let rows;
     if (W.mode === 'quali') rows = W.qualiAI.map(q => ({ short: q.name.split(' ').slice(-1)[0].toUpperCase().slice(0, 3), t: q.best, me: false, c: '#8d9aa4' })).concat([{ short: me.short, t: me.bestLap || 1e9, me: true }]).sort((a, c) => a.t - c.t);
-    else { rows = me.laps.slice(-12).map((t, k, arr) => ({ short: 'LAP ' + (me.laps.length - arr.length + k + 1), t, me: t === me.bestLap })); if (Records.d.traceT) rows.unshift({ short: 'ALL-TIME', t: Records.d.traceT, me: false, rec: true }); const gr = []; for (const g of W.ghosts) { gr.push({ short: 'GHOST ' + g.short, t: g.recBest || 1e9, me: false, gh: true }); if (g.sync === 'rec') g.laps.forEach((t, j) => gr.push({ short: g.short + ' LAP ' + (j + 1), t, me: false, gh: true })); } rows.splice(Records.d.traceT ? 1 : 0, 0, ...gr); }
+    else { rows = me.laps.slice(-12).map((t, k, arr) => { const n = me.laps.length - arr.length + k, inv = me.lapsInv[n]; return { short: 'LAP ' + (n + 1) + (inv ? ' INV' : ''), t, me: !inv && t === me.bestLap, inv }; }); if (Records.d.traceT) rows.unshift({ short: 'ALL-TIME', t: Records.d.traceT, me: false, rec: true }); const gr = []; for (const g of W.ghosts) { gr.push({ short: 'GHOST ' + g.short, t: g.recBest || 1e9, me: false, gh: true }); if (g.sync === 'rec') g.laps.forEach((t, j) => gr.push({ short: g.short + ' LAP ' + (j + 1), t, me: false, gh: true })); } rows.splice(Records.d.traceT ? 1 : 0, 0, ...gr); }
     const maxRows = Math.max(6, Math.floor((VH - 200 - 56) / rowH)); let start = 0;
     if (rows.length > maxRows) { const mi = rows.findIndex(r => r.me); start = clamp(mi - Math.floor(maxRows / 2), 0, rows.length - maxRows); }
     const vis = rows.slice(start, start + maxRows);
@@ -2724,7 +2765,7 @@ function drawTower(st, me) {
       const yy = y + 26 + k * rowH;
       if (r.me) { ctx.fillStyle = W.mode === 'quali' ? 'rgba(255,207,31,.18)' : 'rgba(180,107,255,.2)'; ctx.fillRect(x + 2, yy, w - 4, rowH); }
       if (W.mode === 'quali') txt(String(start + k + 1), x + 22, yy + 14, 14, r.me ? '#ffcf1f' : '#fff', 800, 'right', true);
-      const rc = r.rec ? '#b46bff' : r.gh ? '#9fd8ff' : null;
+      const rc = r.rec ? '#b46bff' : r.gh ? '#9fd8ff' : r.inv ? '#e3312a' : null;
       txt(r.short, x + (W.mode === 'quali' ? 30 : 10), yy + 14, 14, rc || '#fff', 700);
       txt(r.t < 1e8 ? fmtTime(r.t) : 'NO TIME', x + w - 10, yy + 14, 13, rc || '#c9d2d8', 600, 'right');
     });
@@ -2956,7 +2997,7 @@ const UI = {
     if (!n) { el.innerHTML = '<span class="small">No laps saved yet. Every completed lap you ride is kept in this browser, and your best one becomes the target for the live delta.</span>'; $('btnClearRec').hidden = true; return; }
     const lbl = { practice: 'Practice', quali: 'Qualifying', race: 'Race' };
     const best = Object.keys(lbl).filter(k => d.best[k]).map(k => `<div class="rec"><span class="lbl">${lbl[k]} best</span><b>${fmtTime(d.best[k].t)}</b><span class="small">${new Date(d.best[k].at).toLocaleDateString()}${d.best[k].aids ? '' : ' \u00B7 no aids'}${d.best[k].auto ? ' \u00B7 auto' : ''}</span></div>`).join('');
-    const last = d.laps.slice(-6).reverse().map(e => `<tr><td>${fmtTime(e.t)}</td><td>${lbl[e.mode] || e.mode}</td><td class="small">${e.s && e.s.length === 3 ? e.s.map(x => x.toFixed(2)).join(' / ') : ''}</td><td class="small">${new Date(e.at).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</td></tr>`).join('');
+    const last = d.laps.slice(-6).reverse().map(e => `<tr><td>${fmtTime(e.t)}${e.inv ? ' <span class="small">INV</span>' : ''}</td><td>${lbl[e.mode] || e.mode}</td><td class="small">${e.s && e.s.length === 3 ? e.s.map(x => x.toFixed(2)).join(' / ') : ''}</td><td class="small">${new Date(e.at).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</td></tr>`).join('');
     el.innerHTML = `<div class="recs">${best}<div class="rec"><span class="lbl">Laps logged</span><b>${n}</b></div></div><div class="tablewrap"><table><thead><tr><th>Lap</th><th>Session</th><th>Sectors</th><th>When</th></tr></thead><tbody>${last}</tbody></table></div>`;
     $('btnClearRec').hidden = false; $('btnClearRec').textContent = 'Clear saved laps';
   },
@@ -3163,8 +3204,8 @@ const UI = {
     const me = W.player; const myPos = st.indexOf(me) + 1;
     let fl = null; for (const b of st) if (b.bestLap && (!fl || b.bestLap < fl.bestLap)) fl = b;
     this.results('Race result', 'British Grand Prix \u00B7 ' + W.totalLaps + ' laps', me.dnf ? 'You did not finish.' : `You finished P${myPos} of ${st.length}. Fastest lap: #${fl.num} ${fl.name} ${fmtTime(fl.bestLap)}`,
-      ['Pos', '#', 'Rider', 'Team', 'Time / gap', 'Best lap', 'Pits'],
-      st.map((b, k) => ({ me: b === me, cells: [b.dnf ? 'DNF' : k + 1, b.num, b.ghost ? b.name.replace(' (ghost)', '') + ' \u00B7 GHOST' : b.name, sw(b.team) + TEAMS[b.team].name, b.dnf ? 'Retired' : k === 0 ? fmtTime(b.finishT) : (b.lap < win.lap ? '+' + (win.lap - b.lap) + ' lap' + (win.lap - b.lap > 1 ? 's' : '') : '+' + (b.finishT - win.finishT).toFixed(3)), b.bestLap ? (b === fl ? '<span class="pb">' + fmtTime(b.bestLap) + '</span>' : fmtTime(b.bestLap)) : '\u2013', b.ghost ? '\u2013' : b.pits] })),
+      ['Pos', '#', 'Rider', 'Team', 'Time / gap', 'Best lap', 'Pits', 'Pen'],
+      st.map((b, k) => ({ me: b === me, cells: [b.dnf ? 'DNF' : k + 1, b.num, b.ghost ? b.name.replace(' (ghost)', '') + ' \u00B7 GHOST' : b.name, sw(b.team) + TEAMS[b.team].name, b.dnf ? 'Retired' : k === 0 ? fmtTime(b.finishT + (b.pen || 0)) : (b.lap < win.lap ? '+' + (win.lap - b.lap) + ' lap' + (win.lap - b.lap > 1 ? 's' : '') : '+' + (b.finishT + (b.pen || 0) - win.finishT - (win.pen || 0)).toFixed(3)), b.bestLap ? (b === fl ? '<span class="pb">' + fmtTime(b.bestLap) + '</span>' : fmtTime(b.bestLap)) : '\u2013', b.ghost ? '\u2013' : b.pits, b.pen > 0 ? '+' + b.pen.toFixed(1) + ' s' : ''] })),
       [['Race again', () => this.launch(W.kind, W.kind === 'gp' ? { qualiGrid: W.opts.qualiGrid } : {})], ...(rec ? [['Watch replay', () => RP.open([rec], 'results'), true], ['Export session', () => Lib.export(rec), true]] : []), ['Back to menu', () => this.toMenu(), true]]);
   },
   results(eyebrow, title, sub, head, rows, actions) {
@@ -3225,7 +3266,7 @@ function boot() {
   requestAnimationFrame(t => { last = t; requestAnimationFrame(frame); });
   setInterval(() => { if (UI.state === 'menu') { for (let k = 0; k < 4; k++) simStep(SUB); } }, 1000 / 30);
 }
-window.__sgp = { Touch, tiltProjectX: draw => { for (const Ly of LAYERS) { const g = Ly.g; g.setTransform(Ly.dpr, 0, 0, Ly.dpr, 0, 0); g.translate(-Ly.x0, -Ly.y0); draw(g, RW, RH); } projectTilted(); return { VW, VH, RW, RH }; }, worldToScreenX: (x, y) => worldToScreen(x, y), worldToCanvasX: (x, y) => worldToCanvas(x, y), frameX: t => frame(t), setCamModeX: m => setCamMode(m), CAM, RP, Rec, Lib, Ghost, W, T, PHYS, Input, FX, Records, completeLapX: b => completeLap(b), drawWorldX: () => drawWorld(), speedBlurX: () => speedBlur(), camNameX: () => TILT_CAM, setupSession, simStep, standings, UI, SUB, TILT, setAIReal: v => { AI_REAL = v; } };
+window.__sgp = { Touch, tiltProjectX: draw => { for (const Ly of LAYERS) { const g = Ly.g; g.setTransform(Ly.dpr, 0, 0, Ly.dpr, 0, 0); g.translate(-Ly.x0, -Ly.y0); draw(g, RW, RH); } projectTilted(); return { VW, VH, RW, RH }; }, worldToScreenX: (x, y) => worldToScreen(x, y), worldToCanvasX: (x, y) => worldToCanvas(x, y), frameX: t => frame(t), setCamModeX: m => setCamMode(m), CAM, RP, Rec, Lib, Ghost, W, T, PHYS, Input, FX, Records, completeLapX: b => completeLap(b), trackLimitsX: b => trackLimits(b), limitRefX: (s0, s1) => limitRef(s0, s1), SURF, drawWorldX: () => drawWorld(), speedBlurX: () => speedBlur(), camNameX: () => TILT_CAM, setupSession, simStep, standings, UI, SUB, TILT, setAIReal: v => { AI_REAL = v; } };
 if (document.fonts && document.fonts.ready) { Promise.race([document.fonts.ready, new Promise(r => setTimeout(r, 1500))]).then(boot).catch(e => { console.error("boot failed", e && e.stack); }); } else boot();
 
 })();

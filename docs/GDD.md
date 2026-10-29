@@ -1,6 +1,6 @@
 # Silverstone GP — Game Design Document
 
-**Version:** 1.19.5 · **Last updated:** 2026-10-28 · **Owner:** Petr
+**Version:** 1.19.6 · **Last updated:** 2026-10-28 · **Owner:** Petr
 
 This document is the source of truth for how the game should work. Every
 change starts here: update the GDD on a feature branch first, then change the
@@ -196,6 +196,7 @@ Stored in `localStorage` key `sgp_records`, format `{v:1, laps, best, trace, tra
   - The player's own pit box is marked by a ring in the team's main colour that blinks every 0.3 s.
 - Centre messages for start, pit, flags and session events.
 - Screens: menu, loading, pause, results.
+  - **Version on the menu (since 1.19.6):** the version number shows next to the menu title, "Silverstone GP", as a small label (for example `v1.19.6`). The number is read from the newest `## vX.Y.Z` heading in `CHANGELOG.md` when `tools/build.py` writes `index.html`, so there is one source of truth and no version to edit by hand. It is shown on the menu only, not in play, pause or results.
   - **Zoom and selection on menus (since 1.19.5):** the overlay layer and the page body allow double-tap zoom and text selection. Bug before 1.19.5 (suspected cause, found by reading the CSS, not yet reproduced on a phone): `.overlay` sets `touch-action: pan-y`, which lets double-tap zoom through, and no rule stops text selection outside the game surface.
   - **Race result order (since 1.19.4):** the results table ranks finishers by laps completed first, then by finish order (the order they crossed the line). Every rider on the winner's lap count is listed above every rider a lap down, so all `+NN.MMM` rows come before all `+N lap` rows.
   - Bug before 1.19.4 (suspected cause, not yet reproduced in a run): after the chequered flag, a rider a lap down could cross the line first and was ranked above a lead-lap rider still on the last lap, because finish order alone set the rank. The "+1 lap" row then showed above a "+NN.MMM" row.
@@ -562,7 +563,7 @@ After tagging, push `main`, the tag and the feature branch to GitHub (`p3trk/mot
 
 ## 16. Version history
 
-See `CHANGELOG.md`. Current: **1.19.5** (fix: no double-tap zoom or text selection on menus and overlays in iPhone browsers, Brave included; §3a). Previous: **1.19.4** (fix: race result order lists riders a lap down below lead-lap riders; §11). Previous: **1.19.3** (no browser zoom on phones; §3a). Before that: **1.19.2** (tilt dead zone 12 degrees; §3a).
+See `CHANGELOG.md`. Current: **1.19.6** (version number shown next to the menu title; §11). Previous: **1.19.5** (fix: no double-tap zoom or text selection on menus and overlays in iPhone browsers, Brave included; §3a). Previous: **1.19.4** (fix: race result order lists riders a lap down below lead-lap riders; §11). Previous: **1.19.3** (no browser zoom on phones; §3a). Before that: **1.19.2** (tilt dead zone 12 degrees; §3a).
 
 ### Open questions for 1.18.0 (recommended answer in bold; the design above uses it)
 

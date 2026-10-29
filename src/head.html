@@ -26,6 +26,7 @@ input,textarea,select{-webkit-user-select:text;user-select:text}
 .eyebrow{font-family:var(--disp);font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:var(--accent);font-size:14px}
 h1{font-family:var(--disp);font-weight:800;font-size:clamp(44px,8vw,92px);line-height:.88;margin:0;letter-spacing:-.01em;text-wrap:balance;font-style:italic}
 h1 span{color:var(--accent)}
+h1 .ver{color:var(--mute);font-size:.3em;font-style:normal;font-weight:700;letter-spacing:.02em;vertical-align:.5em}
 h2{font-family:var(--disp);font-weight:700;font-size:26px;margin:0;letter-spacing:.02em;text-transform:uppercase;font-style:italic}
 .facts{display:flex;flex-wrap:wrap;gap:8px 26px;color:var(--mute);font-family:var(--disp);font-size:17px;letter-spacing:.04em}
 .facts b{color:var(--fg);font-weight:700;font-size:22px;margin-right:4px;font-variant-numeric:tabular-nums}
@@ -108,7 +109,7 @@ tr.me td.pos{color:var(--accent)}
   <div class="wrap">
     <div style="display:flex;flex-direction:column;gap:10px">
       <div class="eyebrow">British Grand Prix · Silverstone Circuit · Northamptonshire</div>
-      <h1>Silverstone <span>GP</span></h1>
+      <h1>Silverstone <span>GP</span> <span class="ver">v__VERSION__</span></h1>
       <div class="facts"><span><b>5.891</b>km lap</span><span><b>18</b>turns</span><span><b>22</b>riders</span><span><b>20</b>laps race distance</span><span><b>Hangar</b>straight, 330+ km/h</span></div>
     </div>
     <div class="modes" role="group" aria-label="Race mode">

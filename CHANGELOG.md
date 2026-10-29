@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.19.6 (2026-10-29)
+- The version number shows next to the menu title (GDD 11). It is read from the newest heading in this file when `tools/build.py` writes `index.html`, so it always matches the changelog. Not shown during play, pause or results.
+- Tests: tests/menu_version.test.js checks the menu label against this file; it is in `npm test`.
+
 ## v1.19.5 (2026-10-29)
 - Fix: on iPhone browsers, including Brave, a double tap on a menu, the pause screen or the results screen no longer zooms the page, and text on the page can no longer be selected by a press or long press. Form fields keep their selection (GDD 3a, §16).
 - Tests: tests/mobile_controls.test.js checks the menu overlay and the page body for these rules.

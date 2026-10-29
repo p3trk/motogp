@@ -47,7 +47,7 @@ Without 1 and 2 a swap changes nothing, so they come first.
 1. The player rides into the pit lane. The limiter is automatic, so the speeding penalty is never needed.
 2. Stopping on the box marker (the blinking ring, GDD §11) starts the swap. No key press is needed.
 3. The bike stands still for a fixed **swap time**, then the second bike is ready. Press W to leave, as the old pit service worked.
-4. The bikes trade places. The first bike stays in the box and its crew get it ready for the next swap.
+4. The bikes trade places. The first bike stays in the box and its crew prepare it again in about 1 lap, with the tyre the team expects next. Coming in before it is ready gives that bike with its old tyres (open question 8).
 5. Unlimited swaps, as in the real rules.
 
 **The second bike**
@@ -76,7 +76,7 @@ Without 1 and 2 a swap changes nothing, so they come first.
 5. Should the second bike repair damage? **Yes**, it is a different bike. This makes a swap after a crash attractive, which is also true in real racing.
 6. Qualifying in the wet? **Swaps allowed at any time**, as in real practice and qualifying.
 7. Judge pit lane speeding? **No**, the limiter is automatic (GDD §7).
-8. After a swap, is the bike left in the box prepared again? **Yes, after a preparation time of about 1 lap**, with the tyre the team expects next (in real racing mechanics can work on it while the race goes on). Coming in before it is ready gives the bike with its old tyres. Alternative: no re-preparation, so each bike keeps its pre-race tyres all race.
+8. After a swap, is the bike left in the box prepared again? **Decided: yes, after a preparation time of about 1 lap**, with the tyre the team expects next (in real racing mechanics can work on it while the race goes on). Coming in before it is ready gives the bike with its old tyres. Alternative: no re-preparation, so each bike keeps its pre-race tyres all race.
 
 ## 6. Rough phases
 

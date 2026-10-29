@@ -148,12 +148,8 @@ function placeTraining(b, tr) {
   b.rpm = b.rpmVis = Math.max(PHYS.idle, rpmFor(tr.v, gear));
 }
 function aiStartFuel(b) {
-  // AI strategies: most start full and stop once / twice; some start light
-  const laps = W.totalLaps, per = 2.65;
-  const need = laps * per; if (need <= PHYS.tank) return Math.min(PHYS.tank, need + 0.6);
-  const stops = Math.ceil(need / PHYS.tank) - 1;
-  const light = W.rand() < 0.35;
-  return light ? Math.min(PHYS.tank, need / (stops + 1) + 1.2) : PHYS.tank;
+  // AI riders never refuel (GDD 7): start with just enough fuel to finish
+  return Math.min(PHYS.tank, W.totalLaps * PHYS.lapFuel + 0.6);
 }
 function simulateQualiAI(opts) {
   const rr = mulberry(1234);
@@ -279,23 +275,16 @@ function pitLogic(b, dt) {
   b.limiter = b.inPitLane && sr >= P.limIn && sr <= P.limOut;
   if (!b.inPitLane) b.serviceDone = false;
   const bs = P.boxS(b.box);
-  if (!b.service && !b.serviceDone && b.inPitLane && Math.abs(sr - bs) < 5 && Math.abs(b.d - P.boxD) < 3.6 && b.v < 1.5 && ((b.isPlayer && !b.autopilot) || b.pitPlan)) {
-    b.service = true; b.serviceT = 0; b.needRelease = true; b.v = 0; b.pits++; b.serviceFuel0 = b.fuel;
-    if (b.isPlayer) { HUD.msg('BOX', 'Crew refuelling. Press W to leave.', '#ffcf1f', 2); Sound.pit(); }
+  // pit stop (GDD 7): the player stops in the box and holds until W; no refuelling and no repairs since 1.22.0
+  if (!b.service && !b.serviceDone && b.inPitLane && Math.abs(sr - bs) < 5 && Math.abs(b.d - P.boxD) < 3.6 && b.v < 1.5 && b.isPlayer && !b.autopilot) {
+    b.service = true; b.serviceT = 0; b.needRelease = true; b.v = 0; b.pits++;
+    HUD.msg('BOX', 'Pit stop. Press W to leave.', '#ffcf1f', 2); Sound.pit();
   }
-  if (b.service) {
-    b.v = 0; b.vs = 0; b.serviceT += dt;
-    const target = b.isPlayer && !b.autopilot ? PHYS.tank : Math.max(b.pitFill, b.fuel);
-    if (b.serviceT > 1.2) {
-      if (b.fuel < target) b.fuel = Math.min(target, b.fuel + PHYS.refuelRate * dt);
-      b.dmg.a = Math.max(0, b.dmg.a - 0.09 * dt); b.dmg.c = Math.max(0, b.dmg.c - 0.07 * dt); b.dmg.e = Math.max(0, b.dmg.e - 0.03 * dt);
-    }
-    if ((!b.isPlayer || b.autopilot) && b.serviceT > 2 && b.fuel >= target - 0.01 && b.dmg.a < 0.2 && b.dmg.c < 0.2) endService(b);
-  }
+  if (b.service) { b.v = 0; b.vs = 0; b.serviceT += dt; }
 }
 function endService(b) {
-  b.service = false; b.serviceDone = true; b.pitPlan = false; b.fuelLapStart = b.fuel; b.pittedThisLap = true;
-  if (b.isPlayer) HUD.msg('GO GO GO', `Fuel ${b.fuel.toFixed(1)} L`, '#3ad17a', 1.5);
+  b.service = false; b.serviceDone = true; b.fuelLapStart = b.fuel;
+  HUD.msg('GO GO GO', '', '#3ad17a', 1.5);
 }
 
 function timing(b) {
@@ -404,8 +393,8 @@ function completeLap(b) {
   if (b.isPlayer) Rec.lap(W.time - lt, W.time, lt, b.autopilot, inv);
   b.lastLap = lt; b.laps.push(lt); b.lapsInv.push(inv); const pb = !inv && (!b.bestLap || lt < b.bestLap); if (pb) b.bestLap = lt;
   b.lap++; b.lapStartT = W.time; b.secStart = W.time; b.cp = 0; b.lapInv = b.offT >= 0;
-  const used = b.fuelLapStart - b.fuel; if (!b.pittedThisLap && used > 0.8 && used < 6) b.fuelPerLap = lerp(b.fuelPerLap, used, b.laps.length > 1 ? 0.5 : 0.8);
-  b.fuelLapStart = b.fuel; b.pittedThisLap = false;
+  const used = b.fuelLapStart - b.fuel; if (used > 0.3 && used < 3) b.fuelPerLap = lerp(b.fuelPerLap, used, b.laps.length > 1 ? 0.5 : 0.8);
+  b.fuelLapStart = b.fuel;
   if (b.isPlayer) {
     let rec = { allPb: false };
     if (!b.autopilot) rec = Records.add(W.mode, lt, b, W.curTrace, inv);

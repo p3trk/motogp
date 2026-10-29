@@ -20,7 +20,7 @@ const PHYS = {
   gears: [0, 135, 178, 220, 260, 302, 345].map(k => k / 3.6), // top speed per gear at redline
   CdA: 0.30, rho: 1.2, roll: 0.015,
   mu: 1.68, brakeMax: 1.55 * G, wheelie: 1.02 * G, maxLean: 64 * DEG,
-  pitLimit: 60 / 3.6, refuelRate: 2.6, fuelK: 0.052,
+  pitLimit: 60 / 3.6, fuelK: 0.02, lapFuel: 1.0, // lapFuel: litres per lap at race pace (GDD 7); no refuelling since 1.22.0
   VS: 1.35 // visual scale of bike sprites (collision uses same footprint)
 };
 const SURF = { ASPH: 0, KERB: 1, RUN: 2, GRAVEL: 3, GRASS: 4, PIT: 5, WALL: 6 };
@@ -352,8 +352,8 @@ function makeBike(o) {
     i: 0, s: 0, d: 0, surf: 0, prevS: 0,
     lap: 0, gridCross: false, cp: 0, lapStartT: 0, lastLap: 0, bestLap: 0, laps: [], secStart: 0, sectors: [0, 0, 0], bestSec: [0, 0, 0], lastSec: [0, 0, 0], sec: 0,
     crashed: false, crash: null, held: false, dnf: false, finished: false, finishT: 0, crashes: 0, pits: 0,
-    pitPlan: false, pitFill: 0, service: false, serviceT: 0, inPitLane: false, limiter: false, box: 0, needRelease: false,
-    ai: null, fuelLapStart: PHYS.tank, fuelPerLap: 2.6, progress: 0, msgs: [],
+    service: false, serviceT: 0, inPitLane: false, limiter: false, box: 0, needRelease: false,
+    ai: null, fuelLapStart: PHYS.tank, fuelPerLap: PHYS.lapFuel, progress: 0, msgs: [],
     offT: -1, offS: 0, offCr: 0, lapInv: false, lapsInv: [], pen: 0, tl: 0, llPend: [], llRun: null, llGiven: 0, dropBehind: null, dropPen: 0
   }, o);
 }
@@ -509,13 +509,6 @@ function aiControl(b, dt, W) {
   if (b.crashed || b.dnf) return;
   const sr = T.rel(b.s);
   A.think -= dt;
-  // fuel strategy: decide before Stowe whether to box at the end of this lap
-  if (W.mode !== 'quali' && !b.pitPlan && b.s > T.L - 1500 && b.s < T.L - 1300 && !b.finished && !W.flag) {
-    const lapsLeft = W.totalLaps - b.lap - 1;
-    const per = Math.max(1.6, b.fuelPerLap);
-    if (lapsLeft > 0 && b.fuel < per * 1.15 + 0.4) { b.pitPlan = true; b.pitFill = Math.min(PHYS.tank, per * lapsLeft * 1.08 + 0.9); }
-    if (b.dmg.a > 0.55 || b.dmg.c > 0.55) { b.pitPlan = lapsLeft > 1 || b.pitPlan; b.pitFill = Math.max(b.pitFill, Math.min(PHYS.tank, per * lapsLeft * 1.08 + 0.9)); }
-  }
   // traffic awareness: nearest rider ahead in my lane, riders alongside
   if (A.think <= 0) {
     A.think = 0.08 + W.rand() * 0.06;
@@ -547,13 +540,12 @@ function aiControl(b, dt, W) {
   const look = 6 + v * 0.42; const j = (b.i + Math.round(look / DS)) % N;
   let dT = T.lat[j] + A.off;
   const sj = T.rel(j * DS);
-  const pitting = b.pitPlan || b.inPitLane;
+  const pitting = b.inPitLane;
   if (pitting) {
     if (sj > PIT.sIn - 260 && sj < PIT.sIn + 2) dT = T.WR[j] - 2.2;
     const pc = PIT.center(sj);
     if (pc !== null) dT = pc;
-    if (b.pitPlan && pc !== null) { const bs = PIT.boxS(b.box); if (sj > bs - 45 && sj < bs + 10) dT = lerp(PIT.d, PIT.boxD, sstep((sj - (bs - 45)) / 30)); }
-    if (!b.pitPlan && b.inPitLane && sj > PIT.flatOut) dT = pc !== null ? pc : dT;
+    if (b.inPitLane && sj > PIT.flatOut) dT = pc !== null ? pc : dT;
   }
   dT = clamp(dT, -(T.WL[j] - 0.9), pitting ? 30 : T.WR[j] - 0.9);
   const tx = T.X[j] + T.NX[j] * dT, ty = T.Y[j] + T.NY[j] * dT;
@@ -575,14 +567,11 @@ function aiControl(b, dt, W) {
     const lim = PHYS.pitLimit - 0.4;
     if (sr > PIT.limIn - 140 && sr < PIT.limIn) vt = Math.min(vt, Math.sqrt(lim * lim + 2 * 9 * Math.max(0, PIT.limIn - sr)));
     if (b.inPitLane && sr >= PIT.limIn && sr <= PIT.limOut) vt = Math.min(vt, lim);
-    if (b.pitPlan) { const bs = PIT.boxS(b.box); if (sr > bs - 80 && sr < bs + 3) vt = Math.min(vt, Math.sqrt(2 * 5 * Math.max(0, bs - sr - 0.3))); }
   }
-  if (b.service) vt = 0;
   if (W.flag && b.finished) vt = Math.min(vt, 30);
   // mistakes: occasional late braking for lower-consistency riders
   if (A.mistake > 0) { A.mistake -= dt; vt *= 1.06; } else if (W.rand() < dt * 0.004 * (1 - A.cons)) A.mistake = 0.6;
   if (v < vt - 0.2) { c.thr = clamp((vt - v) * 0.6 + 0.25, 0, 1); c.brk = 0; }
   else if (v > vt + 0.4) { c.thr = 0; c.brk = clamp((v - vt) * 0.3, 0, 1); }
   else { c.thr = 0.35; c.brk = 0; }
-  if (b.service) { c.thr = 0; c.brk = 1; }
 }

@@ -38,7 +38,7 @@ function drawTags(b, rx, ry, rw) {
 // fuel warning on phones, where the fuel panel is gone (GDD 11g): a centre message at 3 laps and at 1 lap left
 function fuelWarn(b) {
   const left = b.fuel / Math.max(1, b.fuelPerLap), w = b.fuelWarned || (b.fuelWarned = {});
-  if (left > 3.5) { w.three = false; w.one = false; return; } // refuelled
+  if (left > 3.5) { w.three = false; w.one = false; return; } // fuel back above 3.5 laps (a restart)
   if (left < 1 && !w.one) { w.one = true; HUD.msg('FUEL', left.toFixed(1) + ' LAP LEFT', '#e3312a', 3); }
   else if (left < 3 && !w.three) { w.three = true; HUD.msg('FUEL', '3 LAPS LEFT', '#ffcf1f', 3); }
 }
@@ -199,9 +199,7 @@ function drawHUD(dt) {
     panel(px, py, pw, 70, 0.9);
     txt('PIT STOP', px + 14, py + 24, 16, '#ffcf1f', 800, 'left', true);
     txt(b.serviceT.toFixed(1) + ' s', px + pw - 14, py + 24, 16, '#fff', 700, 'right');
-    ctx.fillStyle = 'rgba(255,255,255,.08)'; ctx.fillRect(px + 14, py + 34, pw - 28, 9); ctx.fillStyle = '#3ad17a'; ctx.fillRect(px + 14, py + 34, (pw - 28) * b.fuel / PHYS.tank, 9);
-    const full = b.fuel >= PHYS.tank - 0.01;
-    txt(full ? 'Tank full. Press W to go.' : `Refuelling ${b.fuel.toFixed(1)} / ${PHYS.tank} L · press W to leave now`, px + 14, py + 61, 13, '#c9d2d8', 600);
+    txt('Press W to leave now', px + 14, py + 61, 13, '#c9d2d8', 600);
   }
   // ---- messages
   if (HUD.m) {
@@ -630,9 +628,9 @@ const UI = {
     document.querySelectorAll('.mode').forEach(m => m.setAttribute('aria-pressed', String(m.dataset.mode === o.mode)));
     for (const [id, key] of [['optTrans', 'trans'], ['optAids', 'aids'], ['optAI', 'ai'], ['optCam', 'cam'], ['optGuide', 'guide'], ['optBlur', 'blur'], ['optTrain', 'train'], ['optCtl', 'controls'], ['optSide', 'side'], ['optTilt', 'tilt']]) $(id).querySelectorAll('button').forEach(bt => bt.setAttribute('aria-pressed', String(bt.dataset.v === o[key])));
     $('optFuel').value = o.fuel; $('optGrid').value = o.grid; $('optTeam').value = o.team; $('optName').value = o.name; $('optNum').value = o.num;
-    const laps = o.mode === 'gp' ? 20 : 10; const L = PHYS.tank * o.fuel / 100; const range = L / 2.65;
+    const laps = o.mode === 'gp' ? 20 : 10; const L = PHYS.tank * o.fuel / 100; const range = L / PHYS.lapFuel;
     $('optFuelV').textContent = L.toFixed(1) + ' L';
-    const stops = Math.max(0, Math.ceil(laps * 2.65 / PHYS.tank - 0.001) - 1); $('optFuelHint').textContent = o.mode === 'practice' ? 'Practice starts with a full tank.' : `About ${range.toFixed(1)} laps on this load. A ${laps} lap race needs at least ${stops} stop${stops === 1 ? '' : 's'} on a full tank. Less fuel is lighter and faster but means more stops.`;
+    const minPct = Math.ceil(laps * PHYS.lapFuel / PHYS.tank * 20) * 5; $('optFuelHint').textContent = o.mode === 'practice' ? 'Practice starts with a full tank.' : `About ${range.toFixed(1)} laps on this load. A ${laps} lap race needs at least ${minPct} % of the tank, since there is no refuelling. Less fuel is lighter and faster but risks running dry.`;
     $('optFuelWrap').hidden = o.mode === 'practice'; $('optGuideWrap').hidden = o.mode !== 'practice'; $('optTrainWrap').hidden = o.mode !== 'practice'; $('trainBox').hidden = o.train !== 'on'; this.renderTraining(); this.renderRecords(); $('optGridWrap').hidden = !(o.mode === 'sprint' || (o.mode === 'practice' && o.train !== 'on')); // one setting for the race and the practice grid start (GDD 2a)
     Touch.opts();
     try { localStorage.setItem('sgp_opts', JSON.stringify(o)); } catch (e) { }

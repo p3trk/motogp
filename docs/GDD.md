@@ -649,8 +649,8 @@ See `CHANGELOG.md`. Current: **1.22.0** (no refuelling, pit stop kept; consumpti
 2. What happens to the pit stop? **Keep it, without refuelling**: the bike stops in its box and W leaves. The box is also the qualifying start (§2). The pit lane keeps its 60 km/h limiter, even though a stop has no fuel reason now.
 3. Does a stop repair damage? **No:** damage is never repaired in the pits. The 1.21.0 code repairs damage during a stop; 1.22.0 removes that along with the refuelling.
 4. Do AI riders still pit for heavy damage? **No.** A stop no longer repairs or refuels, so AI riders never enter the box. Alternative: keep the AI damage stop as a visual only, which costs time for nothing.
-4. Starting fuel: keep 25–100 %? **Yes**, with the menu showing the least fuel that finishes the chosen race. Less fuel is lighter and faster but risks running dry.
-5. Fuel warning on phones (§3a)? **Keep it**: 3 laps and 1 lap left, since the race cannot be refuelled.
+5. Starting fuel: keep 25–100 %? **Yes**, with the menu showing the least fuel that finishes the chosen race. Less fuel is lighter and faster but risks running dry.
+6. Fuel warning on phones (§3a)? **Keep it**: 3 laps and 1 lap left, since the race cannot be refuelled.
 
 ### Open questions for 1.21.0 (recommended answer in bold; the design above uses it)
 

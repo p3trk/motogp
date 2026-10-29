@@ -548,8 +548,8 @@ On phones (touch controls on, §3a) the HUD is made smaller and simpler. Desktop
   - **Tilt:** the roll angle is fed in as motion events, as in `mobile_controls.test.js`, with the dead zone (12°) and sensitivity (Low 60°) of §3a.
   - **Portrait:** turning the phone to portrait shows the turn prompt and pauses; back in landscape the prompt is hidden.
   - **Zoom:** the viewport meta tag has `user-scalable=no` and `maximum-scale=1`; a two-finger pinch through CDP (Chromium only) leaves `visualViewport.scale` at 1; a double tap on a touch half does not zoom; the game canvas has `touch-action: none`. The iPhone pinch gesture is blocked in script, so the test checks that the handler calls `preventDefault`.
-  - **Menus:** the menu still scrolls with a finger (`touch-action: pan-y`) and does not zoom.
-  - **Limits:** WebKit here is not Safari, and the pinch test runs only in Chromium. Real iPhone Safari and real Android are not covered; those need Phase 2 or 3, or one manual check.
+  - **Menus:** the menu still scrolls with a finger and does not double-tap zoom (`touch-action: manipulation`, as set in 1.19.5 and 1.19.7).
+  - **Limits:** WebKit here is not Safari. The pinch and double-tap checks run only in Chromium, and the portrait prompt check runs only in Chromium, because WebKit's orientation query does not follow a resized emulated viewport. Real iPhone Safari and real Android are not covered; those need Phase 2 or 3, or one manual check.
   - Added to `npm test`. The test writes nothing outside the repository (screenshots go to `shots/`).
 
 ## 14. Change process

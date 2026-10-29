@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.19.8 (2026-10-29)
+- Tests: new tests/phone_emulation.test.js (in npm test, GDD 13). It runs the phone checks in an emulated iPhone (WebKit) and Pixel (Chromium): viewport and touch rules, the phone layout and touch halves, tilt, zoom (two-finger pinch and double tap, Chromium only), and the portrait prompt (Chromium only). Real phones are not covered.
+- Test-only change: no game code changed.
+
 ## v1.19.7 (2026-10-29)
 - Fix: on iPhone browsers, including Brave, holding or double-tapping the brake and throttle halves no longer selects text, shows the magnifier or zooms the page, during play or in replay. The touch layer now cancels the touch events themselves; iPhone WebKit ignored the cancelled pointer press. Text selection and the long-press menu are blocked while playing (GDD 3a).
 - Tests: tests/mobile_controls.test.js checks that the touch events are cancelled and the brake still works. The iPhone behaviour itself still needs a check on a phone.

@@ -1,6 +1,6 @@
 # Silverstone GP — Game Design Document
 
-**Version:** 1.19.7 · **Last updated:** 2026-10-28 · **Owner:** Petr
+**Version:** 1.19.8 · **Last updated:** 2026-10-28 · **Owner:** Petr
 
 This document is the source of truth for how the game should work. Every
 change starts here: update the GDD on a feature branch first, then change the
@@ -541,6 +541,16 @@ On phones (touch controls on, §3a) the HUD is made smaller and simpler. Desktop
   - v1.16.0 fails it (no blur at top speed).
 - Since 1.17.0 `tilt_seam.test.js` and `camera_shake.test.js` run with Speed blur Off, so their measurements stay as before; `camera_tuning.test.js` expects 15 sliders (the three blur sliders added) and checks that they are saved per camera and reset by Reset to defaults.
 - `npm test` runs all tests (needs `npm install` and `npx playwright install chromium` once).
+- Tests (since 1.19.8, Phase 1): `node tests/phone_emulation.test.js [index.html]` runs the phone checks in emulated phones on the Mac, with no real device or account. It uses Playwright device profiles:
+  - **iPhone** in WebKit (the engine of Safari, but not Safari itself) and **Pixel** in Chromium (the engine of Chrome on Android), both in landscape with touch, at the sizes of a current phone.
+  - **Layout:** the phone HUD (§11g) is shown, the bottom-right panel and speed guide are absent, the pause button and both touch halves are visible, the menu shows the gearbox row hidden and the side and tilt rows shown.
+  - **Touch halves:** a touch on each half brakes or throttles as in §3a, both together brake, and the side option swaps them. Touches are sent as real touch events with CDP where the engine supports it, otherwise as pointer events.
+  - **Tilt:** the roll angle is fed in as motion events, as in `mobile_controls.test.js`, with the dead zone (12°) and sensitivity (Low 60°) of §3a.
+  - **Portrait:** turning the phone to portrait shows the turn prompt and pauses; back in landscape the prompt is hidden.
+  - **Zoom:** the viewport meta tag has `user-scalable=no` and `maximum-scale=1`; a two-finger pinch through CDP (Chromium only) leaves `visualViewport.scale` at 1; a double tap on a touch half does not zoom; the game canvas has `touch-action: none`. The iPhone pinch gesture is blocked in script, so the test checks that the handler calls `preventDefault`.
+  - **Menus:** the menu still scrolls with a finger (`touch-action: pan-y`) and does not zoom.
+  - **Limits:** WebKit here is not Safari, and the pinch test runs only in Chromium. Real iPhone Safari and real Android are not covered; those need Phase 2 or 3, or one manual check.
+  - Added to `npm test`. The test writes nothing outside the repository (screenshots go to `shots/`).
 
 ## 14. Change process
 

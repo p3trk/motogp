@@ -111,6 +111,7 @@ Stored in `localStorage` key `sgp_opts`. The camera choice is remembered for all
 | Starting fuel (races) | 25–100 % of tank, step 5. Since 1.22.0 the race has no refuelling (§7), so this must cover the whole race | 100 % |
 | Starting position (10 lap race and, since 1.16.0, Practice with Curve training Off) | Pole / Front row / Mid-pack / Back. One setting shared by both modes | Mid-pack |
 | Speed blur (since 1.17.0) | On / Off. Blurs the surroundings at top speed in the Behind and CLOSE cameras (§11f) | On |
+| Speed effects (since 1.23.0) | On / Off. Wider view, speed lines and camera vibration at speed (§11h). Off keeps the 1.23.0 zoom and the trackside details, which are part of the world | On |
 | Sync ghosts to (since 1.16.0) | One of the selected ghosts (§11c) | The first selected ghost |
 | Rider name, number, team | up to 14 chars / 1–99 / 11 teams | Petr, 25, Arancia Tech |
 
@@ -287,7 +288,7 @@ Three cameras (since 1.14.0): **Behind**, **CLOSE** and **Top-down**. Chosen on 
 - A chase view from behind and slightly above the bike. The flat 2D world is tilted back in true perspective (see Tuning below).
 - Near track is big, which keeps the feel of speed. Far track shrinks towards the horizon, so corners coming up are visible much earlier than top-down.
 - The bike sits ~20 % above the bottom edge. The view rotates with the bike's heading, smoothed. Bikes are drawn at least ~40 px long so they stay readable when zoomed out (visual only).
-- Zoom eases out with speed: `ppm = min(20, min(VW, 1.25·VH) / (30 + 1.0·v))`. Since 1.7.1 it is closer at speed (it was `1.45·v`), because the far view made the game feel slow.
+- Zoom eases out with speed: `ppm = min(20, min(VW, 1.25·VH) / (30 + 0.5·v))`. Since 1.7.1 it is closer at speed (it was `1.45·v`), because the far view made the game feel slow. Since 1.23.0 the speed factor is 0.5 (was 1.0), so the ground moves faster on screen at speed (§11h).
   - At 300 km/h roughly 200 m of track ahead is on screen, about the Stowe braking distance.
   - In a slow corner it stays close.
 - HUD, name tags and panels are drawn flat on a separate layer on top. Name tags are projected through the same perspective.
@@ -313,7 +314,9 @@ Three cameras (since 1.14.0): **Behind**, **CLOSE** and **Top-down**. Chosen on 
   - Tilt: 40° / 55°, 20–70.
   - Camera distance: 1.3 / 1.8 × screen height, 0.5–2.5.
   - Bike height on screen: 20 / 8 %, 5–40.
-  - Zoom: maximum 20 / 30 px/m (10–30), base 30 / 12 m (10–60), speed factor 1.0 / 0.4 (0.3–2.0) in `ppm = min(max, min(VW, 1.25·VH) / (base + factor·v))`.
+  - Zoom: maximum 20 / 30 px/m (10–30), base 30 / 12 m (10–60), speed factor 0.5 / 0.3 (0.1–2.0; was 1.0 / 0.4 and 0.3–2.0 before 1.23.0, §11h) in `ppm = min(max, min(VW, 1.25·VH) / (base + factor·v))`.
+  - Ground depth default for Behind is 4.0 × screen since 1.23.0 (was 2.6), so the road ahead at top speed stays about as long as before with the closer zoom (§11h).
+  - Speed effects (since 1.23.0, §11h): **Widen at speed** 15 / 15 % (0–30), **Vibration** 1.5 / 1.5 px (0–4).
   - Ground area: width 2.3 / 3.5 × screen (1.5–3.5), depth 2.6 / 6 × screen (1.5–6).
   - Image quality: near band 0.75 / 1.5 (0.4–2.0), far band 0.45 / 0.7 (0.25–0.8), fade zone 30 / 30 % (0–60).
   - Minimum bike length: 40 / 40 px, 20–80.
@@ -565,6 +568,76 @@ On phones (touch controls on, §3a) the HUD is made smaller and simpler. Desktop
 3. Minimap on phones: keep its size or make it smaller? **About 140 px**, so the timing tower and the minimap do not crowd the top corners.
 4. Lean as a number in the speedometer, or a bar? **A bar** (Petr, 2026-10-28), with the angle in degrees centred right above it and no "LEAN" label (Petr, 2026-10-28).
 
+## 11h. Sense of speed (since 1.23.0)
+
+Asked by Petr (2026-10-30): "How to make game feel faster?", then picked four of the proposed changes: closer zoom at speed, wider view at speed, more detail beside the road, and camera vibration at speed.
+
+**Why the game felt slow**
+- How fast the ground moves across the screen is `ppm · v`. With `ppm = C / (base + factor·v)` that is `C · v / (base + factor·v)`, which flattens out as speed rises. In Behind (base 30, factor 1.0) doubling the speed from 160 to 320 km/h made the ground move only about 25 % faster on screen. The camera zoomed out almost as fast as the bike sped up.
+
+**1. Closer zoom at speed**
+- The zoom speed factor goes down: **Behind 1.0 → 0.5**, **CLOSE 0.4 → 0.3**. The slider range becomes 0.1–2.0 (was 0.3–2.0). Base and maximum stay the same.
+- On the 1470 × 830 reference screen (`C` = 1037):
+
+  | | Behind 1.22 | Behind 1.23 | CLOSE 1.22 | CLOSE 1.23 |
+  |---|---|---|---|---|
+  | Zoom at 160 km/h | 13.9 px/m | 19.9 px/m | 22.6 → 30 (max) | 30 (max) |
+  | Zoom at 320 km/h | 8.7 px/m | 13.9 px/m | 21.8 px/m | 26.8 px/m |
+  | Ground speed on screen at 320 km/h | 775 px/s | 1239 px/s (+60 %) | 1938 px/s | 2382 px/s (+23 %) |
+  | 320 vs 160 km/h on screen | ×1.25 | ×1.40 | ×1.45 | ×1.79 |
+
+- A closer zoom shows less road ahead. To keep the corner coming up in view, the Behind **ground depth goes from 2.6 to 4.0 × screen height**: at 300 km/h the road ahead stays at about 195 m (was about 200 m). The ground reaches a little closer to the horizon, so there is a little less sky. CLOSE is already at its maximum depth (6); at 320 km/h it shows about 186 m ahead (was about 228 m). The corner countdown (§11b) still warns early.
+- **Saved camera values:** a saved Behind value of exactly 1.0 for the speed factor or 2.6 for the depth, and a saved CLOSE speed factor of exactly 0.4, are the old defaults and move to the new ones on load. Any other saved value is the player's own choice and is kept. Reset to defaults gives the new values.
+- Top-down keeps its zoom (see open question 1).
+
+**2. Wider view at speed (Behind and CLOSE)**
+- Like a racing game widening its field of view: above 200 km/h the camera moves closer to the ground plane, so the perspective gets stronger. The near ground and the sides stretch outward and the road ahead seems to rush at the player.
+- Camera distance used for drawing: `P = p · VH · (1 − widen · w)`, with `w = smoothstep((v − 200) / (340 − 200))` (v in km/h, the speed the camera follows, as for the blur in §11f) and **widen 15 %** by default for both cameras. Below 200 km/h nothing changes. `w` is smoothed over about 0.4 s, so braking does not snap the view back.
+- The bike stays at its set height on screen (`tiltBikeH()` already uses the current distance). The horizon point of the speed blur follows the current distance.
+- The ground layers are sized once in `resize()` for the smallest distance the setting can reach, so no canvas is reallocated while the speed changes.
+- Camera tuning gets a slider **Widen at speed**, 0–30 %, step 1, per tilted camera. 0 turns it off for that camera.
+
+**3. More detail beside the road**
+The eye judges speed from small things passing by. These are part of the world, baked into the cached ground tiles (no cost per frame), and are shown in all three cameras and in replay.
+- **Mowing stripes on the grass:** bands 6 m long along the track, alternating lighter and darker (about ±6 % brightness), running across the track direction from the track edge to the wall on both sides. They follow the track's curves, so they always cross the view at right angles to the road.
+- **Distance posts:** small white posts with a black top (0.5 × 0.5 m, with a short shadow) every 25 m on both sides along the straights, on the grass 1 m inside the wall. Not where kerbs are (corners) and not in the pit lane. The braking boards stay as they are.
+- **Asphalt joints:** a faint dark line across the track every 40 m (about 8 % darker than the asphalt, 0.15 m wide), as where the track was resurfaced. Subtle so it does not look like a painted line.
+- At top speed in the tilted cameras the stripes and posts are smeared by the speed blur (§11f) like the rest of the surroundings, which makes the streaks easier to see.
+
+**4. Speed lines (all cameras)**
+- Above 280 km/h, thin white lines streak outward at the screen edges, from the horizon point straight ahead (Top-down: from a point above the bike in the direction of travel). Strength `l = smoothstep((v − 280) / (340 − 280))`.
+- About 16 lines at full strength, each 1 px wide, 40–120 px long, alpha up to 0.3 · `l`, living about 0.15 s. They appear only in the outer 30 % of the screen width and never over the road ahead.
+- Drawn on the HUD layer before the HUD, so panels, timing and the minimap stay on top. Cost: a few short lines per frame.
+
+**5. Camera vibration at speed**
+- The world image shakes by a small random offset every frame; the HUD stays still. It uses the same path as the impact shake (§6), and the two add up.
+- Amplitude `A = vib · min(2, s + k + b)`, with **vib 1.5 px** by default:
+  - `s = smoothstep((v − 180) / (345 − 180))`: speed, 0 below 180 km/h, 1 at top speed.
+  - `k = 1` while on a kerb above 50 km/h: kerbs rattle.
+  - `b = 0.5` while braking harder than 1.0 g.
+  - So the most it shakes is 3 px (2 × vib).
+- Camera tuning gets a slider **Vibration**, 0–4 px, step 0.5, per tilted camera; Top-down uses the default 1.5 px.
+- No vibration while paused, in the pause menu or while crashed (the impact shake still works). In replay it follows the followed bike's recorded speed and surface.
+
+**Settings**
+- New start-screen option **Speed effects** On / Off (§4), default **On**, saved in `sgp_opts` (`fx`). Off turns off the wider view, the speed lines and the vibration at speed (not the impact shake). The closer zoom and the trackside details stay, because they are part of the camera and the world. Hint text: "Wider view, speed lines and camera vibration at speed."
+- The pause-menu Camera tuning panel gets the two new sliders above, saved with the other camera values (`sgp_cam`, `sgp_cam_close`) and reset by Reset to defaults. Older saves without them get the defaults.
+
+**Performance limit**
+- Everything in 1.23.0 together may add at most **10 % to the frame time** at top speed on the 1470 × 830 reference screen, compared with 1.22.0 in the same view. The bigger Behind ground depth (about 70 % more far-band pixels at 0.45 quality) is the main cost; if it is over the limit, the far-band quality for Behind drops from 0.45 to 0.4 first.
+- When the slow-machine quality drop (`TILT.q` below 1, §11a) happens, the speed lines and the wider view stay (they are cheap); the speed blur goes off as before.
+
+**Tests**
+- `camera_tuning`: new defaults (zK 0.5 / 0.3, hk 4.0, widen 15, vib 1.5), the two new sliders, and the move of old saved defaults to the new values while custom values are kept.
+- New `speed_feel` test: zoom at 160 and 320 km/h matches the table above; widen is 0 below 200 km/h and full at 340; no canvas reallocation while the speed changes; speed lines are drawn at 340 km/h and not at 250 km/h or with Speed effects Off; the world offset is 0 at rest, when paused and with Speed effects Off, and at most 2 × vib at top speed on a kerb; frame time within the limit above.
+
+### Open questions for 1.23.0 (recommended answer in bold; the design above uses it)
+
+1. Top-down camera: change its zoom too (`34 + 0.95·v`, which flattens out the same way)? **No**, keep it: its look-ahead is limited so the bike stays on screen, and a closer zoom would shorten what the player sees ahead. It still gets the trackside details, the speed lines and the vibration. Alternative: speed factor 0.95 → 0.6.
+2. One option for all the effects, or one per effect? **One option, Speed effects**, plus per-camera sliders for widen and vibration. Separate On/Off options for each would make the start screen longer.
+3. Should old saved camera values move to the new defaults? **Only values equal to the old defaults** (zK 1.0 / 0.4, Behind depth 2.6). Without this, anyone who ever saved camera settings, Petr included, would not see change 1. Alternative: keep every saved value and let the player press Reset to defaults.
+4. Grass stripes: 6 m bands, or longer like real mowing (about 10–15 m)? **6 m**: shorter bands pass by more often, which gives more sense of speed. Real circuits often use wider bands.
+
 ## 12. Track and graphics
 
 - Centreline from the TUMFTM racetrack-database (LGPL-3.0), resampled every ~2 m (5 888 m, 2 944 points); start line at the real finish line.
@@ -574,7 +647,8 @@ On phones (touch controls on, §3a) the HUD is made smaller and simpler. Desktop
 - No square ends beside the track (since 1.11.4): run-off areas narrow at their ends, and where gravel meets tarmac run-off, by at most 1.5 m per track point (~2 m). Walls change their distance from the track by at most 1.2 m per track point (before, the walls stepped by up to 4 m at the pit zone). The pit lane entry and exit merge into the track edge over 20 m instead of ending square, and the pit lane never covers the track's white edge line. These square ends caused the same horizontal cut through the screen at the pit exit before Abbey, in live riding and in replay.
 - Scenery: grandstands, Wing pit building, garages, trees.
 - Bikes: detailed top-down sprites in team livery with rider and number, lean and shadow.
-- Effects: tyre marks, smoke, sparks, debris, dust on grass and gravel; speed blur of the surroundings at top speed in the tilted cameras (§11f, since 1.17.0).
+- Effects: tyre marks, smoke, sparks, debris, dust on grass and gravel; speed blur of the surroundings at top speed in the tilted cameras (§11f, since 1.17.0); wider view, speed lines and camera vibration at speed (§11h, since 1.23.0).
+- Trackside details for the sense of speed (since 1.23.0, §11h): mowing stripes on the grass, distance posts along the straights, asphalt joints.
 - Sound: synthesised engine (rpm and gear), shifts, impacts, pit.
 
 ## 13. Technical design
@@ -652,7 +726,7 @@ After tagging, push `main`, the tag and the feature branch to GitHub (`p3trk/mot
 
 ## 16. Version history
 
-See `CHANGELOG.md`. Current: **1.23.0** (gravel traps: drag grows with speed, feathered throttle rides out at about 20 km/h; §5). Previous: **1.22.0** (no refuelling, pit stop kept; consumption about 1.0 L per lap; §7). Previous: **1.21.0** (track limits, Phase 2: infraction count, warning, Long Lap loop at Stowe, last lap position drop; §6a). Previous: **1.20.0** (track limits, Phase 1: invalid laps in practice and qualifying, time penalty for cuts in races; §6a). Previous: **1.19.8** (phone emulation tests; §13). Previous: **1.19.7** (fix: no text selection or zoom while playing on iPhone browsers, Brave included; §3a). Previous: **1.19.6** (version number shown next to the menu title; §11). Previous: **1.19.5** (fix: no double-tap zoom or text selection on menus and overlays in iPhone browsers, Brave included; §3a). Previous: **1.19.4** (fix: race result order lists riders a lap down below lead-lap riders; §11). Previous: **1.19.3** (no browser zoom on phones; §3a). Before that: **1.19.2** (tilt dead zone 12 degrees; §3a).
+See `CHANGELOG.md`. Current: **1.24.0** (sense of speed: closer zoom, wider view, trackside details, speed lines, camera vibration; §11h). Previous: **1.23.0** (gravel traps: drag grows with speed, feathered throttle rides out at about 20 km/h; §5). Previous: **1.22.0** (no refuelling, pit stop kept; consumption about 1.0 L per lap; §7). Previous: **1.21.0** (track limits, Phase 2: infraction count, warning, Long Lap loop at Stowe, last lap position drop; §6a). Previous: **1.20.0** (track limits, Phase 1: invalid laps in practice and qualifying, time penalty for cuts in races; §6a). Previous: **1.19.8** (phone emulation tests; §13). Previous: **1.19.7** (fix: no text selection or zoom while playing on iPhone browsers, Brave included; §3a). Previous: **1.19.6** (version number shown next to the menu title; §11). Previous: **1.19.5** (fix: no double-tap zoom or text selection on menus and overlays in iPhone browsers, Brave included; §3a). Previous: **1.19.4** (fix: race result order lists riders a lap down below lead-lap riders; §11). Previous: **1.19.3** (no browser zoom on phones; §3a). Before that: **1.19.2** (tilt dead zone 12 degrees; §3a).
 
 ### Open questions for 1.23.0 (recommended answer in bold; the design above uses it)
 

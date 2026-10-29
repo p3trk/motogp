@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.19.5 (2026-10-29)
+- Fix: on iPhone browsers, including Brave, a double tap on a menu, the pause screen or the results screen no longer zooms the page, and text on the page can no longer be selected by a press or long press. Form fields keep their selection (GDD 3a, §16).
+- Tests: tests/mobile_controls.test.js checks the menu overlay and the page body for these rules.
+
 ## v1.19.4 (2026-10-29)
 - Fix: the race result table lists riders a lap down below every rider on the lead lap. Before, a lapped rider who crossed the line after the chequered flag could be listed above a lead-lap rider still on the last lap, so a "+1 lap" row came before a "+NN.MMM" row (GDD 11, §16). Finishers are now ranked by laps completed first, then by the order they crossed the line.
 - Tests: tests/race_result_order.test.js checks the ranking with a lapped rider crossing first; it is in `npm test`.

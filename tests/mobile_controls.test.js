@@ -35,6 +35,11 @@ const FILE = 'file://' + path.resolve(process.argv[2] || path.join(__dirname, '.
   const zoom = await page.evaluate(() => ({ meta: document.querySelector('meta[name=viewport]').content, game: getComputedStyle(document.getElementById('game')).touchAction }));
   check('phone: pinch and double-tap zoom off', /user-scalable=no/.test(zoom.meta) && zoom.game === 'none', zoom);
 
+  // menus (GDD 3a, since 1.19.5): double-tap zoom is off on the overlays, and text cannot be selected on the page
+  // (form fields keep their selection). iPhone Brave uses the same WebKit rules, checked on a phone.
+  const menuRules = await page.evaluate(() => ({ overlay: getComputedStyle(document.getElementById('menu')).touchAction, body: getComputedStyle(document.body).userSelect, field: getComputedStyle(document.querySelector('input,textarea,select') || document.body).userSelect }));
+  check('phone: menus block double-tap zoom and text selection', menuRules.overlay === 'manipulation' && menuRules.body === 'none', menuRules);
+
   // practice, no curve training: the bike waits on the grid until the first input
   await page.evaluate(() => {
     document.querySelector('.mode[data-mode="practice"]').click();

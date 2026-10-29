@@ -44,9 +44,11 @@ const Records = {
   load() { try { const r = JSON.parse(localStorage.getItem('sgp_records') || 'null'); if (r && r.v === 1) this.d = Object.assign(this.d, r); } catch (e) { } },
   save() { try { localStorage.setItem('sgp_records', JSON.stringify(this.d)); } catch (e) { } },
   allBest() { let b = 0; for (const k in this.d.best) if (this.d.best[k] && (!b || this.d.best[k].t < b)) b = this.d.best[k].t; return b; },
-  add(mode, t, b, trace) {
+  add(mode, t, b, trace, inv) {
     const e = { t: +t.toFixed(3), mode, at: Date.now(), aids: b.assist ? 1 : 0, auto: b.auto ? 1 : 0, s: b.lastSec.map(x => +x.toFixed(3)) };
+    if (inv) e.inv = 1;
     this.d.laps.push(e); if (this.d.laps.length > 300) this.d.laps.splice(0, this.d.laps.length - 300);
+    if (inv) { this.save(); return { pb: false, allPb: false }; } // track limits: listed, never a best (GDD 6a, 10)
     const cur = this.d.best[mode]; const pb = !cur || t < cur.t; if (pb) this.d.best[mode] = e;
     const allPb = !this.d.traceT || t < this.d.traceT;
     if (allPb && trace) { this.d.trace = Array.from(trace, x => Math.round(x * 100) / 100); this.d.traceT = e.t; }
@@ -202,6 +204,7 @@ function simStep(dt) {
     if (b.surf === SURF.WALL) { wallHit(b); if (b.crashed) continue; T.project(b.x, b.y, b.i, b); b.surf = T.surface(b.i, b.s, b.d); if (b.surf === SURF.WALL) b.surf = SURF.GRASS; }
     pitWall(b, pd);
     pitLogic(b, dt);
+    if (b.isPlayer) trackLimits(b);
     timing(b);
     effects(b, dt);
   }
@@ -300,9 +303,9 @@ function timing(b) {
   if (ds < -L / 2) { // crossed the line forwards
     if (b.isPlayer) W.lineT = W.time; // practice ghosts start a best lap at every crossing (GDD 11c)
     if (b.gridCross) { b.gridCross = false; b.cp = 0; }
-    else if (b.outLap) { b.outLap = false; b.lapStartT = W.time; b.secStart = W.time; b.cp = 0; b.fuelLapStart = b.fuel; if (b.isPlayer) { HUD.msg('TIMED LAP', '', '#ffcf1f', 1.2); W.curTrace.fill(-1); } }
+    else if (b.outLap) { b.outLap = false; b.lapStartT = W.time; b.secStart = W.time; b.cp = 0; b.fuelLapStart = b.fuel; b.lapInv = b.offT >= 0; if (b.isPlayer) { HUD.msg('TIMED LAP', '', '#ffcf1f', 1.2); W.curTrace.fill(-1); } }
     else if (b.cp >= 2) completeLap(b);
-    else { b.lapStartT = W.time; b.secStart = W.time; b.cp = 0; if (b.isPlayer) { HUD.msg('LAP INVALID', 'Missed a sector', '#e3312a', 1.5); W.curTrace.fill(-1); } }
+    else { b.lapStartT = W.time; b.secStart = W.time; b.cp = 0; b.lapInv = b.offT >= 0; if (b.isPlayer) { HUD.msg('LAP INVALID', 'Missed a sector', '#e3312a', 1.5); W.curTrace.fill(-1); } }
   } else if (ds > L / 2) { b.cp = -1; } // went backwards over the line
   else {
     if (b.cp === 0 && prev < L / 3 && s >= L / 3) sector(b, 0);
@@ -316,26 +319,58 @@ function timing(b) {
   }
   if (b.isPlayer && !b.outLap && !b.gridCross && W.curTrace) { const bin = Math.floor(s / 10); if (W.curTrace[bin] < 0) W.curTrace[bin] = W.time - b.lapStartT; }
 }
+// track limits (GDD 6a): run-off, gravel and grass beyond the kerb; the strip beside the pit lane is not judged
+function overLimit(b) {
+  const sf = b.surf; if (sf !== SURF.RUN && sf !== SURF.GRAVEL && sf !== SURF.GRASS) return false;
+  return !(b.d >= 0 && T.PIT.inZone(T.rel(b.s)));
+}
+function trackLimits(b) {
+  const race = W.mode === 'race', judged = !b.autopilot && !b.trainHold && (race ? W.phase === 'run' && !b.finished : !b.outLap);
+  if (overLimit(b)) {
+    if (b.offT >= 0) return;
+    b.offT = W.time; b.offS = b.s; b.offCr = b.crashes;
+    if (judged && !race && !b.lapInv) { b.lapInv = true; HUD.msg('LAP INVALID', 'Track limits', '#e3312a', 1.5); }
+    return;
+  }
+  if (b.offT < 0) return;
+  const t = W.time - b.offT, s0 = b.offS, crashed = b.crashes !== b.offCr; b.offT = -1;
+  if (!race || !judged || crashed) return; // a crash and respawn is not a rejoin
+  const ref = limitRef(s0, b.s); if (ref === null) return;
+  const lost = t - ref; if (lost >= 0.5) return; // ran wide and paid for it already
+  const pen = Math.ceil((2 + Math.max(0, -lost)) * 10 - 1e-6) / 10;
+  b.pen += pen; HUD.msg('TRACK LIMITS', '+' + pen.toFixed(1) + ' s time penalty', '#e3312a', 2);
+}
+// reference time from s0 to s1: the best lap trace if it covers both points, else the speed guide pace (GDD 6a, 9)
+function limitRef(s0, s1) {
+  let ds = s1 - s0; if (ds < -T.L / 2) ds += T.L; if (ds > T.L / 2) ds -= T.L;
+  if (ds <= 0) return null;
+  const B = W.bestTrace;
+  const at = (s) => { const f = s / 10, k = Math.floor(f), a = B[k], c = B[k + 1]; return a > 0 && c > 0 ? a + (c - a) * (f - k) : -1; };
+  if (B) { const a = at(s0), c = at(s1); if (a >= 0 && c >= 0) { const r = c - a + (c < a ? W.bestTraceT : 0); if (r > 0) return r; } }
+  let r = 0; const n = Math.round(ds / T.DS); for (let k = 0, i = T.idx(s0); k < n; k++, i = (i + 1) % T.N) r += T.DS / Math.max(5, T.VP[i] * GUIDE_K);
+  return r;
+}
 function sector(b, k) {
   const t = W.time - b.secStart; b.secStart = W.time; b.lastSec[k] = t; b.cp = k + 1;
   if (b.isPlayer) { const best = b.bestSec[k]; HUD.sector(k, t, best); }
-  if (!b.bestSec[k] || t < b.bestSec[k]) b.bestSec[k] = t;
+  if (!b.lapInv && (!b.bestSec[k] || t < b.bestSec[k])) b.bestSec[k] = t;
 }
 function completeLap(b) {
   const lt = W.time - b.lapStartT; const t3 = W.time - b.secStart; b.lastSec[2] = t3;
+  const inv = b.lapInv; // track limits (GDD 6a)
   if (b.isPlayer) HUD.sector(2, t3, b.bestSec[2]);
-  if (!b.bestSec[2] || t3 < b.bestSec[2]) b.bestSec[2] = t3;
-  if (b.isPlayer) Rec.lap(W.time - lt, W.time, lt, b.autopilot);
-  b.lastLap = lt; b.laps.push(lt); const pb = !b.bestLap || lt < b.bestLap; if (pb) b.bestLap = lt;
-  b.lap++; b.lapStartT = W.time; b.secStart = W.time; b.cp = 0;
+  if (!inv && (!b.bestSec[2] || t3 < b.bestSec[2])) b.bestSec[2] = t3;
+  if (b.isPlayer) Rec.lap(W.time - lt, W.time, lt, b.autopilot, inv);
+  b.lastLap = lt; b.laps.push(lt); b.lapsInv.push(inv); const pb = !inv && (!b.bestLap || lt < b.bestLap); if (pb) b.bestLap = lt;
+  b.lap++; b.lapStartT = W.time; b.secStart = W.time; b.cp = 0; b.lapInv = b.offT >= 0;
   const used = b.fuelLapStart - b.fuel; if (!b.pittedThisLap && used > 0.8 && used < 6) b.fuelPerLap = lerp(b.fuelPerLap, used, b.laps.length > 1 ? 0.5 : 0.8);
   b.fuelLapStart = b.fuel; b.pittedThisLap = false;
   if (b.isPlayer) {
     let rec = { allPb: false };
-    if (!b.autopilot) rec = Records.add(W.mode, lt, b, W.curTrace);
-    if (rec.allPb || !W.bestTrace) { W.bestTrace = Float32Array.from(W.curTrace); W.bestTraceT = lt; }
+    if (!b.autopilot) rec = Records.add(W.mode, lt, b, W.curTrace, inv);
+    if (!inv && (rec.allPb || !W.bestTrace)) { W.bestTrace = Float32Array.from(W.curTrace); W.bestTraceT = lt; }
     W.curTrace.fill(-1);
-    HUD.lap(lt, pb, rec.allPb);
+    HUD.lap(lt, pb, rec.allPb, inv);
   }
   if (W.mode === 'race') {
     if (!b.finished && (b.lap >= W.totalLaps || W.flag)) {
@@ -404,7 +439,7 @@ function standings() {
     return bikes.sort((a, b) => {
       if (a.dnf !== b.dnf) return a.dnf ? 1 : -1;
       // laps first, so a rider a lap down is always below the lead-lap riders (GDD 11, since 1.19.4)
-      if (a.finished && b.finished) return (b.lap - a.lap) || (W.finishOrder.indexOf(a) - W.finishOrder.indexOf(b));
+      if (a.finished && b.finished) return (b.lap - a.lap) || ((a.finishT + (a.pen || 0)) - (b.finishT + (b.pen || 0))) || (W.finishOrder.indexOf(a) - W.finishOrder.indexOf(b)); // penalties count (GDD 6a)
       if (a.finished !== b.finished) return a.finished ? -1 : 1;
       return b.progress - a.progress;
     });

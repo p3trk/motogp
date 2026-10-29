@@ -9,7 +9,7 @@ const HUD = {
   msg(t, sub, col, dur, hold) { this.m = { t, sub, col, dur, age: 0, hold }; }, // hold: stays while the bike waits for the first input
   ticker(t) { this.tick.unshift({ t, age: 0 }); this.tick = this.tick.slice(0, 3); },
   sector(k, t, best) { this.secFlash[k] = { t, best, age: 0, pb: !best || t < best }; },
-  lap(t, pb, rec) { this.lapFlash = { t, pb, rec, age: 0 }; },
+  lap(t, pb, rec, inv) { this.lapFlash = { t, pb, rec, inv, age: 0 }; },
   step(dt) {
     if (this.m) { this.m.age += dt; if (this.m.hold && W.player && W.player.trainHold) this.m.age = Math.min(this.m.age, 1); if (this.m.age > this.m.dur) this.m = null; }
     for (const q of this.tick) q.age += dt; this.tick = this.tick.filter(q => q.age < 6);
@@ -74,7 +74,8 @@ function drawPhoneTop(b, st, pos) {
   panel(x, PAD, w, 58);
   txt(race ? 'P' + pos + '  LAP ' + Math.min(W.totalLaps, b.lap + 1) + '/' + W.totalLaps : b.outLap ? 'OUT LAP' : 'LAP ' + (b.laps.length + 1) + (W.mode === 'quali' ? '/3' : ''), x + 8, PAD + 15, 12, '#ffcf1f', 800, 'left', true);
   const cur = (b.outLap || b.trainHold || (race && W.phase !== 'run')) ? 0 : W.time - b.lapStartT;
-  txt(b.outLap ? '–:––.–––' : fmtTime(cur), x + 8, PAD + 38, 20, '#fff', 700, 'left');
+  txt(b.outLap ? '–:––.–––' : fmtTime(cur), x + 8, PAD + 38, 20, b.lapInv && !race ? '#e3312a' : '#fff', 700, 'left');
+  if (race && b.pen > 0) txt('PEN +' + b.pen.toFixed(1), x + w - 8, PAD + 15, 11, '#e3312a', 800, 'right'); // GDD 6a
   if (W.bestTrace && !b.outLap) { const bin = Math.floor(b.s / 10); const bt = W.bestTrace[bin], ct = W.curTrace[bin]; if (bt > 0 && ct > 0) { const dlt = ct - bt; txt((dlt >= 0 ? '+' : '−') + Math.abs(dlt).toFixed(2), x + w - 8, PAD + 38, 13, dlt <= 0 ? '#3ad17a' : '#e3312a', 800, 'right'); } }
   txt('B ' + (b.bestLap ? fmtTime(b.bestLap) : '–') + '   L ' + (b.lastLap ? fmtTime(b.lastLap) : '–'), x + 8, PAD + 52, 10, '#8d9aa4', 600);
   const cz = !b.crashed && !b.inPitLane ? cornerAhead(b) : null;
@@ -85,7 +86,7 @@ function drawPhoneTop(b, st, pos) {
     if (ahead && !ahead.dnf) txt('▲ ' + ahead.short + ' ' + Math.max(0, g0 - gapOf(ahead)).toFixed(3), VW / 2 - 60, PAD + 74, 11, '#c9d2d8', 600, 'center');
     if (behind && !behind.dnf && !b.finished) txt('▼ ' + behind.short + ' ' + Math.max(0, gapOf(behind) - g0).toFixed(3), VW / 2 + 60, PAD + 74, 11, '#c9d2d8', 600, 'center');
   }
-  if (HUD.lapFlash) { const f = HUD.lapFlash; ctx.globalAlpha = Math.max(0, Math.min(1, (5 - f.age) * 2)); txt((f.rec ? 'NEW ALL-TIME BEST  ' : f.pb ? 'SESSION BEST  ' : 'LAP  ') + fmtTime(f.t), VW / 2, PAD + 96, 20, f.pb ? '#b46bff' : '#fff', 800, 'center', true); ctx.globalAlpha = 1; }
+  if (HUD.lapFlash) { const f = HUD.lapFlash; ctx.globalAlpha = Math.max(0, Math.min(1, (5 - f.age) * 2)); txt((f.inv ? 'INVALID  ' : f.rec ? 'NEW ALL-TIME BEST  ' : f.pb ? 'SESSION BEST  ' : 'LAP  ') + fmtTime(f.t), VW / 2, PAD + 96, 20, f.inv ? '#e3312a' : f.pb ? '#b46bff' : '#fff', 800, 'center', true); ctx.globalAlpha = 1; }
 }
 function drawHUD(dt) {
   const b = W.player; if (!b) return;
@@ -159,7 +160,8 @@ function drawHUD(dt) {
   }
   const cur = (b.outLap || b.trainHold || (W.mode === 'race' && W.phase !== 'run')) ? 0 : W.time - b.lapStartT;
   const tx = cx + cw / 2 + (W.mode === 'race' ? -10 : 30);
-  txt(b.outLap ? '–:––.–––' : fmtTime(cur), tx, cy + 36, 26, '#fff', 700, 'center');
+  txt(b.outLap ? '–:––.–––' : fmtTime(cur), tx, cy + 36, 26, b.lapInv && W.mode !== 'race' ? '#e3312a' : '#fff', 700, 'center');
+  if (W.mode === 'race' && b.pen > 0) txt('PEN +' + b.pen.toFixed(1) + ' s', cx + cw - 16, cy + 68, 11, '#e3312a', 800, 'right'); // GDD 6a
   // live delta to best lap
   if (W.bestTrace && !b.outLap) { const bin = Math.floor(b.s / 10); const bt = W.bestTrace[bin], ct = W.curTrace[bin]; if (bt > 0 && ct > 0) { const dlt = ct - bt; txt((dlt >= 0 ? '+' : '−') + Math.abs(dlt).toFixed(2), tx, cy + 58, 16, dlt <= 0 ? '#3ad17a' : '#e3312a', 800, 'center'); } }
   txt('LAST ' + (b.lastLap ? fmtTime(b.lastLap) : '–') + '   BEST ' + (b.bestLap ? fmtTime(b.bestLap) : '–') + (Records.d.traceT ? '   PB ' + fmtTime(Records.d.traceT) : ''), tx, cy + 74, 12, '#8d9aa4', 600, 'center');
@@ -178,7 +180,7 @@ function drawHUD(dt) {
     if (ahead && !ahead.dnf) txt('▲ ' + ahead.short + ' ' + Math.max(0, g0 - gapOf(ahead)).toFixed(3), VW / 2 - 70, cy + 128 + gOff, 13, '#c9d2d8', 600, 'center');
     if (behind && !behind.dnf && !b.finished) txt('▼ ' + behind.short + ' ' + Math.max(0, gapOf(behind) - g0).toFixed(3), VW / 2 + 70, cy + 128 + gOff, 13, '#c9d2d8', 600, 'center');
   }
-  if (HUD.lapFlash) { const f = HUD.lapFlash; ctx.globalAlpha = Math.max(0, Math.min(1, (5 - f.age) * 2)); txt((f.rec ? 'NEW ALL-TIME BEST  ' : f.pb ? 'SESSION BEST  ' : 'LAP  ') + fmtTime(f.t), VW / 2, cy + 152 + gOff, 20, f.pb ? '#b46bff' : '#fff', 800, 'center', true); ctx.globalAlpha = 1; }
+  if (HUD.lapFlash) { const f = HUD.lapFlash; ctx.globalAlpha = Math.max(0, Math.min(1, (5 - f.age) * 2)); txt((f.inv ? 'INVALID  ' : f.rec ? 'NEW ALL-TIME BEST  ' : f.pb ? 'SESSION BEST  ' : 'LAP  ') + fmtTime(f.t), VW / 2, cy + 152 + gOff, 20, f.inv ? '#e3312a' : f.pb ? '#b46bff' : '#fff', 800, 'center', true); ctx.globalAlpha = 1; }
   }
   // ---- timing tower (left)
   if (!tiny) { drawTower(st, b); drawMinimap(b); }
@@ -377,6 +379,7 @@ function drawTower(st, me) {
       ctx.fillStyle = TEAMS[o.team].c1; ctx.fillRect(x + 28, yy + 3, 4, rowH - 6);
       txt(o.short, x + 38, yy + 14, 14, o.ghost ? '#9fd8ff' : '#fff', 700);
       if (o.ghost) txt('G', x + 38 + ctx.measureText(o.short).width + 4, yy + 14, 10, '#9fd8ff', 800);
+      else if (o.pen > 0) txt('+' + o.pen.toFixed(0) + 's', x + 38 + ctx.measureText(o.short).width + 4, yy + 14, 10, '#e3312a', 800);
       let g = '';
       if (o.dnf) g = 'OUT'; else if (o.crashed) g = 'CRASH'; else if (o.inPitLane) g = 'PIT'; else if (o.finished) g = '🏁'.length ? 'FIN' : ''; else if (p === 1) g = 'Leader'; else { const lapsDown = st[0].lap - o.lap - (st[0].s < o.s ? 1 : 0); g = lapsDown >= 1 ? '+' + lapsDown + ' LAP' : '+' + ((gapOf(o) || 0) - lead).toFixed(1); }
       txt(g, x + w - 10, yy + 14, 13, g === 'PIT' ? '#ffcf1f' : (g === 'OUT' || g === 'CRASH') ? '#e3312a' : '#c9d2d8', 600, 'right');
@@ -385,7 +388,7 @@ function drawTower(st, me) {
     if (Touch.on && W.mode !== 'quali') return; // no lap list on phones (GDD 11g)
     let rows;
     if (W.mode === 'quali') rows = W.qualiAI.map(q => ({ short: q.name.split(' ').slice(-1)[0].toUpperCase().slice(0, 3), t: q.best, me: false, c: '#8d9aa4' })).concat([{ short: me.short, t: me.bestLap || 1e9, me: true }]).sort((a, c) => a.t - c.t);
-    else { rows = me.laps.slice(-12).map((t, k, arr) => ({ short: 'LAP ' + (me.laps.length - arr.length + k + 1), t, me: t === me.bestLap })); if (Records.d.traceT) rows.unshift({ short: 'ALL-TIME', t: Records.d.traceT, me: false, rec: true }); const gr = []; for (const g of W.ghosts) { gr.push({ short: 'GHOST ' + g.short, t: g.recBest || 1e9, me: false, gh: true }); if (g.sync === 'rec') g.laps.forEach((t, j) => gr.push({ short: g.short + ' LAP ' + (j + 1), t, me: false, gh: true })); } rows.splice(Records.d.traceT ? 1 : 0, 0, ...gr); }
+    else { rows = me.laps.slice(-12).map((t, k, arr) => { const n = me.laps.length - arr.length + k, inv = me.lapsInv[n]; return { short: 'LAP ' + (n + 1) + (inv ? ' INV' : ''), t, me: !inv && t === me.bestLap, inv }; }); if (Records.d.traceT) rows.unshift({ short: 'ALL-TIME', t: Records.d.traceT, me: false, rec: true }); const gr = []; for (const g of W.ghosts) { gr.push({ short: 'GHOST ' + g.short, t: g.recBest || 1e9, me: false, gh: true }); if (g.sync === 'rec') g.laps.forEach((t, j) => gr.push({ short: g.short + ' LAP ' + (j + 1), t, me: false, gh: true })); } rows.splice(Records.d.traceT ? 1 : 0, 0, ...gr); }
     const maxRows = Math.max(6, Math.floor((VH - 200 - 56) / rowH)); let start = 0;
     if (rows.length > maxRows) { const mi = rows.findIndex(r => r.me); start = clamp(mi - Math.floor(maxRows / 2), 0, rows.length - maxRows); }
     const vis = rows.slice(start, start + maxRows);
@@ -395,7 +398,7 @@ function drawTower(st, me) {
       const yy = y + 26 + k * rowH;
       if (r.me) { ctx.fillStyle = W.mode === 'quali' ? 'rgba(255,207,31,.18)' : 'rgba(180,107,255,.2)'; ctx.fillRect(x + 2, yy, w - 4, rowH); }
       if (W.mode === 'quali') txt(String(start + k + 1), x + 22, yy + 14, 14, r.me ? '#ffcf1f' : '#fff', 800, 'right', true);
-      const rc = r.rec ? '#b46bff' : r.gh ? '#9fd8ff' : null;
+      const rc = r.rec ? '#b46bff' : r.gh ? '#9fd8ff' : r.inv ? '#e3312a' : null;
       txt(r.short, x + (W.mode === 'quali' ? 30 : 10), yy + 14, 14, rc || '#fff', 700);
       txt(r.t < 1e8 ? fmtTime(r.t) : 'NO TIME', x + w - 10, yy + 14, 13, rc || '#c9d2d8', 600, 'right');
     });
@@ -627,7 +630,7 @@ const UI = {
     if (!n) { el.innerHTML = '<span class="small">No laps saved yet. Every completed lap you ride is kept in this browser, and your best one becomes the target for the live delta.</span>'; $('btnClearRec').hidden = true; return; }
     const lbl = { practice: 'Practice', quali: 'Qualifying', race: 'Race' };
     const best = Object.keys(lbl).filter(k => d.best[k]).map(k => `<div class="rec"><span class="lbl">${lbl[k]} best</span><b>${fmtTime(d.best[k].t)}</b><span class="small">${new Date(d.best[k].at).toLocaleDateString()}${d.best[k].aids ? '' : ' · no aids'}${d.best[k].auto ? ' · auto' : ''}</span></div>`).join('');
-    const last = d.laps.slice(-6).reverse().map(e => `<tr><td>${fmtTime(e.t)}</td><td>${lbl[e.mode] || e.mode}</td><td class="small">${e.s && e.s.length === 3 ? e.s.map(x => x.toFixed(2)).join(' / ') : ''}</td><td class="small">${new Date(e.at).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</td></tr>`).join('');
+    const last = d.laps.slice(-6).reverse().map(e => `<tr><td>${fmtTime(e.t)}${e.inv ? ' <span class="small">INV</span>' : ''}</td><td>${lbl[e.mode] || e.mode}</td><td class="small">${e.s && e.s.length === 3 ? e.s.map(x => x.toFixed(2)).join(' / ') : ''}</td><td class="small">${new Date(e.at).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</td></tr>`).join('');
     el.innerHTML = `<div class="recs">${best}<div class="rec"><span class="lbl">Laps logged</span><b>${n}</b></div></div><div class="tablewrap"><table><thead><tr><th>Lap</th><th>Session</th><th>Sectors</th><th>When</th></tr></thead><tbody>${last}</tbody></table></div>`;
     $('btnClearRec').hidden = false; $('btnClearRec').textContent = 'Clear saved laps';
   },
@@ -834,8 +837,8 @@ const UI = {
     const me = W.player; const myPos = st.indexOf(me) + 1;
     let fl = null; for (const b of st) if (b.bestLap && (!fl || b.bestLap < fl.bestLap)) fl = b;
     this.results('Race result', 'British Grand Prix · ' + W.totalLaps + ' laps', me.dnf ? 'You did not finish.' : `You finished P${myPos} of ${st.length}. Fastest lap: #${fl.num} ${fl.name} ${fmtTime(fl.bestLap)}`,
-      ['Pos', '#', 'Rider', 'Team', 'Time / gap', 'Best lap', 'Pits'],
-      st.map((b, k) => ({ me: b === me, cells: [b.dnf ? 'DNF' : k + 1, b.num, b.ghost ? b.name.replace(' (ghost)', '') + ' · GHOST' : b.name, sw(b.team) + TEAMS[b.team].name, b.dnf ? 'Retired' : k === 0 ? fmtTime(b.finishT) : (b.lap < win.lap ? '+' + (win.lap - b.lap) + ' lap' + (win.lap - b.lap > 1 ? 's' : '') : '+' + (b.finishT - win.finishT).toFixed(3)), b.bestLap ? (b === fl ? '<span class="pb">' + fmtTime(b.bestLap) + '</span>' : fmtTime(b.bestLap)) : '–', b.ghost ? '–' : b.pits] })),
+      ['Pos', '#', 'Rider', 'Team', 'Time / gap', 'Best lap', 'Pits', 'Pen'],
+      st.map((b, k) => ({ me: b === me, cells: [b.dnf ? 'DNF' : k + 1, b.num, b.ghost ? b.name.replace(' (ghost)', '') + ' · GHOST' : b.name, sw(b.team) + TEAMS[b.team].name, b.dnf ? 'Retired' : k === 0 ? fmtTime(b.finishT + (b.pen || 0)) : (b.lap < win.lap ? '+' + (win.lap - b.lap) + ' lap' + (win.lap - b.lap > 1 ? 's' : '') : '+' + (b.finishT + (b.pen || 0) - win.finishT - (win.pen || 0)).toFixed(3)), b.bestLap ? (b === fl ? '<span class="pb">' + fmtTime(b.bestLap) + '</span>' : fmtTime(b.bestLap)) : '–', b.ghost ? '–' : b.pits, b.pen > 0 ? '+' + b.pen.toFixed(1) + ' s' : ''] })),
       [['Race again', () => this.launch(W.kind, W.kind === 'gp' ? { qualiGrid: W.opts.qualiGrid } : {})], ...(rec ? [['Watch replay', () => RP.open([rec], 'results'), true], ['Export session', () => Lib.export(rec), true]] : []), ['Back to menu', () => this.toMenu(), true]]);
   },
   results(eyebrow, title, sub, head, rows, actions) {
@@ -896,5 +899,5 @@ function boot() {
   requestAnimationFrame(t => { last = t; requestAnimationFrame(frame); });
   setInterval(() => { if (UI.state === 'menu') { for (let k = 0; k < 4; k++) simStep(SUB); } }, 1000 / 30);
 }
-window.__sgp = { Touch, tiltProjectX: draw => { for (const Ly of LAYERS) { const g = Ly.g; g.setTransform(Ly.dpr, 0, 0, Ly.dpr, 0, 0); g.translate(-Ly.x0, -Ly.y0); draw(g, RW, RH); } projectTilted(); return { VW, VH, RW, RH }; }, worldToScreenX: (x, y) => worldToScreen(x, y), worldToCanvasX: (x, y) => worldToCanvas(x, y), frameX: t => frame(t), setCamModeX: m => setCamMode(m), CAM, RP, Rec, Lib, Ghost, W, T, PHYS, Input, FX, Records, completeLapX: b => completeLap(b), drawWorldX: () => drawWorld(), speedBlurX: () => speedBlur(), camNameX: () => TILT_CAM, setupSession, simStep, standings, UI, SUB, TILT, setAIReal: v => { AI_REAL = v; } };
+window.__sgp = { Touch, tiltProjectX: draw => { for (const Ly of LAYERS) { const g = Ly.g; g.setTransform(Ly.dpr, 0, 0, Ly.dpr, 0, 0); g.translate(-Ly.x0, -Ly.y0); draw(g, RW, RH); } projectTilted(); return { VW, VH, RW, RH }; }, worldToScreenX: (x, y) => worldToScreen(x, y), worldToCanvasX: (x, y) => worldToCanvas(x, y), frameX: t => frame(t), setCamModeX: m => setCamMode(m), CAM, RP, Rec, Lib, Ghost, W, T, PHYS, Input, FX, Records, completeLapX: b => completeLap(b), trackLimitsX: b => trackLimits(b), limitRefX: (s0, s1) => limitRef(s0, s1), SURF, drawWorldX: () => drawWorld(), speedBlurX: () => speedBlur(), camNameX: () => TILT_CAM, setupSession, simStep, standings, UI, SUB, TILT, setAIReal: v => { AI_REAL = v; } };
 if (document.fonts && document.fonts.ready) { Promise.race([document.fonts.ready, new Promise(r => setTimeout(r, 1500))]).then(boot).catch(e => { console.error("boot failed", e && e.stack); }); } else boot();

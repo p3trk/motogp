@@ -159,7 +159,7 @@ Based on the real MotoGP rules (FIM Grand Prix Regulations Art. 1.21 and the Rac
 | Legal | Over the limit |
 |---|---|
 | Asphalt, the white edge line, the kerbs | Tarmac run-off, gravel and grass beyond the outer edge of the kerb |
-| The pit lane (surface `PIT`) | |
+| The pit lane (surface `PIT`), and the strip between the track and the pit lane inside the pit zone | |
 
 - The check uses the bike's centre point (the game has no separate wheels). A **trip off track** starts when the centre moves onto run-off, gravel or grass, and ends when it is back on asphalt, kerb or pit lane.
 - Phase 1 judges the **player only**. AI riders follow their line and are not judged.
@@ -579,6 +579,7 @@ On phones (touch controls on, §3a) the HUD is made smaller and simpler. Desktop
   - v1.16.0 fails it (no blur at top speed).
 - Since 1.17.0 `tilt_seam.test.js` and `camera_shake.test.js` run with Speed blur Off, so their measurements stay as before; `camera_tuning.test.js` expects 15 sliders (the three blur sliders added) and checks that they are saved per camera and reset by Reset to defaults.
 - `npm test` runs all tests (needs `npm install` and `npx playwright install chromium` once).
+- Tests (since 1.20.0): `node tests/track_limits.test.js [index.html]` checks §6a: kerbs and the strip beside the pit lane are legal; gravel makes a practice lap invalid; the invalid lap is saved with `inv` and never becomes a best lap, mode best or all-time trace; the next lap starts valid; in a race a cut gives 2 s + the time gained, a slow run wide and a crash give no penalty, and the penalty counts in the result order.
 - Tests (since 1.19.8, Phase 1): `node tests/phone_emulation.test.js [index.html]` runs the phone checks in emulated phones on the Mac, with no real device or account. It uses Playwright device profiles:
   - **iPhone** in WebKit (the engine of Safari, but not Safari itself) and **Pixel** in Chromium (the engine of Chrome on Android), both in landscape with touch, at the sizes of a current phone.
   - **Layout:** the phone HUD (§11g) is shown, the bottom-right panel and speed guide are absent, the pause button and both touch halves are visible, the menu shows the gearbox row hidden and the side and tilt rows shown.

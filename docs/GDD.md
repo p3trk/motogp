@@ -704,12 +704,40 @@ The eye judges speed from small things passing by. These are part of the world, 
   - **Limits:** WebKit here is not Safari. The pinch and double-tap checks run only in Chromium, and the portrait prompt check runs only in Chromium, because WebKit's orientation query does not follow a resized emulated viewport. Real iPhone Safari and real Android are not covered; those need Phase 2 or 3, or one manual check.
   - Added to `npm test`. The test writes nothing outside the repository (screenshots go to `shots/`).
 
+## 13a. Code scanning (ESLint with Sonar's rules)
+
+Every commit that changes JavaScript is scanned with ESLint and `eslint-plugin-sonarjs` (Sonar's JavaScript rules packaged for ESLint). A commit that adds a new issue is stopped, the issue is reported, and it is fixed on the same branch before the commit goes in. There is no server and nothing is uploaded.
+
+**Setup:**
+- `eslint` and `eslint-plugin-sonarjs` are dev dependencies in `package.json`, like Playwright (`node_modules` stays out of git; worktrees use a symlink to the main checkout's `node_modules`).
+- `eslint.config.js` (committed) uses ESLint's recommended rules and Sonar's recommended rules.
+  - `src/*.js` are browser scripts that are joined into one file by `tools/build.py`, so each file uses functions and constants from the others. For them, the rules for undefined, unused and implicit global names (`no-undef`, `no-unused-vars`, `sonarjs/no-implicit-global`) are off; every other rule applies. Sonar's own `sonarjs/no-unused-vars` stays on, since it checks only names local to a function.
+  - `tests/` and `tools/` are Node scripts and get Node globals. The tests are plain Playwright scripts, not `describe`/`it` blocks, so `sonarjs/no-empty-test-file` is off for them.
+  - `index.html` (built), `node_modules/`, `saved_tracks/`, `shots/` and `.claude/` are ignored.
+- `npm run lint` scans the whole project and writes the list to `shots/lint-report.txt`.
+
+**Pre-commit hook:**
+- `tools/hooks/pre-commit` (committed), switched on once with `git config core.hooksPath tools/hooks`. The setting is shared by the main checkout and all worktrees; a branch made before this change has no hook file, so its commits are not scanned until it includes the change.
+- It scans only the staged `.js` files under `src/`, `tests/` and `tools/`, using their staged content (not the working copy). Commits with no such file (GDD-only, CHANGELOG-only, `index.html`) are not scanned.
+- It keeps only the issues on lines this commit adds or changes (from `git diff --cached`). Issues already in the code before the commit do not block it.
+- If any are left, the commit is stopped and the hook prints each one: file, line, rule and message. It takes about 1–2 s.
+- If ESLint is missing (no `node_modules`), the commit is stopped with a message saying how to install it. `git commit --no-verify` skips the scan; it is used only when the owner says so.
+
+**Workflow:** when the hook stops a commit, the issues are reported to the owner in the reply, fixed on the same branch, and the commit is made again. `CLAUDE.md` gets the same rule so every session follows it.
+
+**Existing issues:** the first full scan (`npm run lint`) is reported to the owner as a summary. These issues do not stop commits; they are fixed in their own feature branches when the owner asks.
+
+**Limits:**
+- JavaScript only: the CSS and HTML in `src/head.html` and the Python in `tools/build.py` are not scanned.
+- No duplicated-code check across files, no dashboard or history; that needs the SonarQube server, which can be added later as a scan at release.
+- Because `no-undef` is off in `src/`, a misspelled name used across files is not caught by the scan; the tests still catch most of these.
+
 ## 14. Change process
 
 1. Create a worktree with a feature branch from `main`: `git worktree add .claude/worktrees/<name> -b feature/<short-name>`.
 2. **Update this GDD first** and commit it. Do not change the version here.
 3. Wait for approval of the design before changing the code.
-4. Change the code in `src/`, run `python3 tools/build.py`, test, commit. Feature commits add no tags, no version bump and no `CHANGELOG.md` version entry.
+4. Change the code in `src/`, run `python3 tools/build.py`, test, commit. The pre-commit hook scans the code (§13a); a commit it stops is fixed and made again. Feature commits add no tags, no version bump and no `CHANGELOG.md` version entry.
 5. Merge the feature branch into `dev` with `--no-ff`, through the `.claude/worktrees/dev` worktree. Feature branches never merge straight into `main`.
 
 **Release** (only when the owner says "Release"):

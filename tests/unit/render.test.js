@@ -1,0 +1,295 @@
+// Unit tests for src/render.js (GDD 13b): camera tuning, layers, textures, geometry, scenery, camera, projection,
+// speed blur and speed effects, and the drawing functions (checked on recording canvases).
+'use strict';
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { load, makeCtx, ops, texts, placeAt } = require('./load');
+
+const near = (a, b, tol, msg) => assert.ok(Math.abs(a - b) <= tol, `${msg || ''} ${a} vs ${b} (tol ${tol})`);
+const DEG = Math.PI / 180;
+const def = (G, k) => G.CAM_SET.find(d => d.k === k);
+// the player riding on the Hangar Straight at a set speed, camera settled
+function riding(kmh, cam = 'behind', lo) {
+  const g = load(lo); const { G } = g;
+  G.UI.opts.cam = cam; G.UI.launch('practice', {});
+  const b = G.W.player, hs = G.T.corners.find(c => c.name === 'Hangar Straight');
+  placeAt(G, b, hs.s + 100, 0); b.trainHold = false; b.v = kmh / 3.6;
+  G.CAM.init = false; G.updateCamera(1 / 60); for (let k = 0; k < 120; k++) G.updateCamera(1 / 60);
+  return Object.assign(g, { b });
+}
+const rec = G => { const c = makeCtx({ width: 1280, height: 800 }); G.ctx = c; return c; };
+const all = () => true, none = () => false;
+
+// --- camera tuning (GDD 11a) -----------------------------------------------
+test('camGet: TILT value in display units', () => {
+  const { G } = load(); assert.equal(G.camGet(def(G, 'a')), 40); assert.equal(G.camGet(def(G, 'bike')), 20); assert.equal(G.camGet(def(G, 'zK')), 0.5);
+});
+test('camSet: clamps, applies, keeps blur speeds 10 km/h apart, saves on request', () => {
+  const { G, env } = load();
+  assert.equal(G.camSet(def(G, 'a'), 99, false), 70); near(G.TILT.a, 70 * DEG, 1e-12); assert.equal(env.ls.getItem('sgp_cam'), null);
+  assert.equal(G.camSet(def(G, 'a'), 'x', true), 40, 'not a number: the default'); assert.equal(JSON.parse(env.ls.getItem('sgp_cam')).a, 40);
+  G.camSet(def(G, 'bv0'), 330, false); assert.equal(G.TILT.bv1, 340);
+  G.camSet(def(G, 'bv1'), 200, false); assert.equal(G.TILT.bv0, 190);
+});
+test('camSave: the values of one camera in its own key', () => {
+  const { G, env } = load(); G.CAM_VAL.close.zMax = 22; G.camSave('close');
+  assert.equal(JSON.parse(env.ls.getItem('sgp_cam_close')).zMax, 22); assert.equal(env.ls.getItem('sgp_cam'), null);
+});
+test('camLoad: TILT takes the values of the chosen camera', () => {
+  const { G } = load(); G.camLoad('close');
+  assert.equal(G.TILT_CAM, 'close'); near(G.TILT.a, 55 * DEG, 1e-12); assert.equal(G.TILT.hk, 6);
+  G.camLoad('behind'); near(G.TILT.a, 40 * DEG, 1e-12); assert.equal(G.TILT.hk, 2.9);
+});
+test('camReset: defaults for the camera in use only', () => {
+  const { G, env } = load(); G.camLoad('close'); G.camSet(def(G, 'zMax'), 12, true); G.camLoad('behind'); G.camSet(def(G, 'zMax'), 11, true);
+  G.camReset(); assert.equal(G.CAM_VAL.behind.zMax, 20); assert.equal(G.CAM_VAL.close.zMax, 12); assert.equal(JSON.parse(env.ls.getItem('sgp_cam')).zMax, 20);
+});
+test('camera storage on load: saved values kept, old defaults moved, the 1.13 Close profile dropped', () => {
+  const a = load({ storage: { sgp_cam: { zMax: 25, zK: 1, hk: 2.6 }, sgp_cam_close: { zK: 0.4, a: 60 } } }).G;
+  assert.equal(a.CAM_VAL.behind.zMax, 25); assert.equal(a.CAM_VAL.behind.zK, 0.5); assert.equal(a.CAM_VAL.behind.hk, 2.9);
+  assert.equal(a.CAM_VAL.close.zK, 0.3); assert.equal(a.CAM_VAL.close.a, 60);
+  const old = { profile: 'close', a: 55, p: 1.8, bike: 8, zMax: 30, zBase: 12, zK: 0.4, wk: 3.5, hk: 6, nearQ: 1.5, farQ: 0.7, fade: 30, minLen: 40 };
+  const b = load({ storage: { sgp_cam: old } }); assert.equal(b.G.CAM_VAL.behind.a, 40, 'Behind starts from its defaults');
+  assert.equal(JSON.parse(b.env.ls.getItem('sgp_cam')).profile, undefined, 'profile field no longer written');
+});
+
+// --- layers, textures, geometry, scenery ------------------------------------
+test('tiltP: camera distance, shorter when the view widens at speed', () => {
+  const { G } = load(); G.CAM.w = 0; near(G.tiltP(), G.TILT.p * G.VH, 1e-9);
+  G.CAM.w = 1; near(G.tiltP(), G.TILT.p * G.VH * (1 - G.TILT.wd), 1e-9);
+});
+test('tiltA: the tilt is lowered with the distance, so the horizon stays put', () => {
+  const { G } = load(); G.CAM.w = 0; assert.equal(G.tiltA(), G.TILT.a);
+  G.CAM.w = 1; const a = G.tiltA(); assert.ok(a < G.TILT.a);
+  near(G.tiltP() / Math.tan(a), G.TILT.p * G.VH / Math.tan(G.TILT.a), 1e-6, 'horizon at P cot(a)');
+});
+test('tiltBikeH: the bike row on the ground canvas, below the horizon', () => {
+  const { G } = load(); G.CAM.w = 0; const h = G.tiltBikeH();
+  assert.ok(h > G.TILT.bike * G.VH && h < G.RH);
+  const P = G.tiltP(), a = G.tiltA(); near(h * Math.cos(a) * P / (P + h * Math.sin(a)), G.TILT.bike * G.VH, 1e-6, 'projects to the bike height');
+});
+test('resize: one layer top-down, near and far bands tilted', () => {
+  const { G, env } = load({ width: 1000, height: 600, dpr: 2 });
+  G.setCamMode('chase'); assert.equal(G.LAYERS.length, 1); assert.equal(G.RW, 1000); assert.equal(G.cv.width, 1500, 'DPR capped at 1.5');
+  G.setCamMode('behind'); assert.equal(G.LAYERS.length, 2); assert.equal(G.RW, Math.round(1000 * G.TILT.wk)); assert.equal(G.RH, Math.round(600 * G.TILT.hk));
+  assert.equal(G.LAYERS[1].h, 600); assert.ok(G.LAYERS[0].hB > 0); assert.equal(G.hcv.width, 1500);
+  env.win.innerWidth = 800; G.resize(); assert.equal(G.VW, 800);
+});
+test('mkCanvas: a canvas of the given size', () => {
+  const { G } = load(); const c = G.mkCanvas(12, 34); assert.equal(c.tagName, 'CANVAS'); assert.equal(c.width, 12); assert.equal(c.height, 34);
+});
+test('noiseTex: a noise texture, with extra drawing', () => {
+  const { G } = load(); let ex = 0; const c = G.noiseTex(8, [10, 20, 30], 0, 1, () => ex++);
+  const put = ops(c.getContext('2d'), 'putImageData')[0]; assert.ok(put); assert.equal(ex, 1);
+  assert.deepEqual(Array.from(put[1].data.slice(0, 4)), [10, 20, 30, 255]);
+});
+test('buildTextures: textures and patterns for every surface', () => {
+  const { G } = load();
+  for (const k of ['pAsph', 'pGrass', 'pGravel', 'pRun', 'pPit', 'pCrowd', 'pRoof', 'pConc', 'shadow']) assert.ok(G.TEX[k], k);
+  assert.equal(G.TEX.trees.length, 5); assert.equal(G.TEX.pAsph.m.k, 9 / 256, 'asphalt pattern repeats every 9 m');
+});
+test('buildGeometry: track, kerbs, run-off, pit lane, boxes, posts', () => {
+  const { G } = load(); const GEO = G.GEO, T = G.T;
+  assert.equal(GEO.track.ops.filter(o => o[0] === 'closePath').length, 2, 'both edges');
+  assert.equal(GEO.boxes.length, 22); assert.equal(GEO.gravel.length, 2); assert.equal(GEO.runoff.length, 4);
+  assert.ok(GEO.kerbR.ops.length > 100 && GEO.pit.ops.length > 50 && GEO.grid.ops.length > 22);
+  assert.ok(GEO.posts.length > 10); for (const p of GEO.posts) { const o = {}; T.project(p.x, p.y, -1, o); assert.equal(T.surface(o.i, o.s, o.d), G.SURF.GRASS); }
+});
+test('trackClear: false near the track, true out in the fields', () => {
+  const { G } = load(); const T = G.T;
+  assert.equal(G.trackClear(T.X[300], T.Y[300], 4), false); assert.equal(G.trackClear(T.bbox.maxx + 500, T.bbox.maxy + 500, 4), true);
+});
+test('inPitCompound: the paddock behind the pit lane', () => {
+  const { G } = load(); const T = G.T, P = T.PIT, [x, y] = T.pt(T.idx((P.flatIn + P.flatOut) / 2), P.garage + 40);
+  assert.equal(G.inPitCompound(x, y), true); assert.equal(G.inPitCompound(...T.pt(T.idx(T.L / 2), 50)), false);
+});
+test('buildScenery: grandstands, paddock buildings and trees off the track', () => {
+  const { G } = load(); const S = G.SCN;
+  assert.ok(S.stands.length >= 8); assert.equal(S.buildings.length, 56); assert.ok(S.trees.length > 300); assert.ok(S.wing.garage.length > 10);
+  for (const t of S.trees.slice(0, 200)) assert.ok(G.trackClear(t.x, t.y, t.r), 'tree off the track');
+});
+test('shade: darker and lighter tints of a colour', () => {
+  const { G } = load(); assert.equal(G.shade('#808080', -0.5), 'rgb(64,64,64)'); assert.equal(G.shade('#808080', 0.5), 'rgb(191,191,191)'); assert.equal(G.shade('#ff0000', 0), 'rgb(255,0,0)');
+});
+test('bikeSprite: chassis and rider sprites per team and number, cached', () => {
+  const { G } = load(); const s = G.bikeSprite(3, 77);
+  assert.equal(s.c.width, G.SPW); assert.equal(s.r.height, G.SPH); assert.equal(G.bikeSprite(3, 77), s); assert.notEqual(G.bikeSprite(4, 77), s);
+  assert.ok(texts(s.c.getContext('2d')).includes('77'), 'tail number');
+});
+
+// --- camera and projection --------------------------------------------------
+test('camTilted: every camera but Top-down', () => {
+  const { G } = load(); G.CAM.mode = 'close'; assert.equal(G.camTilted(), true); G.CAM.mode = 'chase'; assert.equal(G.camTilted(), false);
+});
+test('setCamMode: switches camera, its tuning and the layers', () => {
+  const { G } = load(); G.setCamMode('close');
+  assert.equal(G.CAM.mode, 'close'); assert.equal(G.TILT_CAM, 'close'); assert.equal(G.CAM.init, false); assert.equal(G.RH, Math.round(G.VH * 6));
+  G.setCamMode('chase'); assert.equal(G.TILT_CAM, 'close', 'Top-down keeps the last tilted values'); G.setCamMode('nonsense'); assert.equal(G.CAM.mode, 'chase');
+});
+test('updateCamera: follows the bike, zooms out with speed, widens above 200 km/h', () => {
+  const slow = riding(100), fast = riding(340);
+  near(fast.G.CAM.x, fast.b.x, 1e-9); assert.ok(fast.G.CAM.ppm < slow.G.CAM.ppm);
+  assert.equal(slow.G.CAM.w, 0); assert.ok(fast.G.CAM.w > 0.95);
+  const off = riding(340); off.G.UI.opts.fx = 'off'; for (let k = 0; k < 200; k++) off.G.updateCamera(1 / 60); assert.ok(off.G.CAM.w < 0.01);
+  const top = riding(200, 'chase'); assert.ok(Math.hypot(top.G.CAM.x - top.b.x, top.G.CAM.y - top.b.y) > 10, 'Top-down looks ahead');
+  const { G } = riding(200); G.W.player.v = 0; G.updateCamera(0.1); assert.ok(G.CAM.dec > 5, 'deceleration tracked');
+});
+test('worldToCanvas, canvasToWorld: inverse transforms around the camera', () => {
+  const { G } = riding(150); const C = G.CAM;
+  const [cx, cy] = G.worldToCanvas(C.x, C.y); near(cx, G.RW * C.ax, 1e-9); near(cy, G.RH * C.ay, 1e-9);
+  const [wx, wy] = G.canvasToWorld(...G.worldToCanvas(C.x + 13, C.y - 7)); near(wx, C.x + 13, 1e-9); near(wy, C.y - 7, 1e-9);
+});
+test('worldToScreen: the perspective of the tilted view; plain in Top-down', () => {
+  const { G, b } = riding(150); const T = G.T;
+  const [sx, sy] = G.worldToScreen(b.x, b.y); near(sx, G.VW / 2, 1); near(G.VH - sy, G.TILT.bike * G.VH, 1, 'bike at its height on screen');
+  const ahead = T.pt((b.i + 25) % T.N, 0); assert.ok(G.worldToScreen(...ahead)[1] < sy, 'further ahead is higher');
+  G.setCamMode('chase'); G.updateCamera(0.01); assert.deepEqual(G.worldToScreen(b.x, b.y), G.worldToCanvas(b.x, b.y));
+});
+
+// --- tiles and the world ----------------------------------------------------
+test('drawStatic: grass, track, kerbs, lines, walls, posts within view', () => {
+  const { G } = load(); const c = rec(G);
+  G.drawStatic(all, 0, 0, 40, 40);
+  assert.ok(ops(c, 'fill').some(o => o[1] === G.GEO.track && o[2] === 'evenodd'));
+  assert.ok(ops(c, 'stroke').some(o => o[1] === G.GEO.walls)); assert.equal(ops(c, 'fillRect')[0][3], 40);
+  const posts = ops(c, 'translate').length; const d = rec(G); G.drawStatic(none, 0, 0, 40, 40);
+  assert.ok(ops(d, 'translate').length < posts, 'posts out of view are skipped');
+});
+test('renderTile: a 512 px tile of the static world, ctx restored', () => {
+  const { G } = load(); const L = G.TLV[0]; const c = G.renderTile(L, 3, -2);
+  assert.equal(c.width, 512); const g = c.getContext('2d');
+  assert.deepEqual(ops(g, 'scale')[0].slice(1), [512 / 40, 512 / 40]); assert.deepEqual(ops(g, 'translate')[0].slice(1), [-120, 80]);
+  assert.equal(G.ctx, G.mainCtx);
+});
+test('getTile: rendered on demand, cached, least recently used dropped', () => {
+  const { G } = load(); const L = { m: 40, map: new Map(), cap: 3 };
+  assert.equal(G.getTile(L, 0, 0, false), null);
+  const a = G.getTile(L, 0, 0, true); assert.equal(G.getTile(L, 0, 0, false), a);
+  G.tileFrame = 10; G.getTile(L, 1, 0, true); G.getTile(L, 2, 0, true); G.tileFrame = 11; G.getTile(L, 0, 0, false); G.getTile(L, 3, 0, true);
+  assert.equal(L.map.size, 3); assert.equal(G.getTile(L, 1, 0, false), null, 'oldest gone'); assert.equal(G.getTile(L, 0, 0, false), a);
+});
+test('drawWorld: every layer drawn, then projected and blurred when tilted', () => {
+  const { G } = riding(150); const f = G.tileFrame, m = G.mainCtx; m.calls.length = 0;
+  for (const Ly of G.LAYERS) Ly.g.calls.length = 0;
+  G.drawWorld();
+  assert.equal(G.tileFrame, f + 1); assert.ok(G.LAYERS.every(Ly => ops(Ly.g, 'drawImage').length > 0));
+  assert.ok(ops(m, 'drawImage').length > 100, 'projected row by row'); assert.equal(G.ctx, m);
+});
+test('drawWorldLayer: tiles, bikes, ghosts faded, speed guide in practice', () => {
+  const { G, b } = riding(150); const Ly = G.LAYERS[1], c = rec(G); G.W.guide = true;
+  G.drawWorldLayer(Ly, 0, 0);
+  const spr = G.bikeSprite(b.team, b.num); assert.ok(ops(c, 'drawImage').some(o => o[1] === spr.c), 'the player bike');
+  assert.ok(ops(c, 'stroke').length > 100, 'speed guide segments');
+  assert.ok(c.calls.some(o => o[0] === '=globalAlpha' && o[1] === 0.42), 'ghost alpha');
+});
+test('drawTrackPaint: start line, pit markings, braking boards, Long Lap and corner names', () => {
+  const { G } = load(); const c = rec(G); G.drawTrackPaint(all);
+  const t = texts(c); for (const s of ['PIT 60', 'END', '300', '50', 'LONG LAP', 'STOWE', 'COPSE']) assert.ok(t.includes(s), s);
+  assert.ok(!t.includes('HANGAR STRAIGHT'), 'no names on the straights');
+  const d = rec(G); G.drawTrackPaint(none); assert.equal(texts(d).length, 0); assert.ok(ops(d, 'fill').length >= 28, 'the start line is always drawn');
+});
+test('llPath: both edges of the Long Lap lane', () => {
+  const { G } = load(); const p = G.llPath(); assert.equal(p.ops.filter(o => o[0] === 'moveTo').length, 2);
+  const n = Math.floor((G.T.LL.sB + 0.01 - G.T.LL.sA) / 2) + 1; assert.equal(p.ops.length, 2 * n);
+});
+test('groundText: painted text along the track direction', () => {
+  const { G } = load(); const c = rec(G); G.groundText('HELLO', 5, 6, 0, 4, '#fff');
+  assert.deepEqual(c.calls.filter(o => !o[0].startsWith('=')).map(o => o[0]), ['save', 'translate', 'rotate', 'scale', 'fillText', 'restore']);
+  assert.deepEqual(ops(c, 'scale')[0].slice(1), [0.1, 0.1]);
+});
+test('drawPitBoxes: box lines on the tiles, live team colours and numbers', () => {
+  const { G } = load(); G.setupSession('sprint', G.UI.sessionOpts({ train: null }));
+  const s = rec(G); G.drawPitBoxes(all, true); assert.equal(ops(s, 'stroke').length, 44); assert.equal(texts(s).length, 0);
+  const l = rec(G); G.drawPitBoxes(all, false); assert.equal(texts(l).filter(x => x.startsWith('#')).length, 22);
+  const n = rec(G); G.drawPitBoxes(none, false); assert.equal(n.calls.length, 0);
+});
+test('polyFill: a closed path through the points', () => {
+  const { G } = load(); const c = rec(G); G.polyFill([[0, 0], [1, 0], [1, 1]]);
+  assert.deepEqual(c.calls.map(o => o[0]), ['beginPath', 'moveTo', 'lineTo', 'lineTo', 'closePath']);
+});
+test('drawBuildings: the Wing, paddock and grandstands, only on the tiles', () => {
+  const { G } = load(); const c = rec(G); G.drawBuildings(all, true);
+  assert.ok(texts(c).includes('SILVERSTONE')); assert.ok(ops(c, 'fillRect').length > 56 * 4);
+  const d = rec(G); G.drawBuildings(all, false); assert.equal(d.calls.length, 0);
+});
+test('drawTrees: shadow and crown for each tree in view', () => {
+  const { G } = load(); const c = rec(G); G.SCN.trees = G.SCN.trees.slice(0, 3); G.drawTrees(all);
+  assert.equal(ops(c, 'drawImage').length, 6); const d = rec(G); G.drawTrees(none); assert.equal(d.calls.length, 0);
+});
+test('drawBikeShadow: one shadow, two after a crash, none when retired', () => {
+  const { G, b } = riding(100); const sh = G.TEX.shadow, n = c => ops(c, 'drawImage').filter(o => o[1] === sh).length;
+  let c = rec(G); G.drawBikeShadow(b, all); assert.equal(n(c), 1);
+  G.crashBike(b, G.W, 'lowside'); c = rec(G); G.drawBikeShadow(b, all); assert.equal(n(c), 2);
+  b.crashed = false; b.dnf = true; c = rec(G); G.drawBikeShadow(b, all); assert.equal(n(c), 0);
+});
+test('drawBike: chassis and rider, brake light, crashed bike and rider apart', () => {
+  const { G, b } = riding(100); const spr = G.bikeSprite(b.team, b.num);
+  let c = rec(G); b.ctl.brk = 1; G.drawBike(b, all);
+  assert.deepEqual(ops(c, 'drawImage').map(o => o[1]), [spr.c, spr.r]); assert.ok(ops(c, 'arc').length >= 1, 'brake light');
+  b.lean = 0.8; c = rec(G); G.drawBike(b, all); assert.ok(ops(c, 'ellipse').length >= 1, 'knee out');
+  G.crashBike(b, G.W, 'lowside'); c = rec(G); G.drawBike(b, all); assert.equal(ops(c, 'drawImage').length, 2);
+  c = rec(G); G.drawBike(b, none); assert.equal(c.calls.length, 0);
+});
+test('drawParticles: sparks, smoke, dust and grass', () => {
+  const { G } = load(); G.FX.clear();
+  for (const t of ['spark', 'smoke', 'dust', 'grass']) G.FX.add({ t, x: 0, y: 0, vx: 1, vy: 1, age: 0, life: 1, r: 0.5, a: 0.3 });
+  const c = rec(G); G.drawParticles(all);
+  assert.equal(ops(c, 'stroke').length, 1); assert.equal(ops(c, 'arc').length, 2); assert.equal(ops(c, 'fillRect').length, 1);
+});
+
+// --- speed blur and speed effects (GDD 11f, 11h) ----------------------------
+test('blurStrength: none below the start speed, full above the full speed', () => {
+  const { G } = riding(340); G.CAM.v = 340 / 3.6; assert.equal(G.blurStrength(), 1);
+  G.CAM.v = 250 / 3.6; assert.equal(G.blurStrength(), 0); G.CAM.v = 295 / 3.6; assert.ok(G.blurStrength() > 0.3 && G.blurStrength() < 0.7);
+  G.CAM.v = 340 / 3.6; G.UI.opts.blur = 'off'; assert.equal(G.blurStrength(), 0); G.UI.opts.blur = 'on';
+  G.TILT.q = 0.8; assert.equal(G.blurStrength(), 0, 'slow machine'); G.TILT.q = 1;
+  G.setCamMode('chase'); assert.equal(G.blurStrength(), 0);
+});
+test('speedBlur: a quarter-size zoom blur over the screen at top speed', () => {
+  const { G } = riding(340); const m = G.mainCtx; m.calls.length = 0;
+  G.speedBlur(); assert.equal(G.BLUR.a.width, Math.ceil(G.VW / 4)); assert.ok(ops(m, 'drawImage').some(o => o[1] === G.BLUR.b));
+  assert.ok(G.BLUR.gb.calls.some(o => o[0] === '=globalCompositeOperation' && o[1] === 'destination-out'), 'road cut out');
+  const s = riding(200); s.G.mainCtx.calls.length = 0; s.G.speedBlur(); assert.equal(ops(s.G.mainCtx, 'drawImage').length, 0);
+});
+test('blurRoadRuns: the road on screen as closed polygons', () => {
+  const { G } = riding(340); const runs = G.blurRoadRuns();
+  assert.ok(runs.length >= 1); assert.ok(runs.every(r => r.length % 2 === 0 && r.length >= 8));
+  const [bx, by] = G.worldToScreen(G.W.player.x, G.W.player.y);
+  assert.ok(runs.some(r => { let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9; for (let k = 0; k < r.length; k += 2) { x0 = Math.min(x0, r[k]); x1 = Math.max(x1, r[k]); y0 = Math.min(y0, r[k + 1]); y1 = Math.max(y1, r[k + 1]); } return bx > x0 && bx < x1 && by > y0 && by < y1; }), 'covers the bike position');
+});
+test('blurBikeSpots: an ellipse around each bike, two for a crash', () => {
+  const { G, b } = riding(340); assert.equal(G.blurBikeSpots().length, 1);
+  const [x, y] = G.blurBikeSpots()[0], [sx, sy] = G.worldToScreen(b.x, b.y); near(x, sx, 2); near(y, sy, 30);
+  G.crashBike(b, G.W, 'lowside'); assert.equal(G.blurBikeSpots().length, 2);
+});
+test('fxLive: only while the session or the replay runs, with Speed effects On', () => {
+  const { G } = riding(100); assert.equal(G.fxLive(), true);
+  G.W.paused = true; assert.equal(G.fxLive(), false); G.W.paused = false;
+  G.UI.opts.fx = 'off'; assert.equal(G.fxLive(), false); G.UI.opts.fx = 'on';
+  G.UI.state = 'replay'; G.RP.playing = false; assert.equal(G.fxLive(), false); G.RP.playing = true; assert.equal(G.fxLive(), true);
+  G.UI.state = 'menu'; assert.equal(G.fxLive(), false);
+});
+test('speedVib: none at rest, grows with speed, more on kerbs, at most 2 x vib', () => {
+  const r = riding(0); assert.equal(r.G.speedVib(), 0);
+  const f = riding(340); const a = f.G.speedVib(); assert.ok(a > 0 && a <= 2 * f.G.TILT.vib);
+  f.G.W.paused = true; assert.equal(f.G.speedVib(), 0);
+  const k = riding(340); const c = k.G.T.corners.find(q => q.name === 'Copse'), side = k.G.T.KERB[0][c.i] > 0 ? 1 : -1;
+  placeAt(k.G, k.b, c.i * k.G.T.DS, side * (k.G.T.EDGE[side > 0 ? 0 : 1][c.i] + 0.5)); near(k.G.speedVib(), k.G.TILT.vib * (k.G.sstep((340 - 180) / 165) + 1), 1e-9, 'kerb adds a full vib');
+});
+test('speedOrigin: the horizon point ahead, or ahead of the bike in Top-down', () => {
+  const { G } = riding(300); const [x, y] = G.speedOrigin(); assert.equal(x, G.VW / 2); assert.ok(y >= 0 && y < G.VH / 2);
+  G.setCamMode('chase'); assert.deepEqual(G.speedOrigin(), [G.VW / 2, G.VH * 0.25]);
+});
+test('drawSpeedLines: lines at top speed in the outer screen, none below 280 km/h', () => {
+  const { G } = riding(340); const c = rec(G); G.SPL.lines = []; G.SPL.acc = 0;
+  for (let k = 0; k < 10; k++) G.drawSpeedLines(1 / 60);
+  assert.ok(G.SPL.lines.length > 3); assert.ok(ops(c, 'stroke').length > 10);
+  assert.ok(G.SPL.lines.every(q => q.x < 0.3 * G.VW || q.x > 0.7 * G.VW));
+  G.CAM.v = 250 / 3.6; G.drawSpeedLines(1 / 60); assert.equal(G.SPL.lines.length, 0);
+});
+test('projectTilted: sky, haze and one strip per screen row', () => {
+  const { G } = riding(150); const m = G.mainCtx; m.calls.length = 0; G.projectTilted();
+  assert.ok(ops(m, 'createLinearGradient').length === 1); assert.equal(ops(m, 'fillRect').length, 2);
+  const rows = ops(m, 'drawImage'); assert.ok(rows.length > G.VH / 2, 'rows ' + rows.length);
+  assert.ok(rows.every(o => o[1] === G.LAYERS[0].c || o[1] === G.LAYERS[1].c));
+});

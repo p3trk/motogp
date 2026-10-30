@@ -183,9 +183,9 @@ test('playerControl: keys, touch halves, tilt, grid and pit limiter', () => {
   K.KeyW = true; G.playerControl(b, dt); near(c.thr, 0.35, 1e-9);
   K.KeyW = false; K.KeyS = true; G.playerControl(b, dt); near(c.brk, 0.4, 1e-9); assert.equal(c.thr, 0);
   K.KeyS = false; K.KeyA = true; G.playerControl(b, dt); assert.equal(c.steer, -1); near(c.leanT, -G.PHYS.maxLean, 1e-9);
-  K.KeyA = false; G.Touch.on = true; G.Touch.tilt = 0.5; G.playerControl(b, dt); assert.equal(c.steer, 0.5);
-  c.thr = 0; G.Touch.gas = true; G.Touch.brk = true; G.playerControl(b, dt); assert.equal(c.thr, 0, 'on touch the brake wins');
-  G.Touch.gas = G.Touch.brk = false; G.Touch.on = false;
+  K.KeyA = false; G.TouchCtl.on = true; G.TouchCtl.tilt = 0.5; G.playerControl(b, dt); assert.equal(c.steer, 0.5);
+  c.thr = 0; G.TouchCtl.gas = true; G.TouchCtl.brk = true; G.playerControl(b, dt); assert.equal(c.thr, 0, 'on touch the brake wins');
+  G.TouchCtl.gas = G.TouchCtl.brk = false; G.TouchCtl.on = false;
   K.KeyW = true; b.limiter = true; b.v = G.PHYS.pitLimit + 2; G.playerControl(b, dt); assert.equal(c.thr, 0); assert.ok(c.brk > 0);
   const r = session('sprint'); r.G.Input.k.KeyW = true; r.G.playerControl(r.b, dt); assert.equal(r.b.ctl.brk, 1, 'held on the grid');
 });
@@ -403,4 +403,10 @@ test('fmtTime: minutes, seconds and thousandths', () => {
 });
 test('fmtGap: signed seconds', () => {
   const { G } = load(); assert.equal(G.fmtGap(1.5), '+1.500'); assert.equal(G.fmtGap(-0.25), '−0.250'); assert.equal(G.fmtGap(0), '+0.000');
+});
+
+test('crashText: crash message by cause', () => {
+  const { G } = load();
+  assert.equal(G.crashText('highside'), 'Highside, rider down'); assert.equal(G.crashText('gravel'), 'Down in the gravel');
+  assert.equal(G.crashText('wall'), 'Front tucked, lowside'); assert.equal(G.crashText(undefined), 'Front tucked, lowside');
 });

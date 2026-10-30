@@ -101,7 +101,7 @@ test('drawHUD: wrong way after a second, name tags for riders nearby', () => {
   assert.ok(texts(c).includes('WRONG WAY')); assert.ok(texts(c).includes('#' + o.num + ' ' + o.short), 'name tag');
 });
 test('drawHUD: phones get the phone dashboard and no fuel panel', () => {
-  const { G } = play('practice', { width: 844, height: 390, coarse: true }); G.Touch.sync(); const c = rec(G); G.drawHUD(1 / 60);
+  const { G } = play('practice', { width: 844, height: 390, coarse: true }); G.TouchCtl.sync(); const c = rec(G); G.drawHUD(1 / 60);
   assert.ok(!texts(c).includes('FUEL')); assert.ok(texts(c).includes('KM/H')); inScreen(G, c);
 });
 test('drawReplayHUD: gap panel, followed rider, speed and lean', () => {
@@ -148,7 +148,7 @@ test('drawTower: race order, qualifying times, practice laps; none on phones in 
   const q = play('quali'); c = rec(q.G); q.G.drawTower([], q.b); assert.ok(texts(c).includes('QUALIFYING') && texts(c).includes('NO TIME'));
   const p = play('practice'); p.b.laps = [131, 129]; p.b.lapsInv = [true, false]; p.b.bestLap = 129; c = rec(p.G); p.G.drawTower([], p.b);
   assert.ok(texts(c).includes('LAP 1 INV') && texts(c).includes('2:09.000'));
-  p.G.Touch.on = true; c = rec(p.G); p.G.drawTower([], p.b); assert.equal(c.calls.length, 0);
+  p.G.TouchCtl.on = true; c = rec(p.G); p.G.drawTower([], p.b); assert.equal(c.calls.length, 0);
 });
 test('penCell: penalties in the results', () => {
   const { G } = load(); assert.equal(G.penCell({}), '');
@@ -214,61 +214,61 @@ test('keys in replay: play, seek, speed, laps, follow, camera and exit', () => {
   env.fireWin('keydown', { code: 'Escape' }); assert.equal(G.UI.state, 'menu');
 });
 test('window blur and gestures: keys cleared and paused; pinch zoom cancelled', () => {
-  const { G, env } = play('practice'); G.Input.k.KeyW = true; G.Touch.pts.set(1, 'gas');
-  env.fireWin('blur'); assert.deepEqual(G.Input.k, {}); assert.equal(G.Touch.pts.size, 0); assert.equal(G.W.paused, true);
+  const { G, env } = play('practice'); G.Input.k.KeyW = true; G.TouchCtl.pts.set(1, 'gas');
+  env.fireWin('blur'); assert.deepEqual(G.Input.k, {}); assert.equal(G.TouchCtl.pts.size, 0); assert.equal(G.W.paused, true);
   assert.equal(env.doc.fire('gesturestart').defaultPrevented, true);
 });
 
 // --- touch and tilt (GDD 3a) ---------------------------------------------
-test('Touch.want: touch controls by option or on a coarse pointer', () => {
+test('TouchCtl.want: touch controls by option or on a coarse pointer', () => {
   const p = load({ coarse: true }).G, k = load().G;
-  assert.equal(p.Touch.want(), true); assert.equal(k.Touch.want(), false);
-  p.UI.opts.controls = 'keys'; assert.equal(p.Touch.want(), false); k.UI.opts.controls = 'touch'; assert.equal(k.Touch.want(), true);
+  assert.equal(p.TouchCtl.want(), true); assert.equal(k.TouchCtl.want(), false);
+  p.UI.opts.controls = 'keys'; assert.equal(p.TouchCtl.want(), false); k.UI.opts.controls = 'touch'; assert.equal(k.TouchCtl.want(), true);
 });
-test('Touch.zone, Touch.sens, Touch.angle: screen halves, tilt sensitivity, screen angle', () => {
-  const { G, env } = load({ width: 1000 }); const Tc = G.Touch;
+test('TouchCtl.zone, TouchCtl.sens, TouchCtl.angle: screen halves, tilt sensitivity, screen angle', () => {
+  const { G, env } = load({ width: 1000 }); const Tc = G.TouchCtl;
   assert.equal(Tc.zone(100), 'brk'); assert.equal(Tc.zone(900), 'gas'); G.UI.opts.side = 'gas'; assert.equal(Tc.zone(100), 'gas');
   for (const [o, v] of [['verylow', 75], ['low', 60], ['high', 35], ['x', 60]]) { G.UI.opts.tilt = o; assert.equal(Tc.sens(), v); }
   env.win.screen.orientation.angle = 90; assert.equal(Tc.angle(), 90);
 });
-test('Touch.press, Touch.release, Touch.refresh, Touch.reset: fingers on the halves', () => {
-  const { G } = play('practice', { width: 1000 }); const Tc = G.Touch; let prevented = 0; const ev = (id, x) => ({ pointerId: id, clientX: x, preventDefault() { prevented++; } });
+test('TouchCtl.press, TouchCtl.release, TouchCtl.refresh, TouchCtl.reset: fingers on the halves', () => {
+  const { G } = play('practice', { width: 1000 }); const Tc = G.TouchCtl; let prevented = 0; const ev = (id, x) => ({ pointerId: id, clientX: x, preventDefault() { prevented++; } });
   Tc.press(ev(1, 100)); assert.equal(Tc.brk, true); Tc.press(ev(2, 900)); assert.equal(Tc.gas, true); assert.equal(prevented, 2);
   Tc.release(ev(1)); assert.equal(Tc.brk, false); assert.equal(Tc.gas, true);
   Tc.pts.set(9, 'brk'); Tc.refresh(); assert.equal(Tc.brk, true); Tc.reset(); assert.equal(Tc.gas || Tc.brk, false);
   G.W.paused = true; Tc.press(ev(3, 900)); assert.equal(Tc.gas, false, 'paused: ignored');
 });
-test('Touch.press: in the replay the thirds seek and pause', () => {
+test('TouchCtl.press: in the replay the thirds seek and pause', () => {
   const { G } = load({ width: 900 }); G.RP.open([makeRec(G, { laps: 1 })], 'menu'); G.RP.seek(20); const ev = x => ({ clientX: x, preventDefault() { } });
-  G.Touch.press(ev(100)); assert.equal(G.RP.t, 15); G.Touch.press(ev(800)); assert.equal(G.RP.t, 20); G.Touch.press(ev(450)); assert.equal(G.RP.playing, false);
+  G.TouchCtl.press(ev(100)); assert.equal(G.RP.t, 15); G.TouchCtl.press(ev(800)); assert.equal(G.RP.t, 20); G.TouchCtl.press(ev(450)); assert.equal(G.RP.playing, false);
 });
-test('Touch.motion, Touch.recentre: roll angle with a 12 degree dead zone', () => {
-  const { G, env } = load(); const Tc = G.Touch; Tc.rollSeen = false;
+test('TouchCtl.motion, TouchCtl.recentre: roll angle with a 12 degree dead zone', () => {
+  const { G, env } = load(); const Tc = G.TouchCtl; Tc.rollSeen = false;
   const roll = deg => { const r = deg * Math.PI / 180; for (let k = 0; k < 60; k++) Tc.motion({ accelerationIncludingGravity: { x: -Math.sin(r) * 9.81, y: Math.cos(r) * 9.81 } }); };
   roll(0); assert.equal(Tc.tilt, 0); roll(10); assert.equal(Tc.tilt, 0, 'dead zone'); roll(36); near(Tc.tilt, (36 - 12) / 48, 1e-3); roll(-80); near(Tc.tilt, -1, 1e-9);
   Tc.recentre(); assert.equal(Tc.tilt, 0); near(Tc.roll0, Tc.roll, 1e-12);
   env.win.screen.orientation.angle = 90; Tc.rollSeen = false; Tc.motion({ accelerationIncludingGravity: { x: 0, y: 9.81 } }); assert.equal(Tc.tilt, 0);
   Tc.motion({ accelerationIncludingGravity: { x: null } }); // no sensor data: ignored
 });
-test('Touch.enable: motion access asked once, listener added', async () => {
-  assert.equal(await load().G.Touch.enable(), false, 'no motion sensor');
+test('TouchCtl.enable: motion access asked once, listener added', async () => {
+  assert.equal(await load().G.TouchCtl.enable(), false, 'no motion sensor');
   const ok = load({ window: { DeviceMotionEvent: { requestPermission: async () => 'granted' } } });
-  assert.equal(await ok.G.Touch.enable(), true); assert.equal(ok.G.Touch.tiltOk, true); assert.equal(ok.env.winL.devicemotion.length, 1);
-  await ok.G.Touch.enable(); assert.equal(ok.env.winL.devicemotion.length, 1, 'listener added once');
-  const no = load({ window: { DeviceMotionEvent: { requestPermission: async () => 'denied' } } }); assert.equal(await no.G.Touch.enable(), false);
-  const err = load({ window: { DeviceMotionEvent: { requestPermission: () => Promise.reject(new Error('x')) } } }); assert.equal(await err.G.Touch.enable(), false);
+  assert.equal(await ok.G.TouchCtl.enable(), true); assert.equal(ok.G.TouchCtl.tiltOk, true); assert.equal(ok.env.winL.devicemotion.length, 1);
+  await ok.G.TouchCtl.enable(); assert.equal(ok.env.winL.devicemotion.length, 1, 'listener added once');
+  const no = load({ window: { DeviceMotionEvent: { requestPermission: async () => 'denied' } } }); assert.equal(await no.G.TouchCtl.enable(), false);
+  const err = load({ window: { DeviceMotionEvent: { requestPermission: () => Promise.reject(new Error('x')) } } }); assert.equal(await err.G.TouchCtl.enable(), false);
 });
-test('Touch.opts: phone option rows and the labels of the halves', () => {
+test('TouchCtl.opts: phone option rows and the labels of the halves', () => {
   const { G, env } = load({ coarse: true }); const $ = id => env.doc.getElementById(id);
-  G.UI.opts.side = 'gas'; G.Touch.opts();
+  G.UI.opts.side = 'gas'; G.TouchCtl.opts();
   assert.equal($('optTrans').closest('.opt').hidden, true); assert.equal($('optSideWrap').hidden, false);
   const z = $('touch').children; assert.equal(z[0].dataset.z, 'gas'); assert.equal(z[0].firstElementChild.textContent, 'Gas'); assert.equal(z[1].firstElementChild.textContent, 'Brake');
 });
-test('Touch.sync: touch layer in play, pause button, portrait prompt pauses', () => {
-  const g = play('practice', { coarse: true }); const { G, $ } = g; G.Touch.sync();
+test('TouchCtl.sync: touch layer in play, pause button, portrait prompt pauses', () => {
+  const g = play('practice', { coarse: true }); const { G, $ } = g; G.TouchCtl.sync();
   assert.equal($('touch').hidden, false); assert.equal($('touchPause').hidden, false); assert.equal($('turn').hidden, true);
-  g.env.mq['(orientation: portrait)'].matches = true; G.Touch.sync(); assert.equal($('turn').hidden, false); assert.equal(G.W.paused, true);
-  G.UI.toMenu(); G.Touch.pts.set(1, 'gas'); G.Touch.sync(); assert.equal($('touch').hidden, true); assert.equal(G.Touch.pts.size, 0);
+  g.env.mq['(orientation: portrait)'].matches = true; G.TouchCtl.sync(); assert.equal($('turn').hidden, false); assert.equal(G.W.paused, true);
+  G.UI.toMenu(); G.TouchCtl.pts.set(1, 'gas'); G.TouchCtl.sync(); assert.equal($('touch').hidden, true); assert.equal(G.TouchCtl.pts.size, 0);
 });
 
 // --- menus -----------------------------------------------------------------
@@ -430,4 +430,71 @@ test('boot: menu shown, frames asked, the attract session runs in the menu', () 
   assert.equal($('loading').hidden, true); assert.equal($('menu').hidden, false); assert.equal(env.rafs.length, 1); assert.equal(G.UI.state, 'menu');
   const t = G.W.time; env.advance(100); assert.ok(G.W.time > t);
   assert.ok(env.win.__sgp && env.win.__sgp.W === G.W, 'test hooks for the browser tests');
+});
+
+// colours and labels (one helper per HUD or table choice; each case is one branch of the choice)
+test('rpmCol, gearCol, leanCol, dmgCol, paceCol: HUD colours by value', () => {
+  const { G } = load();
+  assert.equal(G.rpmCol(15, 26), '#3ad17a'); assert.equal(G.rpmCol(16, 26), '#ffcf1f'); assert.equal(G.rpmCol(21, 26), '#ffcf1f'); assert.equal(G.rpmCol(22, 26), '#e3312a');
+  assert.equal(G.gearCol({ overrev: 1, shiftFlash: 1 }), '#e3312a'); assert.equal(G.gearCol({ overrev: 0, shiftFlash: 0.1 }), '#ffffff'); assert.equal(G.gearCol({ overrev: 0, shiftFlash: 0 }), '#ffcf1f');
+  assert.equal(G.leanCol(0.06, 10), '#e3312a'); assert.equal(G.leanCol(0, 56), '#ffcf1f'); assert.equal(G.leanCol(0, 55), '#e9edf0');
+  assert.equal(G.dmgCol(0.7), '#e3312a'); assert.equal(G.dmgCol(0.6), '#ffcf1f'); assert.equal(G.dmgCol(0.3), '#ffcf1f'); assert.equal(G.dmgCol(0.25), '#3ad17a');
+  assert.equal(G.paceCol(true, true), '#e3312a'); assert.equal(G.paceCol(false, true), '#4cc3ff'); assert.equal(G.paceCol(false, false), '#3ad17a');
+});
+test('lapLabel, sessionLabel, flashText, flashCol: lap and session labels, lap flash', () => {
+  const { G } = load(); const W = G.W;
+  W.mode = 'practice'; W.train = null;
+  assert.equal(G.lapLabel({ outLap: true, laps: [] }), 'OUT LAP'); assert.equal(G.lapLabel({ outLap: false, laps: [90, 91] }), 'LAP 3');
+  assert.equal(G.sessionLabel(), 'PRACTICE'); W.train = { s: 0 }; assert.equal(G.sessionLabel(), 'CURVE TRAINING');
+  W.mode = 'quali'; assert.equal(G.lapLabel({ outLap: false, laps: [90, 91] }), 'LAP 3/3'); assert.equal(G.sessionLabel(), 'QUALIFYING');
+  assert.equal(G.flashText({ inv: true, rec: true }), 'INVALID  '); assert.equal(G.flashCol({ inv: true, pb: true }), '#e3312a');
+  assert.equal(G.flashText({ rec: true, pb: true }), 'NEW ALL-TIME BEST  '); assert.equal(G.flashText({ pb: true }), 'SESSION BEST  '); assert.equal(G.flashText({}), 'LAP  ');
+  assert.equal(G.flashCol({ pb: true }), '#b46bff'); assert.equal(G.flashCol({}), '#fff');
+});
+test('alignLabel, gapText, gapCol: replay panel alignment and gaps', () => {
+  const { G } = load();
+  G.RP.align = 'best'; assert.equal(G.alignLabel(), 'BEST LAPS'); G.RP.align = 'lap'; G.RP.lapN = 3; assert.equal(G.alignLabel(), 'LAP 3'); G.RP.align = 'start'; assert.equal(G.alignLabel(), 'SESSION START');
+  const on = { on: true };
+  assert.equal(G.gapText(0, on, 1), 'REF'); assert.equal(G.gapText(1, { on: false }, 1), 'NO LAP'); assert.equal(G.gapText(1, on, null), '');
+  assert.equal(G.gapText(1, on, 0.5), '+0.50'); assert.equal(G.gapText(1, on, 0), '+0.00'); assert.equal(G.gapText(1, on, -0.25), '−0.25');
+  assert.equal(G.gapCol(0, null), '#ffcf1f'); assert.equal(G.gapCol(1, null), '#8d9aa4'); assert.equal(G.gapCol(1, 0), '#3ad17a'); assert.equal(G.gapCol(1, -1), '#3ad17a'); assert.equal(G.gapCol(1, 0.1), '#e3312a');
+});
+test('towerCol, lapRowCol: timing tower gap colour and lap row colour', () => {
+  const { G } = load();
+  assert.equal(G.towerCol('PIT'), '#ffcf1f'); assert.equal(G.towerCol('OUT'), '#e3312a'); assert.equal(G.towerCol('CRASH'), '#e3312a'); assert.equal(G.towerCol('+1.2'), '#c9d2d8');
+  assert.equal(G.lapRowCol({ rec: true, gh: true }), '#b46bff'); assert.equal(G.lapRowCol({ gh: true, inv: true }), '#9fd8ff'); assert.equal(G.lapRowCol({ inv: true }), '#e3312a'); assert.equal(G.lapRowCol({}), null);
+});
+test('pauseLabel: race lap, qualifying, curve training, free practice', () => {
+  const { G } = load(); const W = G.W;
+  W.mode = 'race'; W.totalLaps = 10; W.player = { lap: 2 }; assert.equal(G.pauseLabel(), 'Lap 3 of 10');
+  W.player = { lap: 12 }; assert.equal(G.pauseLabel(), 'Lap 10 of 10');
+  W.mode = 'quali'; assert.equal(G.pauseLabel(), 'Qualifying');
+  W.mode = 'practice'; W.train = { s: 0 }; assert.equal(G.pauseLabel(), 'Curve training · restart puts you back on the spot');
+  W.train = null; assert.equal(G.pauseLabel(), 'Free practice · restart puts you back on the grid');
+});
+test('raceResult, qualiTeam, poleGap: recordings list result, qualifying table cells', () => {
+  const { G } = load();
+  assert.equal(G.raceResult({ raceStart: false, position: 3 }), ''); assert.equal(G.raceResult({ raceStart: true, position: 0 }), 'DNF');
+  assert.equal(G.raceResult({ raceStart: true, position: 3 }), 'P3'); assert.equal(G.raceResult({ raceStart: true, position: 3, finishT: 1300.5 }), 'P3 · ' + G.fmtTime(1300.5));
+  const me = { team: 4 };
+  assert.equal(G.qualiTeam({ me: true, id: 7 }, me), 4);
+  G.W.bikes = []; assert.equal(G.qualiTeam({ me: false, id: 7 }, me), 0);
+  G.W.bikes = [{}]; assert.equal(G.qualiTeam({ me: false, id: 7 }, me), G.teamForId(7, 4));
+  assert.equal(G.poleGap(0, 92, 92), 'Pole'); assert.equal(G.poleGap(1, 92.5, 92), '+0.500'); assert.equal(G.poleGap(1, 1e9, 92), '');
+});
+test('raceGap, bestCell, cellClass: race result table cells', () => {
+  const { G } = load();
+  const win = { lap: 10, finishT: 1300, pen: 0 }, b = { lap: 10, finishT: 1302.25, pen: 0, bestLap: 128.4 };
+  assert.equal(G.raceGap({ dnf: true }, 3, win), 'Retired');
+  assert.equal(G.raceGap(win, 0, win), G.fmtTime(1300 + G.penT(win)));
+  assert.equal(G.raceGap(b, 1, win), '+' + (1302.25 + G.penT(b) - 1300 - G.penT(win)).toFixed(3));
+  assert.equal(G.raceGap({ lap: 9, finishT: 1310 }, 5, win), '+1 lap'); assert.equal(G.raceGap({ lap: 7, finishT: 1310 }, 9, win), '+3 laps');
+  assert.equal(G.bestCell({ bestLap: 0 }, null), '–');
+  assert.equal(G.bestCell(b, b), '<span class="pb">' + G.fmtTime(128.4) + '</span>'); assert.equal(G.bestCell(b, win), G.fmtTime(128.4));
+  assert.equal(G.cellClass(0), 'pos'); assert.equal(G.cellClass(1), 'num'); assert.equal(G.cellClass(2), '');
+});
+test('screenAxes: gravity in screen axes for each screen angle', () => {
+  const { G } = load(); const g = { x: 1, y: 2 };
+  assert.deepEqual([...G.screenAxes(0, g)], [1, 2]); assert.deepEqual([...G.screenAxes(90, g)], [2, -1]);
+  assert.deepEqual([...G.screenAxes(180, g)], [-1, -2]); assert.deepEqual([...G.screenAxes(270, g)], [-2, 1]);
 });

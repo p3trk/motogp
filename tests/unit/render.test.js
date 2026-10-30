@@ -295,3 +295,8 @@ test('projectTilted: sky, haze and one strip per screen row', () => {
   const rows = ops(m, 'drawImage'); assert.ok(rows.length > G.VH / 2, 'rows ' + rows.length);
   assert.ok(rows.every(o => o[1] === G.LAYERS[0].c || o[1] === G.LAYERS[1].c));
 });
+
+test('gravelStone: four stone colours by a random number', () => {
+  const { G } = load();
+  assert.equal(G.gravelStone(0.1), '#8f8a80'); assert.equal(G.gravelStone(0.3), '#e3d6b8'); assert.equal(G.gravelStone(0.6), '#a8916a'); assert.equal(G.gravelStone(0.8), '#d8cdb6');
+});

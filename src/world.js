@@ -63,7 +63,7 @@ const AI_LEVEL = { rookie: 0.905, pro: 0.955, legend: 0.99 };
 function setupSession(kind, opts) {
   W.opts = opts; W.kind = kind; W.mode = kind === 'practice' ? 'practice' : kind === 'quali' ? 'quali' : 'race';
   W.totalLaps = kind === 'sprint' ? 10 : kind === 'gp' ? 20 : 0;
-  W.time = 0; W.raceStartT = 0; W.flag = false; W.finishOrder = []; W.resultsShown = false; W.endTimer = 0; W.msgs = []; W.paused = false;
+  W.time = 0; W.raceStartT = 0; W.flag = false; W.finishOrder = []; W.featherHint = false; W.resultsShown = false; W.endTimer = 0; W.msgs = []; W.paused = false;
   W.rand = mulberry((Math.random() * 1e9) | 0); FX.rand = W.rand; FX.clear();
   W.infiniteFuel = false;
   W.bikes = [];
@@ -417,6 +417,7 @@ function effects(b, dt) {
   const r = W.rand;
   if (b.skid && b.v > 8) { FX.mark(b.x - Math.cos(b.h) * 0.6, b.y - Math.sin(b.h) * 0.6, Math.cos(b.h) * b.v, Math.sin(b.h) * b.v, b.slip > 0.05 ? 0.55 : 0.28); if (b.slip > 0.05 && r() < 0.35) FX.smoke(b.x - Math.cos(b.h), b.y - Math.sin(b.h), 0, 0, 0.25); }
   if ((b.surf === SURF.GRAVEL || b.surf === SURF.GRASS) && b.v > 5 && r() < 0.6) FX.dust(b.x, b.y, b.surf);
+  if (b.dig) { if (r() < 0.8) FX.dust(b.x - Math.cos(b.h) * 0.8, b.y - Math.sin(b.h) * 0.8, SURF.GRAVEL); if (b.isPlayer && b.digT > 1 && !W.featherHint) { W.featherHint = true; HUD.msg('FEATHER THE THROTTLE', 'The rear wheel digs into the gravel. Tap W.', '#ffcf1f', 3); } }
   if (Math.abs(b.lean) > 58 * DEG && b.v > 15 && r() < 0.15) { const sg = Math.sign(b.lean); FX.spark(b.x - Math.sin(b.h) * sg * 0.7 * PHYS.VS, b.y + Math.cos(b.h) * sg * 0.7 * PHYS.VS, Math.cos(b.h) * b.v * 0.8, Math.sin(b.h) * b.v * 0.8); }
   if (b.dmg.e > 0.5 && r() < dt * 30 * b.dmg.e) FX.smoke(b.x - Math.cos(b.h) * 1.2, b.y - Math.sin(b.h) * 1.2, Math.cos(b.h) * b.v, Math.sin(b.h) * b.v, 0.3);
 }

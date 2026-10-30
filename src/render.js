@@ -49,7 +49,7 @@ const CAM_KEY = { behind: 'sgp_cam', close: 'sgp_cam_close' };
 const CAM_OLD = { behind: { zK: 1, hk: 2.6 }, close: { zK: 0.4 } }; // defaults before 1.24.0: saved values equal to these move to the new defaults (GDD 11h)
 const CAM_VAL = { behind: Object.assign({}, CAM_DEF.behind), close: Object.assign({}, CAM_DEF.close) };
 let TILT_CAM = 'behind'; // the tilted camera whose values are in TILT
-function camSave(name) { try { localStorage.setItem(CAM_KEY[name], JSON.stringify(CAM_VAL[name])); } catch (e) { } }
+function camSave(name) { try { localStorage.setItem(CAM_KEY[name], JSON.stringify(CAM_VAL[name])); } catch { /* storage blocked: the camera values are not saved */ } }
 function camSet(d, v, save) { // clamps, applies to the tilted camera in use, saves; returns the display value
   v = +v; if (!isFinite(v)) v = CAM_DEF[TILT_CAM][d.k];
   v = clamp(v, d.min, d.max); const V = CAM_VAL[TILT_CAM]; V[d.k] = v; TILT[d.k] = v * (d.f || 1);
@@ -70,7 +70,7 @@ for (const name in CAM_KEY) try {
   for (const k in CAM_OLD[name]) if (Math.abs(+s[k] - CAM_OLD[name][k]) < 1e-6) delete s[k];
   if (!wasClose) for (const d of CAM_SET) { const v = +s[d.k]; if (d.k in s && isFinite(v)) CAM_VAL[name][d.k] = clamp(v, d.min, d.max); }
   if ('profile' in s) camSave(name); // the profile field is no longer written
-} catch (e) { }
+} catch { /* saved camera values unreadable or storage blocked: the defaults stay */ }
 camLoad('behind');
 const tiltP = () => TILT.p * VH * (1 - TILT.wd * CAM.w); // camera distance used for drawing, shorter at speed: wider view (GDD 11h)
 const tiltA = () => CAM.w > 0 ? Math.atan(Math.tan(TILT.a) * (1 - TILT.wd * CAM.w)) : TILT.a; // tilt used for drawing: lowered with the distance, so the horizon (at distance x cot(tilt)) stays put
@@ -100,6 +100,8 @@ function noiseTex(size, base, amp, seed, extra) {
   return c;
 }
 const TEX = {};
+// colour of one gravel stone from a random number in 0..1
+function gravelStone(v) { if (v < 0.3) { return '#8f8a80'; } if (v < 0.6) { return '#e3d6b8'; } return v < 0.8 ? '#a8916a' : '#d8cdb6'; }
 function buildTextures() {
   TEX.asph = noiseTex(256, [60, 63, 67], 26, 11, (g, S, r) => {
     for (let k = 0; k < 1600; k++) { const v = 90 + r() * 70; g.fillStyle = `rgba(${v},${v},${v + 4},${0.5 + r() * 0.4})`; g.fillRect(r() * S, r() * S, 1, 1); }
@@ -111,7 +113,7 @@ function buildTextures() {
     for (let k = 0; k < 30; k++) { const x = r() * S, y = r() * S, rad = 20 + r() * 50; const gr = g.createRadialGradient(x, y, 0, x, y, rad); gr.addColorStop(0, r() < 0.5 ? 'rgba(30,60,20,.12)' : 'rgba(150,170,80,.08)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(x - rad, y - rad, rad * 2, rad * 2); }
   });
   TEX.gravel = noiseTex(256, [196, 178, 142], 34, 13, (g, S, r) => {
-    for (let k = 0; k < 2600; k++) { const v = r(); g.fillStyle = v < 0.3 ? '#8f8a80' : v < 0.6 ? '#e3d6b8' : v < 0.8 ? '#a8916a' : '#d8cdb6'; g.beginPath(); g.ellipse(r() * S, r() * S, 0.6 + r() * 1.6, 0.6 + r() * 1.2, r() * 3, 0, TAU); g.fill(); }
+    for (let k = 0; k < 2600; k++) { const v = r(); g.fillStyle = gravelStone(v); g.beginPath(); g.ellipse(r() * S, r() * S, 0.6 + r() * 1.6, 0.6 + r() * 1.2, r() * 3, 0, TAU); g.fill(); }
   });
   TEX.run = noiseTex(256, [70, 79, 86], 20, 14, (g, S, r) => { for (let k = 0; k < 900; k++) { const v = 100 + r() * 50; g.fillStyle = `rgba(${v},${v + 6},${v + 12},.5)`; g.fillRect(r() * S, r() * S, 1, 1); } });
   TEX.pit = noiseTex(256, [88, 91, 96], 18, 15);
@@ -153,14 +155,17 @@ function buildGeometry() {
   GEO.track = track;
   // run-off strips by type
   const strip = (side, pred, d0f, d1f) => {
-    const p = new Path2D(); const sg = side ? -1 : 1; let i = 0;
+    const p = new Path2D(); const sg = side ? -1 : 1;
     const on = k => pred(k);
     // find a start that is "off" to avoid wrap splits
     let start = 0; while (start < N && on(start)) start++;
-    for (let n = 0; n < N; n++) {
+    // next is where the scan goes on: the index after a skipped point, or after the run just drawn
+    let next;
+    for (let n = 0; n < N; n = next) {
+      next = n + 1;
       const k = (start + n) % N; if (!on(k)) continue;
       const run = []; let m = n; while (m < N && on((start + m) % N)) { run.push((start + m) % N); m++; }
-      n = m;
+      next = m + 1;
       if (run.length < 2) continue;
       run.unshift((run[0] - 1 + N) % N); run.push((run[run.length - 1] + 1) % N);
       run.forEach((q, j) => { const [x, y] = P(q, sg * d0f(q)); j ? p.lineTo(x, y) : p.moveTo(x, y); });
@@ -236,11 +241,11 @@ function buildGeometry() {
   for (let j = idxE.length - 1; j >= 0; j--) { const k = idxE[j]; const [x, y] = P(k, pitEdge(k, 1, 0)); GEO.pit.lineTo(x, y); }
   GEO.pit.closePath();
   for (const sgn of [-1, 1]) idxE.forEach((k, j) => { const [x, y] = P(k, pitEdge(k, sgn, 0.3)); j ? GEO.pitLines.lineTo(x, y) : GEO.pitLines.moveTo(x, y); });
-  let first = true; idxs.forEach(k => { const sr = prs(k); if (sr < PIT.flatIn || sr > PIT.flatOut) return; const [x, y] = P(k, PIT.d + 1.3); first ? GEO.pitDash.moveTo(x, y) : GEO.pitDash.lineTo(x, y); first = false; });
-  first = true; idxs.forEach(k => { const sr = prs(k); if (sr < PIT.flatIn - 6 || sr > PIT.flatOut + 6) return; const [x, y] = P(k, PIT.wallD); first ? GEO.pitWall.moveTo(x, y) : GEO.pitWall.lineTo(x, y); first = false; });
+  let first = true; idxs.forEach(k => { const sr = prs(k); if (sr < PIT.flatIn || sr > PIT.flatOut) { return; } const [x, y] = P(k, PIT.d + 1.3); first ? GEO.pitDash.moveTo(x, y) : GEO.pitDash.lineTo(x, y); first = false; });
+  first = true; idxs.forEach(k => { const sr = prs(k); if (sr < PIT.flatIn - 6 || sr > PIT.flatOut + 6) { return; } const [x, y] = P(k, PIT.wallD); first ? GEO.pitWall.moveTo(x, y) : GEO.pitWall.lineTo(x, y); first = false; });
   // painted chevrons between track and pit ramps
   for (const [a0, a1] of [[PIT.sIn + 8, PIT.flatIn], [PIT.flatOut, PIT.sOut - 8]]) for (let sr = a0; sr < a1; sr += 5) {
-    const k = T.idx(sr); const c = PIT.center(sr); if (c === null) continue; const inner = T.WR[k] + 0.2, outer = c - PIT.halfW(sr) - 0.2; if (outer - inner < 0.8) continue;
+    const k = T.idx(sr); const c = PIT.center(sr); if (c === null) { continue; } const inner = T.WR[k] + 0.2, outer = c - PIT.halfW(sr) - 0.2; if (outer - inner < 0.8) continue;
     const [x1, y1] = P(k, inner), [x2, y2] = P(T.idx(sr + 3), outer); GEO.hatch.moveTo(x1, y1); GEO.hatch.lineTo(x2, y2);
   }
   // box markings
@@ -256,7 +261,7 @@ function buildGeometry() {
 const SCN = { stands: [], buildings: [], trees: [] };
 function trackClear(x, y, margin) {
   let ok = true;
-  T.near(x, y, 75, j => { if (!ok) return; const dx = x - T.X[j], dy = y - T.Y[j]; const d = dx * T.NX[j] + dy * T.NY[j]; const side = d >= 0 ? 0 : 1; const lim = T.WALL[side][j] + margin; if (Math.hypot(dx, dy) < lim) ok = false; });
+  T.near(x, y, 75, j => { if (!ok) { return; } const dx = x - T.X[j], dy = y - T.Y[j]; const d = dx * T.NX[j] + dy * T.NY[j]; const side = d >= 0 ? 0 : 1; const lim = T.WALL[side][j] + margin; if (Math.hypot(dx, dy) < lim) ok = false; });
   return ok;
 }
 function inPitCompound(x, y) {
@@ -266,7 +271,6 @@ function inPitCompound(x, y) {
 function buildScenery() {
   const r = mulberry(99), PIT = T.PIT;
   // pit building (the Wing) + paddock
-  const fi = T.idx(PIT.flatIn - 6), fo = T.idx(PIT.flatOut + 6);
   const mk = (sa, sb, d0, d1) => { const pts = []; for (let sr = sa; sr <= sb; sr += 4) { const k = T.idx(sr); pts.push(T.pt(k, d0)); } for (let sr = sb; sr >= sa; sr -= 4) { const k = T.idx(sr); pts.push(T.pt(k, d1)); } return pts; };
   SCN.wing = { garage: mk(PIT.flatIn - 8, PIT.flatOut + 8, PIT.garage, PIT.garage + 16), roof: mk(PIT.flatIn - 14, PIT.flatOut + 14, PIT.garage + 3, PIT.garage + 34) };
   const ang = T.H[T.idx((PIT.flatIn + PIT.flatOut) / 2)];
@@ -292,15 +296,15 @@ function buildScenery() {
     const cx = lerp(bb.minx - 180, bb.maxx + 180, r()), cy = lerp(bb.miny - 180, bb.maxy + 180, r()); const n = 6 + (r() * 22) | 0;
     for (let k = 0; k < n; k++) {
       const x = cx + (r() - 0.5) * 90, y = cy + (r() - 0.5) * 90, rad = 3 + r() * 4.5;
-      if (!trackClear(x, y, rad + 4)) continue; if (inPitCompound(x, y)) continue;
-      let hitS = false; for (const s of SCN.stands) if (Math.hypot(s.x - x, s.y - y) < s.w / 2 + 10) hitS = true; if (hitS) continue;
+      if (!trackClear(x, y, rad + 4)) { continue; } if (inPitCompound(x, y)) continue;
+      let hitS = false; for (const s of SCN.stands) { if (Math.hypot(s.x - x, s.y - y) < s.w / 2 + 10) hitS = true; } if (hitS) continue;
       SCN.trees.push({ x, y, r: rad, v: (r() * 5) | 0, rot: r() * TAU });
     }
   }
   // single trees along the boundary fences
   for (let k = 0; k < 500; k++) {
     const i = (r() * T.N) | 0, side = r() < 0.5 ? 0 : 1; const d = (side ? -1 : 1) * (T.WALL[side][i] + 10 + r() * 30); const [x, y] = T.pt(i, d); const rad = 2.5 + r() * 3.5;
-    if (!trackClear(x, y, rad + 3) || inPitCompound(x, y)) continue; SCN.trees.push({ x, y, r: rad, v: (r() * 5) | 0, rot: r() * TAU });
+    if (!trackClear(x, y, rad + 3) || inPitCompound(x, y)) { continue; } SCN.trees.push({ x, y, r: rad, v: (r() * 5) | 0, rot: r() * TAU });
   }
 }
 
@@ -359,7 +363,7 @@ function bikeSprite(team, num) {
 const CAM = { x: 0, y: 0, rot: 0, v: 0, ppm: 10, mode: 'behind', init: false, ax: 0.5, ay: 0.6, boost: 1, w: 0, dec: 0 }; // w: wider view at speed, dec: deceleration in m/s2 (GDD 11h)
 const CAM_ORDER = ['behind', 'close', 'chase'], CAM_NAME = { behind: 'Behind', close: 'CLOSE', chase: 'Top-down' }; // C goes through them in this order
 const camTilted = () => CAM.mode !== 'chase';
-function setCamMode(m) { if (CAM.mode === m || !CAM_NAME[m]) return; CAM.mode = m; if (m in CAM_KEY) camLoad(m); CAM.init = false; resize(); }
+function setCamMode(m) { if (CAM.mode === m || !CAM_NAME[m]) { return; } CAM.mode = m; if (m in CAM_KEY) { camLoad(m); } CAM.init = false; resize(); }
 function updateCamera(dt) {
   const b = W.player; if (!b) return;
   let px = b.x, py = b.y, h = b.h, v = b.v;
@@ -455,8 +459,8 @@ function renderTile(L, tx, ty) {
 }
 function getTile(L, tx, ty, allowRender) {
   const key = tx * 100000 + ty; let t = L.map.get(key);
-  if (!t) { if (!allowRender) return null; t = { c: renderTile(L, tx, ty), used: tileFrame }; L.map.set(key, t);
-    if (L.map.size > L.cap) { let old = null, ok = 0; for (const [k, v] of L.map) if (!old || v.used < old.used) { old = v; ok = k; } L.map.delete(ok); } }
+  if (!t) { if (!allowRender) { return null; } t = { c: renderTile(L, tx, ty), used: tileFrame }; L.map.set(key, t);
+    if (L.map.size > L.cap) { let old = null, ok = 0; for (const [k, v] of L.map) { if (!old || v.used < old.used) { old = v; ok = k; } } L.map.delete(ok); } }
   t.used = tileFrame; return t.c;
 }
 function drawWorld() {
@@ -488,7 +492,7 @@ function speedBlur() {
   }
   gb.globalAlpha = 1; gb.setTransform(Q, 0, 0, Q, 0, 0); gb.globalCompositeOperation = 'destination-out';
   gb.fillStyle = gb.strokeStyle = '#000'; gb.lineWidth = 6; gb.lineJoin = 'round'; // the stroke keeps the soft mask edge outside the margin
-  for (const run of blurRoadRuns()) { gb.beginPath(); gb.moveTo(run[0], run[1]); for (let j = 2; j < run.length; j += 2) gb.lineTo(run[j], run[j + 1]); gb.closePath(); gb.fill(); gb.stroke(); }
+  for (const run of blurRoadRuns()) { gb.beginPath(); gb.moveTo(run[0], run[1]); for (let j = 2; j < run.length; j += 2) { gb.lineTo(run[j], run[j + 1]); } gb.closePath(); gb.fill(); gb.stroke(); }
   gb.beginPath(); for (const [x, y, rx, ry] of blurBikeSpots()) { gb.moveTo(x + rx, y); gb.ellipse(x, y, rx, ry, 0, 0, TAU); } gb.fill();
   gb.globalCompositeOperation = 'source-over';
   const g = mainCtx; g.setTransform(ODPR, 0, 0, ODPR, 0, 0); g.imageSmoothingEnabled = true; g.globalAlpha = s; g.drawImage(B, 0, 0, VW, VH); g.globalAlpha = 1;
@@ -536,7 +540,8 @@ function speedVib() { // amplitude in px: speed, kerbs above 50 km/h, braking ha
   const vib = camTilted() ? TILT.vib : CAM_DEF.behind.vib, kmh = CAM.v * 3.6;
   T.project(b.x, b.y, b.i ?? -1, VIBP);
   const k = kmh > 50 && T.surface(VIBP.i, VIBP.s, VIBP.d) === SURF.KERB ? 1 : 0;
-  const br = (UI.state === 'replay' ? b.ctl.brk > 0.5 && CAM.v > 5 : CAM.dec > 9.81) ? 0.5 : 0;
+  const braking = UI.state === 'replay' ? b.ctl.brk > 0.5 && CAM.v > 5 : CAM.dec > 9.81;
+  const br = braking ? 0.5 : 0;
   return vib * Math.min(2, sstep((kmh - 180) / 165) + k + br);
 }
 const SPL = { lines: [], acc: 0 };
@@ -586,7 +591,7 @@ function projectTilted() {
   for (let u0 = 0; u0 < uTop; u0 += du) {
     const u1 = Math.min(uTop, u0 + du), h0 = hOf(u0), h1 = hOf(u1), hm = (h0 + h1) / 2, sc = P / (P + hm * sa);
     if (hm < hN) row(near, u0, u1, h0, h1, sc);
-    if (hm > hF) { const a = hm >= hN ? 1 : (hm - hF) / hB; if (a < 1) g.globalAlpha = a; row(far, u0, u1, h0, h1, sc); g.globalAlpha = 1; }
+    if (hm > hF) { const a = hm >= hN ? 1 : (hm - hF) / hB; if (a < 1) { g.globalAlpha = a; } row(far, u0, u1, h0, h1, sc); g.globalAlpha = 1; }
   }
 }
 function drawWorldLayer(Ly, sx, sy) {
@@ -611,7 +616,8 @@ function drawWorldLayer(Ly, sx, sy) {
     else missing.push([tx, ty, (tx + 0.5) * TM - CAM.x, (ty + 0.5) * TM - CAM.y]);
   }
   missing.sort((a, b) => a[2] * a[2] + a[3] * a[3] - b[2] * b[2] - b[3] * b[3]);
-  let budget = L.map.size < 6 ? 40 : coarse ? 3 : 4;
+  let budget = coarse ? 3 : 4;
+  if (L.map.size < 6) budget = 40;
   for (const m of missing) {
     if (budget-- > 0) { ctx.drawImage(getTile(L, m[0], m[1], true), m[0] * TM, m[1] * TM, TM + 0.04, TM + 0.04); continue; }
     if (!coarse) continue;
@@ -626,28 +632,30 @@ function drawWorldLayer(Ly, sx, sy) {
   const M = FX.marks; ctx.lineWidth = 0.2;
   for (const a of [0.28, 0.55]) {
     ctx.strokeStyle = `rgba(14,14,14,${a * 0.75})`; ctx.beginPath();
-    for (let n = 0; n < FX.mn; n++) { const k = n * 6; if (M[k + 4] !== a) continue; if (!vis(M[k + 2], M[k + 3], 2)) continue; ctx.moveTo(M[k], M[k + 1]); ctx.lineTo(M[k + 2], M[k + 3]); }
+    for (let n = 0; n < FX.mn; n++) { const k = n * 6; if (M[k + 4] !== a) { continue; } if (!vis(M[k + 2], M[k + 3], 2)) { continue; } ctx.moveTo(M[k], M[k + 1]); ctx.lineTo(M[k + 2], M[k + 3]); }
     ctx.stroke();
   }
   if (W.guide && W.player && !W.player.crashed) {
     const b = W.player, N = T.N; ctx.lineWidth = 0.55; ctx.lineCap = 'round';
     for (let o = 1; o < 170; o += 1) {
       const k = (b.i + o) % N, n = (k + 1) % N; const dv = T.VP[n] - T.VP[k];
-      ctx.strokeStyle = dv < -0.02 ? 'rgba(235,50,40,.75)' : dv > 0.02 ? 'rgba(60,210,120,.7)' : 'rgba(255,214,40,.75)';
+      let col = 'rgba(255,214,40,.75)';
+      if (dv < -0.02) col = 'rgba(235,50,40,.75)'; else if (dv > 0.02) col = 'rgba(60,210,120,.7)';
+      ctx.strokeStyle = col;
       ctx.globalAlpha = o > 130 ? (170 - o) / 40 : 1;
       ctx.beginPath(); ctx.moveTo(T.RX[k], T.RY[k]); ctx.lineTo(T.RX[n], T.RY[n]); ctx.stroke();
     }
     ctx.globalAlpha = 1;
   }
   if (W.mode === 'race' && W.player && W.player.llPend?.length && vis(T.X[T.idx(T.LL.sM)], T.Y[T.idx(T.LL.sM)], 120)) { // Long Lap pending (GDD 6a)
-    if (!GEO.llPath) GEO.llPath = llPath(); ctx.strokeStyle = 'rgba(255,207,31,.95)'; ctx.lineWidth = 0.4; ctx.setLineDash([2, 1.5]); ctx.stroke(GEO.llPath); ctx.setLineDash([]);
+    if (!GEO.llPath) { GEO.llPath = llPath(); } ctx.strokeStyle = 'rgba(255,207,31,.95)'; ctx.lineWidth = 0.4; ctx.setLineDash([2, 1.5]); ctx.stroke(GEO.llPath); ctx.setLineDash([]);
   }
   ctx.lineCap = 'butt';
   drawPitBoxes(vis, false);
   drawBuildings(vis, false);
   // bikes
   const list = W.bikes.slice().sort((a, b) => (a.isPlayer ? 1 : 0) - (b.isPlayer ? 1 : 0));
-  ctx.globalAlpha = 0.42; for (const g of W.ghosts) if (g.show) drawBike(g, vis); ctx.globalAlpha = 1;
+  ctx.globalAlpha = 0.42; for (const g of W.ghosts) { if (g.show) drawBike(g, vis); } ctx.globalAlpha = 1;
   for (const b of list) if (!b.dnf || b.crash) drawBikeShadow(b, vis);
   for (const b of list) drawBike(b, vis);
   drawParticles(vis);
@@ -692,7 +700,7 @@ function drawTrackPaint(vis) {
   } }
   // corner names painted on run-off
   for (const c of T.corners) {
-    if (/Straight/.test(c.name)) continue; const i = c.i; const sg = T.KS[i] > 0 ? -1 : 1; const side = sg > 0 ? 0 : 1;
+    if (/Straight/.test(c.name)) { continue; } const i = c.i; const sg = T.KS[i] > 0 ? -1 : 1; const side = sg > 0 ? 0 : 1;
     const [x, y] = P(i, sg * (T.EDGE[side][i] + T.KERB[side][i] + Math.min(6, T.RUN[side][i] * 0.4 + 2))); if (!vis(x, y, 20)) continue;
     groundText(c.name.toUpperCase(), x, y, T.H[i], 2.6, 'rgba(255,255,255,.55)');
   }
@@ -773,7 +781,7 @@ function drawTrees(vis) {
 }
 function drawBikeShadow(b, vis) {
   const VS = PHYS.VS * CAM.boost;
-  if (b.crashed && b.crash) { for (const o of [b.crash.bk, b.crash.rd]) { if (!vis(o.x, o.y, 4)) continue; ctx.save(); ctx.translate(o.x + 0.35, o.y + 0.45); ctx.rotate(o.rot); ctx.globalAlpha = 0.6; ctx.drawImage(TEX.shadow, -1.2 * VS, -0.55 * VS, 2.4 * VS, 1.1 * VS); ctx.restore(); } ctx.globalAlpha = 1; return; }
+  if (b.crashed && b.crash) { for (const o of [b.crash.bk, b.crash.rd]) { if (!vis(o.x, o.y, 4)) { continue; } ctx.save(); ctx.translate(o.x + 0.35, o.y + 0.45); ctx.rotate(o.rot); ctx.globalAlpha = 0.6; ctx.drawImage(TEX.shadow, -1.2 * VS, -0.55 * VS, 2.4 * VS, 1.1 * VS); ctx.restore(); } ctx.globalAlpha = 1; return; }
   if (b.dnf || !vis(b.x, b.y, 4)) return;
   const sl = Math.sin(b.lean);
   ctx.save(); ctx.translate(b.x + 0.45, b.y + 0.6); ctx.rotate(b.h); ctx.translate(0, sl * 0.55 * VS); ctx.globalAlpha = 0.7; ctx.drawImage(TEX.shadow, -1.25 * VS, -0.55 * VS, 2.5 * VS, 1.1 * VS); ctx.restore(); ctx.globalAlpha = 1;
@@ -800,7 +808,7 @@ function drawBike(b, vis) {
 }
 function drawParticles(vis) {
   for (const p of FX.parts) {
-    if (!vis(p.x, p.y, 3)) continue; const f = 1 - p.age / p.life;
+    if (!vis(p.x, p.y, 3)) { continue; } const f = 1 - p.age / p.life;
     if (p.t === 'spark') { ctx.strokeStyle = `rgba(255,${180 + (f * 60) | 0},80,${f})`; ctx.lineWidth = 0.08; ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x - p.vx * 0.03, p.y - p.vy * 0.03); ctx.stroke(); }
     else if (p.t === 'smoke') { ctx.fillStyle = `rgba(215,215,215,${p.a * f})`; ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, TAU); ctx.fill(); }
     else if (p.t === 'dust') { ctx.fillStyle = `rgba(200,180,140,${0.4 * f})`; ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, TAU); ctx.fill(); }

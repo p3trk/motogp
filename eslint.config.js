@@ -12,8 +12,10 @@ module.exports = [
     // the game: browser scripts joined into one file by tools/build.py, so names come from the other files
     files: ['src/**/*.js'],
     languageOptions: { ecmaVersion: 'latest', sourceType: 'script', globals: { ...globals.browser } },
-    // no-implicit-global is Sonar's version of no-undef: it flags names declared in another src file
-    rules: { 'no-undef': 'off', 'no-unused-vars': 'off', 'sonarjs/no-implicit-global': 'off' },
+    // no-implicit-global is Sonar's version of no-undef: it flags names declared in another src file.
+    // Math.random only drives camera shake, speed lines, sound noise and recording ids; the race has its own seeded
+    // generator, so pseudo-random is not a risk here (GDD 13a)
+    rules: { 'no-undef': 'off', 'no-unused-vars': 'off', 'sonarjs/no-implicit-global': 'off', 'sonarjs/pseudo-random': 'off' },
   },
   {
     files: ['tests/**/*.js', 'tools/**/*.js', 'eslint.config.js'],

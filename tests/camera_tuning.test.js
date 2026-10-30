@@ -23,7 +23,7 @@ const UNIT = { a: DEG, bike: 0.01, fade: 0.01, wd: 0.01 }; // display unit -> TI
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   page.on('pageerror', e => { console.error('page error:', e.message); process.exitCode = 1; });
   let failed = 0, total = 0;
-  const check = (ok, name, info) => { total++; if (!ok) failed++; console.log(`${ok ? 'PASS' : 'FAIL'}  ${name.padEnd(50)} ${info || ''}`); };
+  const check = (ok, name, info) => { total++; if (!ok) { failed++; } console.log(`${ok ? 'PASS' : 'FAIL'}  ${name.padEnd(50)} ${info || ''}`); };
   const ready = () => page.waitForFunction(() => window.__sgp && document.getElementById('loading').hidden);
   const tilt = () => page.evaluate(() => Object.assign({}, window.__sgp.TILT));
   const near = (a, b) => Math.abs(a - b) < 1e-6;
@@ -34,7 +34,7 @@ const UNIT = { a: DEG, bike: 0.01, fade: 0.01, wd: 0.01 }; // display unit -> TI
     return { mode: S.CAM.mode, opt: S.UI.opts.cam, chip: b ? b.textContent : null, title: t ? t.textContent : null, panel: !!P && !P.hidden, cam: S.camNameX() }; });
   const stored = k => page.evaluate(k => JSON.parse(localStorage.getItem(k) || 'null'), k);
   const pauseCam = async cam => { // start practice with this camera (start-screen option) and pause with Escape
-    await page.evaluate(cam => { const S = window.__sgp; if (S.W.paused && S.UI.state === 'play') S.UI.togglePause(); S.UI.opts.cam = cam; S.UI.opts.train = 'off'; S.UI.launch('practice', {}); }, cam);
+    await page.evaluate(cam => { const S = window.__sgp; if (S.W.paused && S.UI.state === 'play') { S.UI.togglePause(); } S.UI.opts.cam = cam; S.UI.opts.train = 'off'; S.UI.launch('practice', {}); }, cam);
     await page.keyboard.press('Escape'); await page.waitForFunction(() => window.__sgp.W.paused);
   };
   const slide = (k, v) => page.evaluate(([k, v]) => { const rg = document.getElementById('cam_' + k); rg.value = v; rg.dispatchEvent(new Event('input', { bubbles: true })); }, [k, v]);
@@ -55,7 +55,7 @@ const UNIT = { a: DEG, bike: 0.01, fade: 0.01, wd: 0.01 }; // display unit -> TI
 
   await page.goto(FILE);
   await ready();
-  await page.evaluate(() => { try { localStorage.removeItem('sgp_cam'); } catch (e) { } });
+  await page.evaluate(() => { try { localStorage.removeItem('sgp_cam'); } catch { /* storage may be blocked */ } });
   await page.reload(); await ready();
 
   // a) panel in the Behind pause menu
@@ -188,14 +188,16 @@ const UNIT = { a: DEG, bike: 0.01, fade: 0.01, wd: 0.01 }; // display unit -> TI
   await page.waitForFunction(() => window.__sgp.W.paused);
   p = await panel();
   const pauseOpen = await page.$eval('#pause', el => !el.hidden);
-  check(pauseOpen && !p.visible, 'panel hidden in the Top-down pause menu', `pause menu ${pauseOpen ? 'open' : 'closed'}  panel ${p.exists ? (p.visible ? 'visible' : 'hidden') : 'not built'}`);
+  let panelState = 'not built';
+  if (p.exists) panelState = p.visible ? 'visible' : 'hidden';
+  check(pauseOpen && !p.visible, 'panel hidden in the Top-down pause menu', `pause menu ${pauseOpen ? 'open' : 'closed'}  panel ${panelState}`);
 
   // m) CLOSE on a straight at speed (1470x830 @2x): sky rows at the top are at most 12 % of the screen (GDD 1.13.1)
   const p2 = await browser.newPage({ viewport: { width: 1470, height: 830 }, deviceScaleFactor: 2 });
   p2.on('pageerror', e => { console.error('page error:', e.message); process.exitCode = 1; });
   await p2.goto(FILE); await p2.waitForFunction(() => window.__sgp && document.getElementById('loading').hidden);
   const v0 = await p2.evaluate(() => {
-    const S = window.__sgp; try { localStorage.removeItem('sgp_cam'); localStorage.removeItem('sgp_cam_close'); } catch (e) { }
+    const S = window.__sgp; try { localStorage.removeItem('sgp_cam'); localStorage.removeItem('sgp_cam_close'); } catch { /* storage may be blocked */ }
     S.UI.opts.cam = 'close'; S.UI.opts.train = 'off'; S.UI.launch('practice', {});
     const W = S.W, b = W.player; b.autopilot = true; b.trainHold = false; W.paused = true; let g = 0, hp = b.h, ok = 0;
     while (g < 120 * 300) { // drive until 0.5 s on a straight above 270 km/h

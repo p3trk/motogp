@@ -32,7 +32,7 @@ const FILE = 'file://' + path.resolve(process.argv[2] || path.join(__dirname, '.
     while (g++ < MAX) {
       S.simStep(S.SUB);
       const shown = W.ghosts.some(x => x.show);
-      if (W.lineT < 0) { if (shown) o.beforeLine = true; continue; }
+      if (W.lineT < 0) { if (shown) { o.beforeLine = true; } continue; }
       o.line = true; if (shown) o.onLap = true;
       if (W.time - W.lineT > 30) break;
     }

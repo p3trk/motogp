@@ -18,7 +18,7 @@ const FILE = 'file://' + path.resolve(process.argv[2] || path.join(__dirname, '.
   const page = await ctx.newPage();
   page.on('pageerror', e => { console.error('page error:', e.message); process.exitCode = 1; });
   // iPhone asks for motion access from the Go tap; here the browser is told to allow it
-  await page.addInitScript(() => { try { localStorage.clear(); } catch (e) { } if (window.DeviceMotionEvent) DeviceMotionEvent.requestPermission = () => Promise.resolve('granted'); });
+  await page.addInitScript(() => { try { localStorage.clear(); } catch { /* storage may be blocked */ } if (window.DeviceMotionEvent) DeviceMotionEvent.requestPermission = () => Promise.resolve('granted'); });
   await page.goto(FILE);
   await page.waitForFunction(() => window.__sgp && document.getElementById('loading').hidden);
 
@@ -128,11 +128,11 @@ const FILE = 'file://' + path.resolve(process.argv[2] || path.join(__dirname, '.
 
   // portrait: the turn prompt pauses the race and goes away again in landscape
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.waitForTimeout(400);
+  await page.waitForFunction(() => !document.getElementById('turn').hidden, null, { timeout: 2000 }).catch(() => { /* the check below reports it */ });
   const portrait = await page.evaluate(() => ({ turn: !document.getElementById('turn').hidden, paused: window.__sgp.W.paused }));
   check('portrait: turn prompt shown and race paused', portrait.turn && portrait.paused, portrait);
   await page.setViewportSize({ width: 844, height: 390 });
-  await page.waitForTimeout(400);
+  await page.waitForFunction(() => document.getElementById('turn').hidden, null, { timeout: 2000 }).catch(() => { /* the check below reports it */ });
   const back = await page.evaluate(() => document.getElementById('turn').hidden);
   check('landscape: turn prompt hidden again', back === true);
 
@@ -141,7 +141,7 @@ const FILE = 'file://' + path.resolve(process.argv[2] || path.join(__dirname, '.
   // ---- desktop, no touch: nothing of the phone layout, the gearbox choice stays
   const dctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
   const dpage = await dctx.newPage();
-  await dpage.addInitScript(() => { try { localStorage.clear(); } catch (e) { } });
+  await dpage.addInitScript(() => { try { localStorage.clear(); } catch { /* storage may be blocked */ } });
   await dpage.goto(FILE);
   await dpage.waitForFunction(() => window.__sgp && document.getElementById('loading').hidden);
   const desk = await dpage.evaluate(() => ({

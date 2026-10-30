@@ -362,3 +362,11 @@ test('RP.close: back to the menu, the pause menu or the results', () => {
   assert.equal(G.W.player, me); assert.equal(G.UI.state, 'play'); assert.equal(G.W.paused, true); assert.equal(env.doc.getElementById('pause').hidden, false);
   const r = replay(1, 'results'); r.RP.close(); assert.equal(r.G.UI.state, 'results'); assert.equal(r.env.doc.getElementById('results').hidden, false);
 });
+
+test('Lib.dataOf: a recording from the old IndexedDB library, or null on an error', async () => {
+  const { G } = load(); await tick(); const A = makeRec(G, { id: 'old1' });
+  G.Lib.db = fakeIDB({ data: { old1: A } }).db;
+  assert.equal(await G.Lib.dataOf('old1'), A);
+  G.Lib.db = { transaction: () => ({ objectStore: () => ({ get: () => { const q = {}; queueMicrotask(() => q.onerror()); return q; } }) }) };
+  assert.equal(await G.Lib.dataOf('old1'), null);
+});

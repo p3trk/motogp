@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Camera tuning test (GDD 11a): the pause menu shows a Camera tuning panel with the Behind or CLOSE camera only.
-// It has 17 sliders (since 1.17.0 with Blur start speed, Blur full speed and Blur strength; since 1.23.0 with Widen at speed and Vibration), each with a number box; changed values apply to the camera at once, are kept after a
+// It has 17 sliders (since 1.17.0 with Blur start speed, Blur full speed and Blur strength; since 1.24.0 with Widen at speed and Vibration), each with a number box; changed values apply to the camera at once, are kept after a
 // reload (localStorage 'sgp_cam'), and Reset to defaults brings back the built-in values.
 // Since 1.14.0 CLOSE is its own camera (the 1.13.x profile list is gone): chosen on the start screen and kept after
 // a reload, C cycles Behind -> CLOSE -> Top-down in a session and in replay, CLOSE starts with the Close values,
@@ -15,7 +15,7 @@ const DEG = Math.PI / 180;
 // defaults in display units (tilt in degrees, bike height and fade zone in %)
 const DEF = { a: 40, p: 1.3, bike: 20, zMax: 20, zBase: 30, zK: 0.5, wk: 2.3, hk: 2.9, nearQ: 0.75, farQ: 0.45, fade: 30, minLen: 40, bv0: 260, bv1: 330, bs: 20, wd: 15, vib: 1.5 };
 const CLOSE = { a: 55, p: 1.8, bike: 8, zMax: 30, zBase: 12, zK: 0.3, wk: 3.5, hk: 6, nearQ: 1.5, farQ: 0.7, fade: 30, minLen: 40, bv0: 260, bv1: 330, bs: 24, wd: 15, vib: 1.5 };
-const OLD = { behind: { zK: 1.0, hk: 2.6 }, close: { zK: 0.4 } }; // defaults before 1.23.0 (GDD 11h)
+const OLD = { behind: { zK: 1.0, hk: 2.6 }, close: { zK: 0.4 } }; // defaults before 1.24.0 (GDD 11h)
 const UNIT = { a: DEG, bike: 0.01, fade: 0.01, wd: 0.01 }; // display unit -> TILT value
 
 (async () => {
@@ -171,7 +171,7 @@ const UNIT = { a: DEG, bike: 0.01, fade: 0.01, wd: 0.01 }; // display unit -> TI
   const [o1, s1] = await old(Object.assign({ profile: 'close' }, CLOSE13)), [o2] = await old(Object.assign({ profile: 'custom' }, CLOSE, { zK: 0.8 })), [o3] = await old(Object.assign({}, DEF, { a: 50 }));
   check(isDef(o1) && !('profile' in (s1 || {})), 'old Close profile: Behind starts from defaults', `Behind ${isDef(o1) ? 'defaults' : fmt(o1)}  profile field ${s1 && 'profile' in s1 ? 'kept' : 'gone'}`);
   check(near(o2.zK, 0.8) && near(o2.a, 55 * DEG) && near(o3.a, 50 * DEG), 'other old saved values stay with Behind', `custom -> ${fmt(o2)}  1.12 tilt 50 -> ${(o3.a / DEG).toFixed(1)}°`);
-  // l2) 1.23.0: saved values equal to the old defaults (Behind zoom speed factor 1.0 and depth 2.6, CLOSE factor 0.4) move to the new defaults; others stay (GDD 11h)
+  // l2) 1.24.0: saved values equal to the old defaults (Behind zoom speed factor 1.0 and depth 2.6, CLOSE factor 0.4) move to the new defaults; others stay (GDD 11h)
   const [n1] = await old(Object.assign({}, DEF, OLD.behind)), [n2] = await old(Object.assign({}, DEF, { zK: 0.8, hk: 3 }));
   check(near(n1.zK, DEF.zK) && near(n1.hk, DEF.hk) && near(n2.zK, 0.8) && near(n2.hk, 3), 'Behind: old defaults move to new ones, own values stay', `old defaults -> zK ${n1.zK} depth ${n1.hk}  own -> zK ${n2.zK} depth ${n2.hk}`);
   await page.evaluate(() => window.__sgp.UI.togglePause());

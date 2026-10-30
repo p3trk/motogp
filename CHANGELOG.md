@@ -1,17 +1,18 @@
 # Changelog
-## v1.23.0 (2026-10-30)
-- Gravel traps (GDD 5): drag now grows with speed (0.12 g + 0.0053 g per (m/s)², at most 0.80 g; was 0.55 g at every speed), so a fast bike stops harder and a slow one can ride out. The rear tyre pushes at most 0.30 g in gravel, which balances the drag at about 20 km/h.
-- Fix: a stopped bike in the gravel could only creep at about 1 km/h, because the drag was as big as the most push the tyre could give. A stopped bike with no throttle now stays still.
-- Feathering: with rider aids on, traction control feathers for you and holding W rides out at about 20 km/h. With aids off, holding W more than half open for over 0.3 s digs the rear wheel in (rpm flare, more stones fly, the bike barely moves); tapping W rides out at about 18 km/h. The first spin of over 1 s per session shows FEATHER THE THROTTLE.
-- Tests: new tests/gravel_exit.test.js, in npm test.
 
-## v1.23.0 (2026-10-30)
+## v1.24.0 (2026-10-30)
 - Sense of speed (GDD 11h). Closer zoom at speed: zoom speed factor Behind 1.0 -> 0.5, CLOSE 0.4 -> 0.3, so the ground moves up to 60 % faster on screen at top speed. Behind ground depth 2.6 -> 2.9 (road visible ahead at 300 km/h about 148 m, was about 208 m; a deeper ground costs too much frame time, GDD 11h). Saved camera values equal to the old defaults move to the new ones.
 - Wider view above 200 km/h in Behind and CLOSE (camera distance up to 15 % shorter, tilt lowered with it so the horizon stays put). New Camera tuning sliders: Widen at speed, Vibration.
 - Speed lines at the screen edges above 280 km/h, in all cameras. Camera vibration at speed (up to 1.5 px), more on kerbs and under hard braking (at most 3 px). HUD stays still.
 - New start-screen option Speed effects On / Off (wider view, speed lines, vibration).
 - Trackside details: mowing stripes on the grass, distance posts every 25 m along the straights, faint asphalt joints every 40 m.
 - Tests: new tests/speed_feel.test.js, in npm test; camera_tuning and speed_blur updated for the new defaults (speed_blur: speed effects Off while comparing frames, and the streak check starts at row 1).
+
+## v1.23.0 (2026-10-30)
+- Gravel traps (GDD 5): drag now grows with speed (0.12 g + 0.0053 g per (m/s)², at most 0.80 g; was 0.55 g at every speed), so a fast bike stops harder and a slow one can ride out. The rear tyre pushes at most 0.30 g in gravel, which balances the drag at about 20 km/h.
+- Fix: a stopped bike in the gravel could only creep at about 1 km/h, because the drag was as big as the most push the tyre could give. A stopped bike with no throttle now stays still.
+- Feathering: with rider aids on, traction control feathers for you and holding W rides out at about 20 km/h. With aids off, holding W more than half open for over 0.3 s digs the rear wheel in (rpm flare, more stones fly, the bike barely moves); tapping W rides out at about 18 km/h. The first spin of over 1 s per session shows FEATHER THE THROTTLE.
+- Tests: new tests/gravel_exit.test.js, in npm test.
 
 ## v1.22.0 (2026-10-29)
 - No refuelling (GDD 7). Fuel use is about 1.0 L per lap (was 2.6), so a full 22 L tank covers the 20 lap Grand Prix. The starting fuel hint shows the least fuel that finishes the race (10 lap race 50 %, Grand Prix 95 %).

@@ -107,7 +107,7 @@ const COST = 0.15; // largest share the blur may add to drawing the world
     // against the blur at almost no strength (the same 1/4 copy, no zoom), so only the streaks are measured
     const bs = TL.bs, on = draw(true); TL.bs = 0.01; const off = draw(true); TL.bs = bs; const st = (d, i) => { const x = i % w, y = (i - x) / w, dx = x - hx, dy = y - hy, l = Math.hypot(dx, dy) || 1, j = i + Math.round(dx / l) + Math.round(dy / l) * w; return Math.abs(d[i * 4] - d[j * 4]); };
     const Z = { oOn: 0, oOff: 0, mOn: 0, mOff: 0 };
-    for (let y = 1; y < h - 1; y++) { // from row 1: with no sky (deeper Behind ground, 1.23.0) row 0 is ground and its neighbour towards the horizon point is off the image
+    for (let y = 1; y < h - 1; y++) { // from row 1: when there is no sky (a deeper ground, GDD 11h) row 0 is ground and its neighbour towards the horizon point is off the image
       const r = { oOn: 0, oOff: 0, mOn: 0, mOff: 0, no: 0, nm: 0 };
       for (let x = 0; x < w - 1; x++) {
         const i = y * w + x; if (!M.off[i] || !M.off[i + 1] || !M.off[i + w]) continue;

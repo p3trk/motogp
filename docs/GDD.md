@@ -1,6 +1,6 @@
 # Silverstone GP — Game Design Document
 
-**Version:** 1.23.0 · **Last updated:** 2026-10-30 · **Owner:** Petr
+**Version:** 1.24.0 · **Last updated:** 2026-10-30 · **Owner:** Petr
 
 This document is the source of truth for how the game should work. Every
 change starts here: update the GDD on a feature branch first, then change the
@@ -111,7 +111,7 @@ Stored in `localStorage` key `sgp_opts`. The camera choice is remembered for all
 | Starting fuel (races) | 25–100 % of tank, step 5. Since 1.22.0 the race has no refuelling (§7), so this must cover the whole race | 100 % |
 | Starting position (10 lap race and, since 1.16.0, Practice with Curve training Off) | Pole / Front row / Mid-pack / Back. One setting shared by both modes | Mid-pack |
 | Speed blur (since 1.17.0) | On / Off. Blurs the surroundings at top speed in the Behind and CLOSE cameras (§11f) | On |
-| Speed effects (since 1.23.0) | On / Off. Wider view, speed lines and camera vibration at speed (§11h). Off keeps the 1.23.0 zoom and the trackside details, which are part of the world | On |
+| Speed effects (since 1.24.0) | On / Off. Wider view, speed lines and camera vibration at speed (§11h). Off keeps the 1.24.0 zoom and the trackside details, which are part of the world | On |
 | Sync ghosts to (since 1.16.0) | One of the selected ghosts (§11c) | The first selected ghost |
 | Rider name, number, team | up to 14 chars / 1–99 / 11 teams | Petr, 25, Arancia Tech |
 
@@ -314,9 +314,9 @@ Three cameras (since 1.14.0): **Behind**, **CLOSE** and **Top-down**. Chosen on 
   - Tilt: 40° / 55°, 20–70.
   - Camera distance: 1.3 / 1.8 × screen height, 0.5–2.5.
   - Bike height on screen: 20 / 8 %, 5–40.
-  - Zoom: maximum 20 / 30 px/m (10–30), base 30 / 12 m (10–60), speed factor 0.5 / 0.3 (0.1–2.0; was 1.0 / 0.4 and 0.3–2.0 before 1.23.0, §11h) in `ppm = min(max, min(VW, 1.25·VH) / (base + factor·v))`.
-  - Ground depth default for Behind is 2.9 × screen since 1.23.0 (was 2.6), so the closer zoom loses less road ahead (§11h).
-  - Speed effects (since 1.23.0, §11h): **Widen at speed** 15 / 15 % (0–30), **Vibration** 1.5 / 1.5 px (0–4).
+  - Zoom: maximum 20 / 30 px/m (10–30), base 30 / 12 m (10–60), speed factor 0.5 / 0.3 (0.1–2.0; was 1.0 / 0.4 and 0.3–2.0 before 1.24.0, §11h) in `ppm = min(max, min(VW, 1.25·VH) / (base + factor·v))`.
+  - Ground depth default for Behind is 2.9 × screen since 1.24.0 (was 2.6), so the closer zoom loses less road ahead (§11h).
+  - Speed effects (since 1.24.0, §11h): **Widen at speed** 15 / 15 % (0–30), **Vibration** 1.5 / 1.5 px (0–4).
   - Ground area: width 2.3 / 3.5 × screen (1.5–3.5), depth 2.6 / 6 × screen (1.5–6).
   - Image quality: near band 0.75 / 1.5 (0.4–2.0), far band 0.45 / 0.7 (0.25–0.8), fade zone 30 / 30 % (0–60).
   - Minimum bike length: 40 / 40 px, 20–80.
@@ -568,7 +568,7 @@ On phones (touch controls on, §3a) the HUD is made smaller and simpler. Desktop
 3. Minimap on phones: keep its size or make it smaller? **About 140 px**, so the timing tower and the minimap do not crowd the top corners.
 4. Lean as a number in the speedometer, or a bar? **A bar** (Petr, 2026-10-28), with the angle in degrees centred right above it and no "LEAN" label (Petr, 2026-10-28).
 
-## 11h. Sense of speed (since 1.23.0)
+## 11h. Sense of speed (since 1.24.0)
 
 Asked by Petr (2026-10-30): "How to make game feel faster?", then picked four of the proposed changes: closer zoom at speed, wider view at speed, more detail beside the road, and camera vibration at speed.
 
@@ -579,7 +579,7 @@ Asked by Petr (2026-10-30): "How to make game feel faster?", then picked four of
 - The zoom speed factor goes down: **Behind 1.0 → 0.5**, **CLOSE 0.4 → 0.3**. The slider range becomes 0.1–2.0 (was 0.3–2.0). Base and maximum stay the same.
 - On the 1470 × 830 reference screen (`C` = 1037):
 
-  | | Behind 1.22 | Behind 1.23 | CLOSE 1.22 | CLOSE 1.23 |
+  | | Behind 1.23 | Behind 1.24 | CLOSE 1.23 | CLOSE 1.24 |
   |---|---|---|---|---|
   | Zoom at 160 km/h | 13.9 px/m | 19.9 px/m | 22.6 → 30 (max) | 30 (max) |
   | Zoom at 320 km/h | 8.7 px/m | 13.9 px/m | 21.8 px/m | 26.8 px/m |
@@ -625,14 +625,14 @@ The eye judges speed from small things passing by. These are part of the world, 
 - The pause-menu Camera tuning panel gets the two new sliders above, saved with the other camera values (`sgp_cam`, `sgp_cam_close`) and reset by Reset to defaults. Older saves without them get the defaults.
 
 **Performance limit**
-- Everything in 1.23.0 together may add at most **10 % to the frame time** at top speed on the 1470 × 830 reference screen, compared with 1.22.0 in the same view. Measured (headless Chromium, 1470 × 830 @2x, Behind at 340 km/h; implementation finding, 2026-10-30): the zoom, wider view, speed lines and vibration together add about 2 %. The deeper ground is what costs: depth 4.0 added +23 %, +15 % with the far band at 0.4 and +8 % at 0.35. But a far band below 0.45 fails the seam test (§11a, `tilt_seam`): at 1024 × 700 the jump in sharpness where the near band hands over to the far band grows from 11 % to about 20 % (limit 15 %); near band 0.6 with far band 0.35 fails too. So the far band stays at 0.45 and the **Behind depth is 2.9**: about +8 %. Each 0.1 of depth costs about 2 %. A player whose machine is fast enough can set a deeper ground in Camera tuning.
+- Everything in 1.24.0 together may add at most **10 % to the frame time** at top speed on the 1470 × 830 reference screen, compared with 1.23.0 in the same view. Measured (headless Chromium, 1470 × 830 @2x, Behind at 340 km/h; implementation finding, 2026-10-30): the zoom, wider view, speed lines and vibration together add about 2 %. The deeper ground is what costs: depth 4.0 added +23 %, +15 % with the far band at 0.4 and +8 % at 0.35. But a far band below 0.45 fails the seam test (§11a, `tilt_seam`): at 1024 × 700 the jump in sharpness where the near band hands over to the far band grows from 11 % to about 20 % (limit 15 %); near band 0.6 with far band 0.35 fails too. So the far band stays at 0.45 and the **Behind depth is 2.9**: about +8 %. Each 0.1 of depth costs about 2 %. A player whose machine is fast enough can set a deeper ground in Camera tuning.
 - When the slow-machine quality drop (`TILT.q` below 1, §11a) happens, the speed lines and the wider view stay (they are cheap); the speed blur goes off as before.
 
 **Tests**
 - `camera_tuning`: new defaults (zK 0.5 / 0.3, Behind depth 2.9, widen 15, vib 1.5), the two new sliders, and the move of old saved defaults to the new values while custom values are kept.
 - New `speed_feel` test: zoom at 160 and 320 km/h matches the table above; widen is 0 below 200 km/h and full at 340; no canvas reallocation while the speed changes; speed lines are drawn at 340 km/h and not at 250 km/h or with Speed effects Off; the world offset is 0 at rest, when paused and with Speed effects Off, and at most 2 × vib at top speed on a kerb; frame time within the limit above.
 
-### Open questions for 1.23.0 (recommended answer in bold; the design above uses it)
+### Open questions for 1.24.0 (recommended answer in bold; the design above uses it)
 
 1. Top-down camera: change its zoom too (`34 + 0.95·v`, which flattens out the same way)? **No**, keep it: its look-ahead is limited so the bike stays on screen, and a closer zoom would shorten what the player sees ahead. It still gets the trackside details, the speed lines and the vibration. Alternative: speed factor 0.95 → 0.6.
 2. One option for all the effects, or one per effect? **One option, Speed effects**, plus per-camera sliders for widen and vibration. Separate On/Off options for each would make the start screen longer.
@@ -649,7 +649,7 @@ The eye judges speed from small things passing by. These are part of the world, 
 - Scenery: grandstands, Wing pit building, garages, trees.
 - Bikes: detailed top-down sprites in team livery with rider and number, lean and shadow.
 - Effects: tyre marks, smoke, sparks, debris, dust on grass and gravel; speed blur of the surroundings at top speed in the tilted cameras (§11f, since 1.17.0); wider view, speed lines and camera vibration at speed (§11h, since 1.23.0).
-- Trackside details for the sense of speed (since 1.23.0, §11h): mowing stripes on the grass, distance posts along the straights, asphalt joints.
+- Trackside details for the sense of speed (since 1.24.0, §11h): mowing stripes on the grass, distance posts along the straights, asphalt joints.
 - Sound: synthesised engine (rpm and gear), shifts, impacts, pit.
 
 ## 13. Technical design

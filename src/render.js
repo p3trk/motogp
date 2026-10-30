@@ -16,7 +16,7 @@ let DPR_CAP = 1.5;
 // virtual ground canvas RW x RH (css px): the screen in top-down, larger when tilted, split into LAYERS
 let RW = 800, RH = 600, ODPR = 1;
 let LAYERS = [];
-const TILT = { a: 40 * DEG, p: 1.3, wk: 2.3, hk: 2.9, bike: 0.2, zMax: 20, zBase: 30, zK: 0.5, nearQ: 0.75, farQ: 0.45, fade: 0.3, minLen: 40, bv0: 260, bv1: 330, bs: 20, wd: 0.15, vib: 1.5, q: 1 }; // zK 1.0 and hk 2.6 before 1.23.0 (GDD 11h) // q: resolution scale, lowered on slow machines
+const TILT = { a: 40 * DEG, p: 1.3, wk: 2.3, hk: 2.9, bike: 0.2, zMax: 20, zBase: 30, zK: 0.5, nearQ: 0.75, farQ: 0.45, fade: 0.3, minLen: 40, bv0: 260, bv1: 330, bs: 20, wd: 0.15, vib: 1.5, q: 1 }; // zK 1.0 and hk 2.6 before 1.24.0 (GDD 11h) // q: resolution scale, lowered on slow machines
 // tilted camera tuning (GDD 11a): the pause-menu panel edits these in display units (deg, %), per camera (below)
 const CAM_SET = [ // k: TILT field, f: display unit -> TILT value, rs: needs resize()
   { k: 'a', lbl: 'Tilt', unit: '°', min: 20, max: 70, step: 1, f: DEG, rs: 1 },
@@ -43,10 +43,10 @@ const camGet = d => +(TILT[d.k] / (d.f || 1)).toFixed(4); // display value
 // localStorage 'sgp_cam' (Behind) and 'sgp_cam_close' (CLOSE); TILT holds the values of the tilted camera in use
 const CAM_DEF = {
   behind: Object.fromEntries(CAM_SET.map(d => [d.k, camGet(d)])),
-  close: { a: 55, p: 1.8, bike: 8, zMax: 30, zBase: 12, zK: 0.3, wk: 3.5, hk: 6, nearQ: 1.5, farQ: 0.7, fade: 30, minLen: 40, bv0: 260, bv1: 330, bs: 24, wd: 15, vib: 1.5 }, // 1.13.1: less sky, sees further; 1.23.0: zK 0.4 -> 0.3
+  close: { a: 55, p: 1.8, bike: 8, zMax: 30, zBase: 12, zK: 0.3, wk: 3.5, hk: 6, nearQ: 1.5, farQ: 0.7, fade: 30, minLen: 40, bv0: 260, bv1: 330, bs: 24, wd: 15, vib: 1.5 }, // 1.13.1: less sky, sees further; 1.24.0: zK 0.4 -> 0.3
 };
 const CAM_KEY = { behind: 'sgp_cam', close: 'sgp_cam_close' };
-const CAM_OLD = { behind: { zK: 1, hk: 2.6 }, close: { zK: 0.4 } }; // defaults before 1.23.0: saved values equal to these move to the new defaults (GDD 11h)
+const CAM_OLD = { behind: { zK: 1, hk: 2.6 }, close: { zK: 0.4 } }; // defaults before 1.24.0: saved values equal to these move to the new defaults (GDD 11h)
 const CAM_VAL = { behind: Object.assign({}, CAM_DEF.behind), close: Object.assign({}, CAM_DEF.close) };
 let TILT_CAM = 'behind'; // the tilted camera whose values are in TILT
 function camSave(name) { try { localStorage.setItem(CAM_KEY[name], JSON.stringify(CAM_VAL[name])); } catch (e) { } }

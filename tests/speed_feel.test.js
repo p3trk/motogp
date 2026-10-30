@@ -2,12 +2,12 @@
 // Sense of speed test (GDD 11h): closer zoom at speed (Behind and CLOSE), wider view above 200 km/h with the horizon
 // kept in place, no canvas reallocation while the speed changes, speed lines above 280 km/h, camera vibration at
 // speed (none at rest, when paused or with Speed effects Off; at most 2 x vib on a kerb at top speed), trackside
-// distance posts on the grass along the straights, and the frame cost limit (10 % over the 1.22.0 settings).
+// distance posts on the grass along the straights, and the frame cost limit (10 % over the 1.23.0 settings).
 // Usage: node tests/speed_feel.test.js [path/to/index.html]   (needs Playwright + Chromium)
 const path = require('path');
 const { chromium } = require('playwright');
 const FILE = 'file://' + path.resolve(process.argv[2] || path.join(__dirname, '..', 'index.html'));
-const COST = 0.10; // largest share 1.23.0 may add to drawing the world at top speed
+const COST = 0.10; // largest share 1.24.0 may add to drawing the world at top speed
 
 (async () => {
   const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
@@ -110,7 +110,7 @@ const COST = 0.10; // largest share 1.23.0 may add to drawing the world at top s
   await page.close();
 
   // 7) frame cost: median time of drawing the world and the speed lines at 340 km/h, Behind, 1470x830 @2x,
-  // 1.23.0 settings against the 1.22.0 ones (zoom factor 1.0, depth 2.6, no widen, Speed effects Off)
+  // 1.24.0 settings against the 1.23.0 ones (zoom factor 1.0, depth 2.6, no widen, Speed effects Off)
   {
     const page = await open(1470, 830, 2);
     const r = await page.evaluate(async () => {
@@ -127,7 +127,7 @@ const COST = 0.10; // largest share 1.23.0 may add to drawing the world at top s
       return { nw: med(tNew), old: med(tOld), q: TL.q };
     });
     const add = r.nw / r.old - 1;
-    check(add <= COST && r.q === 1, 'frame cost of 1.23.0 at most 10 % over 1.22.0', `world ${r.old.toFixed(2)} ms -> ${r.nw.toFixed(2)} ms (${add >= 0 ? '+' : ''}${(add * 100).toFixed(1)} %)`);
+    check(add <= COST && r.q === 1, 'frame cost of 1.24.0 at most 10 % over 1.23.0', `world ${r.old.toFixed(2)} ms -> ${r.nw.toFixed(2)} ms (${add >= 0 ? '+' : ''}${(add * 100).toFixed(1)} %)`);
     await page.close();
   }
 

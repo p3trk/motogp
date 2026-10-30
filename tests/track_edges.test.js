@@ -50,7 +50,7 @@ const LIMITS = { kerb: 0.45, runoff: 2.0, wall: 1.5, pit: 1.5 };
   await browser.close();
   let failed = 0;
   for (const [name, o] of Object.entries(r)) {
-    console.log(`${o.bad.length ? 'FAIL' : 'PASS'}  ${name.padEnd(7)} largest step ${o.max.toFixed(2)} m (limit ${LIMITS[name]} m)${o.bad.length ? `, ${o.bad.length} steps over` : ''}`);
+    console.log(`${o.bad.length ? 'FAIL' : 'PASS'}  ${name.padEnd(7)} largest step ${o.max.toFixed(2)} m (limit ${LIMITS[name]} m)${o.bad.length ? ', ' + o.bad.length + ' steps over' : ''}`);
     for (const b of o.bad.slice(0, 4)) console.log('      ' + b);
     failed += o.bad.length ? 1 : 0;
   }

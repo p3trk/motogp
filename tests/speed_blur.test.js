@@ -19,7 +19,7 @@ const COST = 0.15; // largest share the blur may add to drawing the world
 (async () => {
   const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
   let failed = 0, total = 0;
-  const check = (ok, name, info) => { total++; if (!ok) failed++; console.log(`${ok ? 'PASS' : 'FAIL'}  ${name.padEnd(58)} ${info || ''}`); };
+  const check = (ok, name, info) => { total++; if (!ok) { failed++; } console.log(`${ok ? 'PASS' : 'FAIL'}  ${name.padEnd(58)} ${info || ''}`); };
   const ready = page => page.waitForFunction(() => window.__sgp && document.getElementById('loading').hidden);
   const open = async (w, h, sf) => {
     const page = await browser.newPage({ viewport: { width: w, height: h }, deviceScaleFactor: sf });
@@ -58,10 +58,10 @@ const COST = 0.15; // largest share the blur may add to drawing the world
         const runs = []; let cur = null;
         for (let i = 0; i <= T.N + 1; i++) {
           const q = i % T.N, [cx, cy] = S.worldToCanvasX(T.X[q], T.Y[q]), ok = cx > -0.3 * RW && cx < 1.3 * RW && cy > -0.05 * RH && cy < yMax;
-          if (!ok) { cur = null; continue; } if (!cur) runs.push(cur = []);
+          if (!ok) { cur = null; continue; } if (!cur) { cur = []; runs.push(cur); }
           cur.push([S.worldToScreenX(...T.pt(q, -(T.WL[q] + T.KERB[1][q]))), S.worldToScreenX(...T.pt(q, T.WR[q] + T.KERB[0][q]))]);
         }
-        const poly = (g, r) => { g.beginPath(); r.forEach((p, j) => j ? g.lineTo(...p[0]) : g.moveTo(...p[0])); for (let j = r.length - 1; j >= 0; j--) g.lineTo(...r[j][1]); g.closePath(); };
+        const poly = (g, r) => { g.beginPath(); for (let j = 0; j < r.length; j++) { if (j) g.lineTo(...r[j][0]); else g.moveTo(...r[j][0]); } for (let j = r.length - 1; j >= 0; j--) { g.lineTo(...r[j][1]); } g.closePath(); };
         const [mi, gi] = mk(), [mo, go] = mk();
         for (const r of runs) { poly(gi, r); gi.fillStyle = '#fff'; gi.fill(); }
         gi.globalCompositeOperation = 'destination-out'; gi.lineWidth = 6; for (const r of runs) { poly(gi, r); gi.stroke(); }
@@ -88,8 +88,8 @@ const COST = 0.15; // largest share the blur may add to drawing the world
     const w = M.w, h = M.h, lum = (d, i) => d[i * 4] * 0.3 + d[i * 4 + 1] * 0.59 + d[i * 4 + 2] * 0.11;
     const st = (d, i) => Math.abs(lum(d, i) - lum(d, i + 1)) + Math.abs(lum(d, i) - lum(d, i + w));
     let sOn = 0, sOff = 0, n = 0;
-    for (let i = 0; i < w * (h - 1) - 1; i++) { if (!M.off[i] || !M.off[i + 1] || !M.off[i + w]) continue; sOn += st(on.data, i); sOff += st(off.data, i); n++; }
-    const diff = mask => { let n = 0, bad = 0, mx = 0; for (let i = 0; i < w * h; i++) { if (mask && !mask[i]) continue; const d = Math.max(Math.abs(on.data[i * 4] - off.data[i * 4]), Math.abs(on.data[i * 4 + 1] - off.data[i * 4 + 1]), Math.abs(on.data[i * 4 + 2] - off.data[i * 4 + 2])); n++; if (d > 2) bad++; mx = Math.max(mx, d); } return { n, ok: n ? 1 - bad / n : 1, mx }; };
+    for (let i = 0; i < w * (h - 1) - 1; i++) { if (!M.off[i] || !M.off[i + 1] || !M.off[i + w]) { continue; } sOn += st(on.data, i); sOff += st(off.data, i); n++; }
+    const diff = mask => { let n = 0, bad = 0, mx = 0; for (let i = 0; i < w * h; i++) { if (mask && !mask[i]) { continue; } const d = Math.max(Math.abs(on.data[i * 4] - off.data[i * 4]), Math.abs(on.data[i * 4 + 1] - off.data[i * 4 + 1]), Math.abs(on.data[i * 4 + 2] - off.data[i * 4 + 2])); n++; if (d > 2) { bad++; } mx = Math.max(mx, d); } return { n, ok: n ? 1 - bad / n : 1, mx }; };
     return { v: window.__sgp.W.player.v * 3.6, shOn: sOn / n, shOff: sOff / n, road: diff(M.road), bike: diff(M.bike), all: diff(null) };
   }, [cam, kmh]);
   // streaks grow towards the edges: a uniform dot pattern drawn into the ground looks the same all across a screen row
@@ -99,7 +99,7 @@ const COST = 0.15; // largest share the blur may add to drawing the world
     const S = window.__sgp; window.__place(cam, 340); S.UI.opts.blur = 'on';
     const M = window.__masks(document.getElementById('game')), w = M.w, h = M.h;
     // square dots of the same size on screen at any depth (z, zv: ground px per screen px across and along that row)
-    const draw = blur => { S.tiltProjectX((g, RW, RH) => { g.fillStyle = '#000'; g.fillRect(0, 0, RW, RH); g.fillStyle = '#fff'; const P = S.TILT.p * innerHeight, sa = Math.sin(S.TILT.a), ca = Math.cos(S.TILT.a); for (let y = RH, n = 0; y > 0; n++) { const z = (P + (RH - y) * sa) / P, zv = z * z / ca, d = 48 * z; for (let x = (n & 1) * d / 2; x < RW; x += d) g.fillRect(x, y - 12 * zv, 12 * z, 12 * zv); y -= 48 * zv; } }); if (blur) S.speedBlurX(); const c = document.getElementById('game'); return c.getContext('2d').getImageData(0, 0, c.width, c.height).data; };
+    const draw = blur => { S.tiltProjectX((g, RW, RH) => { g.fillStyle = '#000'; g.fillRect(0, 0, RW, RH); g.fillStyle = '#fff'; const P = S.TILT.p * innerHeight, sa = Math.sin(S.TILT.a), ca = Math.cos(S.TILT.a); let y = RH, n = 0; while (y > 0) { const z = (P + (RH - y) * sa) / P, zv = z * z / ca, d = 48 * z; for (let x = (n & 1) * d / 2; x < RW; x += d) { g.fillRect(x, y - 12 * zv, 12 * z, 12 * zv); } y -= 48 * zv; n++; } }); if (blur) { S.speedBlurX(); } const c = document.getElementById('game'); return c.getContext('2d').getImageData(0, 0, c.width, c.height).data; };
     // sharpness along the line to the horizon point (the direction a zoom streak smears): step to the neighbour pixel
     // that lies outward from it
     const TL = S.TILT, VH = innerHeight, kp = w / innerWidth, P = TL.p * VH, RH = Math.round(VH * TL.hk);
@@ -160,7 +160,7 @@ const COST = 0.15; // largest share the blur may add to drawing the world
     await page.keyboard.press('Escape'); await page.waitForFunction(() => window.__sgp.W.paused);
     await page.evaluate(() => { const rg = document.getElementById('cam_bs'); rg.value = 0; rg.dispatchEvent(new Event('input', { bubbles: true })); });
     const z = await page.evaluate(() => {
-      const S = window.__sgp, mx = (a, b) => { let m = 0; for (let i = 0; i < a.data.length; i++) m = Math.max(m, Math.abs(a.data[i] - b.data[i])); return m; };
+      const S = window.__sgp, mx = (a, b) => { let m = 0; for (let i = 0; i < a.data.length; i++) { m = Math.max(m, Math.abs(a.data[i] - b.data[i])); } return m; };
       S.UI.togglePause(); const res = {};
       for (const cam of ['close', 'behind']) { window.__place(cam, 340); res[cam] = mx(window.__shot(true), window.__shot(false)); }
       return Object.assign(res, { saved: JSON.parse(localStorage.getItem('sgp_cam_close') || '{}').bs });
@@ -181,11 +181,11 @@ const COST = 0.15; // largest share the blur may add to drawing the world
       const R = S.Lib.data[S.Lib.meta[0].id], V = R.samples.v, dt = R.samples.dt;
       // the recording passes 340 km/h at most briefly on the autopilot; take its fastest sample, raised to 340 km/h
       let kmax = 0; for (let k = 0; k < V.length; k++) if (V[k] > V[kmax]) kmax = k;
-      const vmax = V[kmax] * 3.6; V[kmax] = Math.max(V[kmax], 340 / 3.6); if (kmax > 0) V[kmax - 1] = Math.max(V[kmax - 1], 340 / 3.6); if (kmax + 1 < V.length) V[kmax + 1] = Math.max(V[kmax + 1], 340 / 3.6);
+      const vmax = V[kmax] * 3.6; V[kmax] = Math.max(V[kmax], 340 / 3.6); if (kmax > 0) { V[kmax - 1] = Math.max(V[kmax - 1], 340 / 3.6); } if (kmax + 1 < V.length) V[kmax + 1] = Math.max(V[kmax + 1], 340 / 3.6);
       let kslow = -1; for (let k = 50; k < V.length; k++) if (V[k] * 3.6 > 120 && V[k] * 3.6 < 220) { kslow = k; break; }
       S.RP.open([R], 'menu'); S.setCamModeX('behind');
-      const mx = (a, b) => { let m = 0; for (let i = 0; i < a.data.length; i++) m = Math.max(m, Math.abs(a.data[i] - b.data[i])); return m; };
-      const at = k => { S.RP.seek(k * dt); if (S.RP.playing) S.RP.toggle(); for (let n = 0; n < 60; n++) window.__frame(); const v = W.player.v * 3.6; return { v, d: mx(window.__shot(true), window.__shot(false)) }; };
+      const mx = (a, b) => { let m = 0; for (let i = 0; i < a.data.length; i++) { m = Math.max(m, Math.abs(a.data[i] - b.data[i])); } return m; };
+      const at = k => { S.RP.seek(k * dt); if (S.RP.playing) { S.RP.toggle(); } for (let n = 0; n < 60; n++) { window.__frame(); } const v = W.player.v * 3.6; return { v, d: mx(window.__shot(true), window.__shot(false)) }; };
       const fast = at(kmax), slow = at(kslow); S.RP.close();
       return { vmax, fast, slow };
     });

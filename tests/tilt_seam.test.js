@@ -43,7 +43,7 @@ const SIZES = [[1280, 800, 1, 'behind'], [1470, 830, 2, 'behind'], [1024, 700, 1
         for (let y = bottom; y >= 0; y--) {
           let sw = 0, sx = 0, gm = 0; const r = Math.max(3, Math.round(4 * k));
           for (let q = Math.max(1, Math.round(x) - r); q <= Math.min(Wd - 2, Math.round(x) + r); q++) { const v = Math.max(0, lum(q, y) - 150); sw += v; sx += v * q; gm = Math.max(gm, Math.abs(lum(q + 1, y) - lum(q - 1, y))); }
-          if (sw < 200) break; x = sx / sw; xs.push([y, x]); sharp[y] += gm; nS[y]++;
+          if (sw < 200) { break; } x = sx / sw; xs.push([y, x]); sharp[y] += gm; nS[y]++;
         }
         for (let i = 2; i < xs.length - 2; i++) { // sharp bend: a row's step against the steps two rows away
           const d = Math.abs((xs[i + 1][1] - xs[i][1]) - ((xs[i + 2][1] - xs[i - 2][1]) / 4)) / k;
@@ -56,7 +56,7 @@ const SIZES = [[1280, 800, 1, 'behind'], [1470, 830, 2, 'behind'], [1024, 700, 1
       const N6 = Math.round(8 * k); let step = 0, stepY = 0;
       for (let y = N6; y + N6 <= bottom; y++) {
         let a = 0, na = 0, b = 0, nb = 0; for (let j = 1; j <= N6; j++) { if (SH[y - j] !== null) { a += SH[y - j]; na++; } if (SH[y + j - 1] !== null) { b += SH[y + j - 1]; nb++; } }
-        if (na < N6 / 2 || nb < N6 / 2) continue; a /= na; b /= nb; const st = Math.abs(a - b) / ((a + b) / 2);
+        if (na < N6 / 2 || nb < N6 / 2) { continue; } a /= na; b /= nb; const st = Math.abs(a - b) / ((a + b) / 2);
         if (st > step) { step = st; stepY = (y + y0) / k; }
       }
       return { lines: starts.length, worst, worstY: Math.round(worstY), step, stepY: Math.round(stepY) };

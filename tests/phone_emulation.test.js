@@ -30,7 +30,7 @@ async function runPhone(phone) {
   page.on('pageerror', e => { console.error('page error:', e.message); failures++; });
   // iPhone asks for motion access from the Go tap; the browser is told to allow it
   await page.addInitScript(() => {
-    try { localStorage.clear(); } catch (e) { }
+    try { localStorage.clear(); } catch { /* storage may be blocked */ }
     if (window.DeviceMotionEvent) DeviceMotionEvent.requestPermission = () => Promise.resolve('granted');
   });
   await page.goto(FILE);
@@ -66,14 +66,14 @@ async function runPhone(phone) {
   const sensor = await page.evaluate(() => ({ listening: window.__sgp.Touch.listening, tiltOk: window.__sgp.Touch.tiltOk }));
   check('motion: sensor access granted and listening', sensor.listening && sensor.tiltOk, sensor);
 
-  await page.waitForTimeout(200); // one frame, so the touch layer has been shown
+  await page.waitForFunction(() => !document.getElementById('touch').hidden, null, { timeout: 2000 }).catch(() => { /* the check below reports it */ });
   const visible = await page.evaluate(() => ({
     touch: !document.getElementById('touch').hidden,
     pause: !document.getElementById('touchPause').hidden,
     turn: !document.getElementById('turn').hidden,
   }));
   check('play: both touch halves and the pause button visible', visible.touch && visible.pause && !visible.turn, visible);
-  await page.waitForTimeout(400);
+  await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))); // two drawn frames
   await page.screenshot({ path: path.join(SHOTS, 'phone-' + phone.device.split(' ')[0].toLowerCase() + '-play.png') });
 
   const step = n => page.evaluate(n => { const S = window.__sgp; for (let k = 0; k < n; k++) S.simStep(S.SUB); }, n);
@@ -121,14 +121,16 @@ async function runPhone(phone) {
       await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: cx - 20 - k * 8, y: cy, id: 0 }, { x: cx + 20 + k * 8, y: cy, id: 1 }] });
     }
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-    await page.waitForTimeout(200);
+    // waiting for a zoom that must not happen: there is no event to wait for, so the time is fixed
+    await page.waitForTimeout(200); // eslint-disable-line sonarjs/no-fixed-wait-in-tests
     const pinch = await page.evaluate(() => window.visualViewport.scale);
     check('pinch: page scale stays 1', Math.abs(pinch - 1) < 0.001, { scale: pinch });
     for (let k = 0; k < 2; k++) {
       await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: width * 0.75, y: 200, id: 0 }] });
       await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
     }
-    await page.waitForTimeout(400);
+    // as above, and longer than the browser's double-tap delay
+    await page.waitForTimeout(400); // eslint-disable-line sonarjs/no-fixed-wait-in-tests
     const dbl = await page.evaluate(() => window.visualViewport.scale);
     check('double tap on the throttle half: page scale stays 1', Math.abs(dbl - 1) < 0.001, { scale: dbl });
   } else {
@@ -139,11 +141,11 @@ async function runPhone(phone) {
   // follow a resized emulated viewport, so there the check is skipped (see GDD 13 limits)
   if (!phone.portrait) { console.log('skip  portrait prompt (WebKit emulation does not change the orientation query)'); await browser.close(); return; }
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.waitForTimeout(400);
+  await page.waitForFunction(() => !document.getElementById('turn').hidden, null, { timeout: 2000 }).catch(() => { /* the check below reports it */ });
   const portrait = await page.evaluate(() => ({ turn: !document.getElementById('turn').hidden, paused: window.__sgp.W.paused }));
   check('portrait: turn prompt shown and race paused', portrait.turn && portrait.paused, portrait);
   await page.setViewportSize(desc.viewport);
-  await page.waitForTimeout(400);
+  await page.waitForFunction(() => document.getElementById('turn').hidden, null, { timeout: 2000 }).catch(() => { /* the check below reports it */ });
   check('landscape: turn prompt hidden again', await page.evaluate(() => document.getElementById('turn').hidden));
 
   await browser.close();

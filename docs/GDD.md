@@ -706,16 +706,20 @@ The eye judges speed from small things passing by. These are part of the world, 
 
 ## 14. Change process
 
-1. Create a feature branch from `main`: `git checkout -b feature/<short-name>`.
-2. **Update this GDD first** (and bump the version at the top) and commit it.
-3. Change the code in `src/`, run `python3 tools/build.py`, test, commit.
-4. Add an entry to `CHANGELOG.md`.
-5. Merge into `main` with `--no-ff` and tag `vMAJOR.MINOR.PATCH`.
-   - MINOR for features.
-   - PATCH for fixes.
-   - MAJOR for big redesigns.
+1. Create a worktree with a feature branch from `main`: `git worktree add .claude/worktrees/<name> -b feature/<short-name>`.
+2. **Update this GDD first** and commit it. Do not change the version here.
+3. Wait for approval of the design before changing the code.
+4. Change the code in `src/`, run `python3 tools/build.py`, test, commit. Feature commits add no tags, no version bump and no `CHANGELOG.md` version entry.
+5. Merge the feature branch into `dev` with `--no-ff`, through the `.claude/worktrees/dev` worktree. Feature branches never merge straight into `main`.
 
-After tagging, push `main`, the tag and the feature branch to GitHub (`p3trk/motogp`).
+**Release** (only when the owner says "Release"):
+
+1. Compare `main` and `dev`.
+2. Choose the new version: MINOR for features, PATCH for fixes, MAJOR for big redesigns.
+3. On `dev`, add the `CHANGELOG.md` entry and bump the version at the top of this GDD. Commit.
+4. Merge `dev` into `main` with `--no-ff`, then tag `vMAJOR.MINOR.PATCH` on `main`.
+
+**Push** (only when the owner says "Push"): push `main` to GitHub (`p3trk/motogp`). Tags, `dev` and feature branches are not pushed unless asked.
 
 ## 15. Deviations from real MotoGP (intentional)
 

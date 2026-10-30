@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.25.0 (unreleased, design only)
+- Design for upright bikes (GDD 11i). No code yet.
+
 ## v1.24.0 (2026-10-30)
 - Sense of speed (GDD 11h). Closer zoom at speed: zoom speed factor Behind 1.0 -> 0.5, CLOSE 0.4 -> 0.3, so the ground moves up to 60 % faster on screen at top speed. Behind ground depth 2.6 -> 2.9 (road visible ahead at 300 km/h about 148 m, was about 208 m; a deeper ground costs too much frame time, GDD 11h). Saved camera values equal to the old defaults move to the new ones.
 - Wider view above 200 km/h in Behind and CLOSE (camera distance up to 15 % shorter, tilt lowered with it so the horizon stays put). New Camera tuning sliders: Widen at speed, Vibration.

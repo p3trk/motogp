@@ -704,12 +704,42 @@ The eye judges speed from small things passing by. These are part of the world, 
   - **Limits:** WebKit here is not Safari. The pinch and double-tap checks run only in Chromium, and the portrait prompt check runs only in Chromium, because WebKit's orientation query does not follow a resized emulated viewport. Real iPhone Safari and real Android are not covered; those need Phase 2 or 3, or one manual check.
   - Added to `npm test`. The test writes nothing outside the repository (screenshots go to `shots/`).
 
+## 13a. Code scanning (SonarQube)
+
+Every commit that changes code is scanned with `sonar-scanner`. A commit that adds a new issue is stopped, the issue is reported, and it is fixed on the same branch before the commit goes in.
+
+**Server (local, no account):**
+- SonarQube Community Edition runs in a Podman container on the Mac (`sonarqube:community`, name `motogp-sonar`, port 9000, data in a Podman volume so findings and settings survive restarts). Nothing is uploaded to any outside service.
+- `sonar-scanner` is installed with Homebrew (it brings its own Java). It needs Node, which is already installed, to analyse JavaScript.
+- The access token is kept in `.sonar/token` in the repository folder. `.sonar/` and the scanner's `.scannerwork/` are excluded through `.git/info/exclude`, so they are never committed.
+- `sonar-project.properties` (committed) sets the project key `motogp`, the sources `src/`, `tests/` and `tools/`, and excludes `index.html` (built from `src/`), `node_modules/`, `saved_tracks/`, `shots/` and `.claude/`.
+
+**Pre-commit hook:**
+- `tools/hooks/pre-commit` (committed), switched on once with `git config core.hooksPath tools/hooks`. The setting is shared by the main checkout and all worktrees; a branch made before this change has no hook file, so its commits are not scanned until it includes the change.
+- Skipped when the commit changes no file under `src/`, `tests/` or `tools/` (for example GDD-only or CHANGELOG-only commits).
+- Starts the server container if it is not running and waits up to 2 minutes for it.
+- Runs `sonar-scanner` on the worktree and waits for the analysis to finish (about 30–60 s).
+- Asks the server for open issues and keeps only those on lines this commit adds or changes (from `git diff --cached`). Issues already in the code before the commit do not block it.
+- If any are left, the commit is stopped and the hook prints each one: file, line, rule, severity and message. The full list of open issues in the project is written to `shots/sonar-report.txt`.
+- If the server cannot be started, the commit is stopped with that message. `git commit --no-verify` skips the scan; it is used only when the owner says so.
+
+**Severities:** a new issue of any severity except Info stops the commit. Info issues are listed but do not stop it.
+
+**Workflow:** when the hook stops a commit, the issues are reported to the owner in the reply, fixed on the same branch, and the commit is made again. `CLAUDE.md` gets the same rule so every session follows it.
+
+**Existing issues:** the first scan of the current code is reported to the owner as a list. They do not stop commits; they are fixed in their own feature branches when the owner asks.
+
+**Limits:**
+- The Community Edition keeps one analysis per project, not one per branch. The scan from the latest commit, on any branch, replaces the previous one on the server. The hook works around this by checking only the lines of the commit being made.
+- The scan reads the files in the worktree, not only the staged versions. Changes that are not staged are scanned too.
+- The server uses about 2 GB of the Podman machine's memory while it runs.
+
 ## 14. Change process
 
 1. Create a worktree with a feature branch from `main`: `git worktree add .claude/worktrees/<name> -b feature/<short-name>`.
 2. **Update this GDD first** and commit it. Do not change the version here.
 3. Wait for approval of the design before changing the code.
-4. Change the code in `src/`, run `python3 tools/build.py`, test, commit. Feature commits add no tags, no version bump and no `CHANGELOG.md` version entry.
+4. Change the code in `src/`, run `python3 tools/build.py`, test, commit. The pre-commit hook scans the code (§13a); a commit it stops is fixed and made again. Feature commits add no tags, no version bump and no `CHANGELOG.md` version entry.
 5. Merge the feature branch into `dev` with `--no-ff`, through the `.claude/worktrees/dev` worktree. Feature branches never merge straight into `main`.
 
 **Release** (only when the owner says "Release"):

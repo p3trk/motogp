@@ -727,6 +727,27 @@ Every commit that changes JavaScript is scanned with ESLint and `eslint-plugin-s
 
 **Existing issues:** the first full scan (`npm run lint`) is reported to the owner as a summary. These issues do not stop commits; they are fixed in their own feature branches when the owner asks.
 
+**Cleanup of the existing issues (feature/lint-cleanup, 2026-10-30).** The first full scan found 355 issues. The cleanup changes how the code is written, never what the game does.
+
+| Rule | Count | Plan |
+|---|---|---|
+| `sonarjs/no-unenclosed-multiline-block` | 130 | Statements after a one-line `if` or loop go on their own line, or get braces if they belong inside. Each is checked; the samples read so far all run as intended |
+| `sonarjs/no-nested-conditional` | 65 | Nested `? :` become `if`/`else` or a small lookup |
+| `sonarjs/cognitive-complexity` | 48 | **Not changed now.** Splitting the large functions (HUD, physics, AI, replay) is a redesign with real risk; they stay listed and are done later, one area per branch, when the owner asks |
+| `no-empty`, `sonarjs/no-ignored-exceptions` | 36 | Empty `catch` blocks get a comment that says why the error is ignored (for example, storage not available) |
+| unused names, dead stores, useless assignments | 37 | Removed |
+| `sonarjs/pseudo-random` | 12 | **Rule off for `src/`.** `Math.random` is used only for camera shake, speed lines, sound noise and recording ids, not for anything that needs to be unpredictable. The race itself uses its own seeded generator |
+| `sonarjs/no-fixed-wait-in-tests` | 8 | Fixed waits in tests become waits for a condition where one exists; where a test must wait for frames to be drawn, the wait stays with a comment and the rule is turned off for that line |
+| `no-redeclare` (`Touch`) | 1 | The game's `Touch` object hides the browser's built-in `Touch`. It is renamed `TouchCtl`; the test hook keeps the name `Touch`, so the tests do not change |
+| The rest | 18 | Fixed one by one (nested functions in tests, inverted conditions, assignments inside expressions, floating point `==`, loop counters, duplicated branches) |
+
+- Expected result: about 48 issues left, all `sonarjs/cognitive-complexity`.
+- **Proof that the game does not change:** a one-off check (kept in `shots/`, not committed) loads the build from before the cleanup and the build after it, with `Math.random` fixed to the same seeded sequence in both:
+  - **Simulation:** a 10 lap race with 22 riders, a practice session and qualifying, each simulated for 3 minutes of game time. The position, speed, lean, gear, fuel and lap times of every rider must be identical in both builds.
+  - **Picture:** frames drawn with the Behind, CLOSE and Top-down cameras, and with the phone HUD, must have identical pixels in both builds.
+- `npm test` must pass, and every commit goes through the pre-commit hook.
+- Commits are split by area (`core.js`, `world.js`, `render.js`, `ui.js`, `replay.js`, tests), so a problem can be traced to one of them.
+
 **Limits:**
 - JavaScript only: the CSS and HTML in `src/head.html` and the Python in `tools/build.py` are not scanned.
 - No duplicated-code check across files, no dashboard or history; that needs the SonarQube server, which can be added later as a scan at release.

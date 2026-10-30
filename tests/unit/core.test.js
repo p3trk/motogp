@@ -16,7 +16,12 @@ function soloBike(o) {
   placeAt(g.G, b, 300, 0);
   return { ...g, b };
 }
-const run = (G, b, secs, ctl) => { for (let t = 0; t < secs; t += G.SUB) { if (ctl) ctl(b, t); G.stepBike(b, G.SUB, G.W); } };
+const run = (G, b, secs, ctl) => {
+  for (let t = 0; t < secs; t += G.SUB) {
+    if (ctl) ctl(b, t);
+    G.stepBike(b, G.SUB, G.W);
+  }
+};
 
 // --- helpers ---------------------------------------------------------------
 test('clamp: limits to the range', () => {
@@ -77,6 +82,7 @@ test('T.project: track distance and lateral offset of a point', () => {
   T.project(x, y, i + 5, out); assert.equal(out.i, i); // with a hint nearby
 });
 test('T.pt: point at a lateral offset along the normal', () => {
+  assert.deepEqual(T.pt(42, 0), [T.X[42], T.Y[42]]);
   const [x, y] = T.pt(42, 2);
   near(Math.hypot(x - T.X[42], y - T.Y[42]), 2, 1e-9);
   near((x - T.X[42]) * T.NX[42] + (y - T.Y[42]) * T.NY[42], 2, 1e-9);

@@ -34,9 +34,14 @@ function makeCtx(canvas) {
   return new Proxy(state, {
     get(t, k) {
       if (k in t || typeof k === 'symbol') return t[k];
-      return fns[k] || (fns[k] = (...a) => { t.calls.push([k, ...a]); return ret[k] ? ret[k](...a) : undefined; });
+      if (!fns[k]) fns[k] = (...a) => { t.calls.push([k, ...a]); return ret[k] ? ret[k](...a) : undefined; };
+      return fns[k];
     },
-    set(t, k, v) { t[k] = v; if (k !== 'calls') t.calls.push(['=' + k, v]); return true; }
+    set(t, k, v) {
+      t[k] = v;
+      if (k !== 'calls') t.calls.push(['=' + k, v]);
+      return true;
+    }
   });
 }
 
@@ -44,15 +49,26 @@ function makeCtx(canvas) {
 // fake DOM: enough of Element for the game, with simple selectors (tag, .class, #id, [attr], tag[attr], lists)
 // ---------------------------------------------------------------------------
 const VOID = new Set(['meta', 'link', 'input', 'br', 'img', 'hr', 'source']);
+function listen(map, t, f) {
+  if (!map[t]) map[t] = [];
+  map[t].push(f);
+}
+// one part of a compound selector: .class, #id, [attr] or [attr=value]
+function partMatches(el, p) {
+  if (p[0] === '#') return el.id === p.slice(1);
+  if (p[0] === '.') return el.classList.contains(p.slice(1));
+  const [k, v] = p.slice(1, -1).split('='), have = el.getAttribute(k);
+  return have !== null && (v === undefined || have === v.replace(/"/g, ''));
+}
 function matches(el, sel) {
-  return sel.split(',').some(s => {
-    s = s.trim(); const m = s.match(/^([a-z0-9]*)((?:[.#][\w-]+)*)((?:\[[^\]]+\])*)$/i); if (!m) return false;
-    if (m[1] && el.tagName !== m[1].toUpperCase()) return false;
-    for (const p of m[2].match(/[.#][\w-]+/g) || []) { if (p[0] === '#' ? el.id !== p.slice(1) : !el.classList.contains(p.slice(1))) return false; }
-    for (const a of m[3].match(/\[[^\]]+\]/g) || []) { const [k, v] = a.slice(1, -1).split('='); const have = el.getAttribute(k); if (have === null || (v !== undefined && have !== v.replace(/"/g, ''))) return false; }
-    return true;
+  return sel.split(',').some(one => {
+    const s = one.trim(), tag = s.match(/^[a-z0-9]*/i)[0], rest = s.slice(tag.length);
+    const parts = rest ? rest.split(/(?=[.#[])/) : [];
+    if (!parts.every(p => p[0] !== '[' || p.endsWith(']'))) return false; // not a simple selector
+    return (!tag || el.tagName === tag.toUpperCase()) && parts.every(p => partMatches(el, p));
   });
 }
+const dataKey = k => k.slice(5).replace(/-(\w)/g, (_, c) => c.toUpperCase()); // data-foo-bar -> fooBar
 class Element {
   constructor(doc, tag) {
     this.ownerDocument = doc; this.tagName = tag.toUpperCase(); this.children = []; this.parentNode = null;
@@ -65,52 +81,100 @@ class Element {
   set id(v) { this.attrs.id = String(v); }
   get className() { return [...this.classList._set].join(' '); }
   set className(v) { this.classList._set.clear(); String(v).split(/\s+/).filter(Boolean).forEach(c => this.classList._set.add(c)); }
-  setAttribute(k, v) { v = String(v); this.attrs[k] = v; if (k === 'class') this.className = v; if (k.startsWith('data-')) this.dataset[k.slice(5).replace(/-(\w)/g, (_, c) => c.toUpperCase())] = v; if (k === 'hidden') this.hidden = true; if (k === 'value') this.value = v; }
-  getAttribute(k) { if (k === 'class') return this.className || null; if (k.startsWith('data-')) { const d = this.dataset[k.slice(5).replace(/-(\w)/g, (_, c) => c.toUpperCase())]; return d === undefined ? null : d; } return k in this.attrs ? this.attrs[k] : null; }
+  setAttribute(k, v) {
+    v = String(v); this.attrs[k] = v;
+    if (k === 'class') this.className = v;
+    if (k.startsWith('data-')) this.dataset[dataKey(k)] = v;
+    if (k === 'hidden') this.hidden = true;
+    if (k === 'value') this.value = v;
+  }
+  getAttribute(k) {
+    if (k === 'class') return this.className || null;
+    if (k.startsWith('data-')) return this.dataset[dataKey(k)] ?? null;
+    return k in this.attrs ? this.attrs[k] : null;
+  }
   get firstElementChild() { return this.children[0] || null; }
   get textContent() { return this._text + this.children.map(c => c.textContent).join(''); }
   set textContent(v) { this.children = []; this._text = String(v); }
   get innerHTML() { return this._html; }
   set innerHTML(v) { this._html = String(v); this.children = []; this._text = ''; parseInto(this.ownerDocument, this, this._html); }
-  appendChild(c) { if (c.parentNode) c.remove(); c.parentNode = this; this.children.push(c); return c; }
+  appendChild(c) {
+    if (c.parentNode) c.remove();
+    c.parentNode = this; this.children.push(c); return c;
+  }
   append(...cs) { cs.forEach(c => this.appendChild(c)); }
   remove() { const p = this.parentNode; if (p) { p.children = p.children.filter(x => x !== this); this.parentNode = null; } }
-  after(c) { const p = this.parentNode; if (c.parentNode) c.remove(); c.parentNode = p; p.children.splice(p.children.indexOf(this) + 1, 0, c); }
-  before(c) { const p = this.parentNode; if (c.parentNode) c.remove(); c.parentNode = p; p.children.splice(p.children.indexOf(this), 0, c); }
+  insertAt(c, k) {
+    const p = this.parentNode;
+    if (c.parentNode) c.remove();
+    c.parentNode = p; p.children.splice(p.children.indexOf(this) + k, 0, c);
+  }
+  after(c) { this.insertAt(c, 1); }
+  before(c) { this.insertAt(c, 0); }
   *walk() { for (const c of this.children) { yield c; yield* c.walk(); } }
   querySelectorAll(sel) { return [...this.walk()].filter(e => matches(e, sel)); }
   querySelector(sel) { return this.querySelectorAll(sel)[0] || null; }
-  closest(sel) { for (let e = this; e; e = e.parentNode) if (e instanceof Element && matches(e, sel)) return e; return null; }
-  addEventListener(t, f) { (this.listeners[t] = this.listeners[t] || []).push(f); }
+  closest(sel) {
+    for (let e = this; e; e = e.parentNode) if (e instanceof Element && matches(e, sel)) return e;
+    return null;
+  }
+  addEventListener(t, f) { listen(this.listeners, t, f); }
   removeEventListener(t, f) { this.listeners[t] = (this.listeners[t] || []).filter(x => x !== f); }
   // fire an event: e gets target/currentTarget and preventDefault; returns the event
   fire(type, props) {
     const e = Object.assign({ type, target: this, defaultPrevented: false, cancelable: true, preventDefault() { this.defaultPrevented = true; } }, props);
-    for (let el = this; el; el = el.parentNode) for (const f of (el.listeners[type] || [])) { e.currentTarget = el; f(e); }
+    for (let el = this; el; el = el.parentNode) {
+      for (const f of (el.listeners[type] || [])) { e.currentTarget = el; f(e); }
+    }
     return e;
   }
   click() { return this.fire('click'); }
   focus() { this.ownerDocument.activeElement = this; }
   blur() { if (this.ownerDocument.activeElement === this) this.ownerDocument.activeElement = this.ownerDocument.body; }
-  getContext() { return this._ctx || (this._ctx = makeCtx(this)); }
+  getContext() {
+    if (!this._ctx) this._ctx = makeCtx(this);
+    return this._ctx;
+  }
   getBoundingClientRect() { const w = this.style.width ? parseFloat(this.style.width) : (this.width || 300), h = this.style.height ? parseFloat(this.style.height) : (this.height || 150); return { left: 0, top: 0, width: w, height: h, right: w, bottom: h }; }
   setPointerCapture() { } releasePointerCapture() { } scrollIntoView() { }
 }
 const unent = s => s.replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(+n)).replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
-function parseInto(doc, root, html) {
-  const re = /<!--[\s\S]*?-->|<(\/?)([a-zA-Z][\w-]*)((?:\s+[^\s=>]+(?:=(?:"[^"]*"|'[^']*'|[^\s>]+))?)*)\s*(\/?)>|([^<]+)/g;
-  let cur = root, m;
-  while ((m = re.exec(html))) {
-    if (m[5] !== undefined) { if (cur.tagName !== 'STYLE') cur._text += unent(m[5]); continue; }
-    if (!m[2]) continue;
-    const tag = m[2].toLowerCase();
-    if (m[1]) { for (let e = cur; e && e !== root; e = e.parentNode) if (e.tagName === tag.toUpperCase()) { cur = e.parentNode; break; } continue; }
-    const el = doc.createElement(tag);
-    for (const a of m[3].matchAll(/([^\s=>]+)(?:=(?:"([^"]*)"|'([^']*)'|([^\s>]+)))?/g)) el.setAttribute(a[1], unent(a[2] ?? a[3] ?? a[4] ?? ''));
-    if (tag === 'option' && el.getAttribute('value') === null) el.value = '';
-    cur.appendChild(el);
-    if (!VOID.has(tag) && !m[4]) cur = el;
+// <tag attr="v" ...> -> element appended to cur; returns the element to fill next (cur for void elements)
+function openTag(doc, cur, tok) {
+  const tag = tok.match(/^<([a-zA-Z][\w-]*)/)[1].toLowerCase(), el = doc.createElement(tag), rest = tok.slice(tag.length + 1, -1);
+  for (const a of rest.matchAll(/([^\s=/]+)(?:=(?:"([^"]*)"|'([^']*)'|(\S+)))?/g)) el.setAttribute(a[1], unent(a[2] ?? a[3] ?? a[4] ?? ''));
+  if (tag === 'option' && el.getAttribute('value') === null) el.value = '';
+  cur.appendChild(el);
+  return VOID.has(tag) || rest.endsWith('/') ? cur : el;
+}
+// </tag> -> the parent of the nearest open element with that tag
+function closeTag(cur, root, tag) {
+  for (let e = cur; e && e !== root; e = e.parentNode) if (e.tagName === tag) return e.parentNode;
+  return cur;
+}
+// markup split into comments (dropped), tags and text
+function* tokens(html) {
+  let i = 0;
+  while (i < html.length) {
+    if (html.startsWith('<!--', i)) { const j = html.indexOf('-->', i); i = j < 0 ? html.length : j + 3; continue; }
+    const j = html[i] === '<' ? html.indexOf('>', i) + 1 : html.indexOf('<', i), end = j <= 0 ? html.length : j;
+    yield html.slice(i, end);
+    i = end;
   }
+}
+function parseInto(doc, root, html) {
+  let cur = root;
+  for (const tok of tokens(html)) {
+    if (tok[0] !== '<') { if (cur.tagName !== 'STYLE') cur._text += unent(tok); }
+    else if (tok[1] === '/') cur = closeTag(cur, root, tok.slice(2, -1).trim().toUpperCase());
+    else if (/^<[a-zA-Z]/.test(tok)) cur = openTag(doc, cur, tok);
+  }
+}
+// an event for listeners on the window or the document; returns it, with defaultPrevented
+function fireAll(list, props) {
+  const e = Object.assign({ defaultPrevented: false, cancelable: true, repeat: false, preventDefault() { this.defaultPrevented = true; } }, props);
+  for (const f of list || []) f(e);
+  return e;
 }
 function makeDocument() {
   const doc = { listeners: {}, visibilityState: 'visible', fonts: undefined };
@@ -120,8 +184,8 @@ function makeDocument() {
   doc.getElementById = id => doc.documentElement.querySelectorAll('#' + id)[0] || null;
   doc.querySelectorAll = sel => doc.documentElement.querySelectorAll(sel);
   doc.querySelector = sel => doc.documentElement.querySelector(sel);
-  doc.addEventListener = (t, f) => { (doc.listeners[t] = doc.listeners[t] || []).push(f); };
-  doc.fire = (type, props) => { const e = Object.assign({ type, defaultPrevented: false, cancelable: true, target: doc.body, preventDefault() { this.defaultPrevented = true; } }, props); for (const f of doc.listeners[type] || []) f(e); return e; };
+  doc.addEventListener = (t, f) => listen(doc.listeners, t, f);
+  doc.fire = (type, props) => fireAll(doc.listeners[type], Object.assign({ type, target: doc.body }, props));
   const head = read('head.html'), body = head.slice(head.indexOf('</style>') + 8);
   parseInto(doc, doc.body, body);
   return doc;
@@ -133,7 +197,10 @@ function makeStorage(init) {
   return {
     map: m, full: false,
     getItem(k) { return m.has(k) ? m.get(k) : null; },
-    setItem(k, v) { if (this.full) { const e = new Error('QuotaExceededError'); e.name = 'QuotaExceededError'; throw e; } m.set(k, String(v)); },
+    setItem(k, v) {
+      if (this.full) { const e = new Error('QuotaExceededError'); e.name = 'QuotaExceededError'; throw e; }
+      m.set(k, String(v));
+    },
     removeItem(k) { m.delete(k); }, clear() { m.clear(); },
     get length() { return m.size; }, key(i) { return [...m.keys()][i] ?? null; }
   };
@@ -147,7 +214,8 @@ let SOURCE = null;
 function source() {
   if (SOURCE) return SOURCE;
   const parts = ORDER.map(read); parts[0] = parts[0].replace('__TRACK__', read('track.txt'));
-  return (SOURCE = parts.join(''));
+  SOURCE = parts.join('');
+  return SOURCE;
 }
 
 // opts: storage {key: value}, width, height, dpr, coarse (phone pointer), portrait, seed, boot (default true)
@@ -163,18 +231,29 @@ function load(opts = {}) {
     // run due timers (setTimeout once, setInterval as often as due)
     advance(ms) {
       const end = now + ms;
-      for (; ;) { const t = timers.filter(x => !x.dead && x.at <= end).sort((a, b) => a.at - b.at)[0]; if (!t) break; now = t.at; if (t.every) t.at += t.every; else t.dead = true; t.fn(); }
+      for (; ;) {
+        const t = timers.filter(x => !x.dead && x.at <= end).sort((a, b) => a.at - b.at)[0];
+        if (!t) break;
+        now = t.at;
+        if (t.every) t.at += t.every; else t.dead = true;
+        t.fn();
+      }
       now = end;
     },
     // window events: env.fireWin('keydown', { code: 'KeyC' })
-    fireWin(type, props) { const e = Object.assign({ type, target: doc.body, defaultPrevented: false, cancelable: true, repeat: false, preventDefault() { this.defaultPrevented = true; } }, props); for (const f of winL[type] || []) f(e); return e; },
+    fireWin: (type, props) => fireAll(winL[type], Object.assign({ type, target: doc.body }, props)),
     ctxOf: id => doc.getElementById(id).getContext('2d')
   };
-  const math = {}; for (const k of Object.getOwnPropertyNames(Math)) math[k] = Math[k]; math.random = () => env.rand();
+  const math = {};
+  for (const k of Object.getOwnPropertyNames(Math)) math[k] = Math[k];
+  math.random = () => env.rand();
   const win = {
     innerWidth: o.width, innerHeight: o.height, devicePixelRatio: o.dpr,
-    addEventListener(t, f) { (winL[t] = winL[t] || []).push(f); }, removeEventListener() { },
-    matchMedia: q => env.mq[q] || (env.mq[q] = { matches: false, addEventListener() { } }),
+    addEventListener(t, f) { listen(winL, t, f); }, removeEventListener() { },
+    matchMedia: q => {
+      if (!env.mq[q]) env.mq[q] = { matches: false, addEventListener() { } };
+      return env.mq[q];
+    },
     getSelection: () => ({ rangeCount: 0, removeAllRanges() { } }),
     screen: { orientation: { angle: 0 } }, location: { protocol: 'file:' },
     setTimeout: (fn, ms) => { timers.push({ id: ++tid, fn, at: now + (ms || 0) }); return tid; },
@@ -186,7 +265,12 @@ function load(opts = {}) {
     Path2D: class { constructor() { this.ops = []; } }, DOMMatrix: class { scale(k) { this.k = k; return this; } },
     DeviceMotionEvent: undefined, btoa, atob, console, Math: math,
     // late-bound: tests set env.idb / env.fetch after loading
-    indexedDB: { open: (...a) => { if (!env.idb) throw new Error('no indexedDB'); return env.idb.open(...a); } },
+    indexedDB: {
+      open: (...a) => {
+        if (!env.idb) throw new Error('no indexedDB');
+        return env.idb.open(...a);
+      }
+    },
     fetch: (...a) => env.fetch(...a),
     localStorage: env.ls, document: doc
   };
@@ -199,7 +283,10 @@ function load(opts = {}) {
   const names = inventoryNames();
   // the page globals the game uses are passed in as parameters (a with-scope made every lookup 3x slower)
   const code = '(()=>{\n' + source() + '\n;__expose(n => eval(n), (__n, __v) => eval(__n + " = __v"));\n})();';
+  // the code run here is the game's own src/, joined like tools/build.py does; eval gives the tests its top-level names
+  // eslint-disable-next-line sonarjs/code-eval
   const run = new Function(...GLOBALS, '__expose', code);
+  // eslint-disable-next-line sonarjs/code-eval
   run(...GLOBALS.map(k => win[k]), (get, set) => { api = { get, set }; });
   const G = new Proxy({}, {
     get: (t, k) => typeof k === 'symbol' ? undefined : api.get(k),
@@ -217,20 +304,26 @@ let INV = null;
 function inventoryNames() {
   if (INV) return INV;
   const list = [], top = new Set();
+  const add = (name, file, k) => list.push({ name, file, line: k + 1 });
   for (const file of ORDER) {
-    const lines = read(file).split('\n'); let obj = null;
-    lines.forEach((ln, k) => {
-      let m;
-      if ((m = ln.match(/^(?:async )?function\*? ?([\w$]+)\s*\(/))) { list.push({ name: m[1], file, line: k + 1 }); top.add(m[1]); }
-      else if ((m = ln.match(/^const ([\w$]+) = (?:\([^)]*\)|[\w$]+) =>/))) { list.push({ name: m[1], file, line: k + 1 }); top.add(m[1]); }
-      if ((m = ln.match(/^const ([\w$]+) = \{/)) && !/\};?\s*(\/\/.*)?$/.test(ln)) obj = m[1];
+    let obj = null; // the top-level object literal being read
+    read(file).split('\n').forEach((ln, k) => {
+      const fn = ln.match(/^(?:async )?function\*? ?([\w$]+)\s*\(/) || ln.match(/^const ([\w$]+) = (?:\([^)]*\)|[\w$]+) =>/);
+      if (fn) { add(fn[1], file, k); top.add(fn[1]); }
+      const open = ln.match(/^const ([\w$]+) = \{/), meth = ln.match(/^ {2}(?:async )?([\w$]+)\([^)]*\) \{/);
+      if (open && !/\};?\s*(\/\/.*)?$/.test(ln)) obj = open[1];
       else if (obj && /^\};?/.test(ln)) obj = null;
-      else if (obj && (m = ln.match(/^  (?:async )?([\w$]+)\([^)]*\) \{/))) list.push({ name: obj + '.' + m[1], file, line: k + 1 });
-      if (file === 'core.js' && (m = ln.match(/^\s+(T|PIT|LL)\.([\w$]+) = (?:function|\(|[\w$]+ =>)/))) list.push({ name: (m[1] === 'T' ? 'T.' : 'T.' + m[1] + '.') + m[2], file, line: k + 1 });
+      else if (obj && meth) add(obj + '.' + meth[1], file, k);
+      const tr = file === 'core.js' && ln.match(/^\s+(T|PIT|LL)\.([\w$]+) = (?:function|\(|[\w$]+ =>)/);
+      if (tr) add((tr[1] === 'T' ? 'T.' : 'T.' + tr[1] + '.') + tr[2], file, k);
     });
   }
-  for (const ln of source().split('\n')) { const m = ln.match(/^(?:const|let) (.*)/); if (m) for (const d of m[1].matchAll(/(?:^|,\s*)([\w$]+)\s*=/g)) top.add(d[1]); }
-  return (INV = { list, top });
+  for (const ln of source().split('\n')) {
+    const m = ln.match(/^(?:const|let) (.*)/);
+    if (m) for (const d of m[1].matchAll(/(?:^|,\s*)([\w$]+)\s*=/g)) top.add(d[1]);
+  }
+  INV = { list, top };
+  return INV;
 }
 
 // helpers for tests

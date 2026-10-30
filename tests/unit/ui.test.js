@@ -27,14 +27,17 @@ const curve = (G, name) => G.T.corners.find(c => c.name === name);
 test('HUD.reset, HUD.msg, HUD.ticker, HUD.sector, HUD.lap: HUD state', () => {
   const { G } = load(); const H = G.HUD;
   H.msg('A', 'b', '#fff', 2, true); assert.deepEqual({ ...H.m }, { t: 'A', sub: 'b', col: '#fff', dur: 2, age: 0, hold: true });
-  for (const t of ['1', '2', '3', '4']) H.ticker(t); assert.deepEqual(H.tick.map(q => q.t), ['4', '3', '2']);
+  for (const t of ['1', '2', '3', '4']) H.ticker(t);
+  assert.deepEqual(H.tick.map(q => q.t), ['4', '3', '2']);
   H.sector(1, 40, 41); assert.equal(H.secFlash[1].pb, true); H.sector(0, 42, 41); assert.equal(H.secFlash[0].pb, false); H.sector(2, 42, 0); assert.equal(H.secFlash[2].pb, true);
   H.lap(130, true, false, false); assert.equal(H.lapFlash.t, 130);
   H.shake = 1; H.reset(); assert.equal(H.m, null); assert.equal(H.tick.length, 0); assert.equal(H.lapFlash, null); assert.equal(H.shake, 0);
 });
 test('HUD.step: messages and flashes age out; a held message waits for the first input', () => {
   const { G, b } = play('practice'); const H = G.HUD;
-  H.msg('X', '', '#fff', 2, true); b.trainHold = true; for (let k = 0; k < 10; k++) H.step(0.5); assert.ok(H.m, 'held');
+  H.msg('X', '', '#fff', 2, true); b.trainHold = true;
+  for (let k = 0; k < 10; k++) H.step(0.5);
+  assert.ok(H.m, 'held');
   b.trainHold = false; H.step(1.5); assert.equal(H.m, null);
   H.ticker('t'); H.lap(1, false, false, false); H.shake = 1; H.step(5.5); assert.equal(H.lapFlash, null); assert.equal(H.shake, 0); H.step(1); assert.equal(H.tick.length, 0);
 });
@@ -81,7 +84,7 @@ test('drawPhoneTop: lap clock, next corner and lap flash on phones', () => {
   assert.ok(texts(e).includes('P12  LAP 1/10') && texts(e).includes('PEN +2.0'));
 });
 test('drawHUD: practice dashboard, fuel panel, timing, corner name, lap list', () => {
-  const { G, b } = play('practice'); const c = rec(G); G.drawHUD(1 / 60); const t = texts(c);
+  const { G } = play('practice'); const c = rec(G); G.drawHUD(1 / 60); const t = texts(c);
   for (const s of ['PRACTICE', 'KM/H', 'FUEL', 'ENGINE', 'YOUR LAPS', 'LAP 1', '22.0 L']) assert.ok(t.includes(s), s);
   assert.ok(t.some(x => x.startsWith('Press W, S, A or D to go')), 'grid hold hint'); inScreen(G, c);
 });
@@ -92,7 +95,7 @@ test('drawHUD: race position, start lights, pit stop panel and messages', () => 
   assert.ok(texts(d).includes('PIT STOP') && texts(d).includes('2.3 s') && texts(d).includes('BOX')); inScreen(G, d);
 });
 test('drawHUD: wrong way after a second, name tags for riders nearby', () => {
-  const { G, b, W, T } = play('sprint'); W.phase = 'run'; for (const x of W.bikes) x.held = false;
+  const { G, b, W } = play('sprint'); W.phase = 'run'; for (const x of W.bikes) x.held = false;
   const o = W.bikes[1]; placeAt(G, b, 800, 0); placeAt(G, o, 820, 0); G.updateCamera(0.01);
   b.h += Math.PI; b.v = 10; let c; for (let k = 0; k < 70; k++) { c = rec(G); G.drawHUD(1 / 60); }
   assert.ok(texts(c).includes('WRONG WAY')); assert.ok(texts(c).includes('#' + o.num + ' ' + o.short), 'name tag');
@@ -109,7 +112,7 @@ test('drawReplayHUD: gap panel, followed rider, speed and lean', () => {
 
 // --- speed guide and corner countdown ----------------------------------------
 test('guideSpeed: 96 % of the ideal speed', () => {
-  const { G } = load(); near(G.guideSpeed(123), G.T.VP[123] * 0.96, 1e-12);
+  const { G } = load(); assert.equal(G.guideSpeed(123), G.T.VP[123] * 0.96);
 });
 test('nextBrake: the next apex slower than the bike, null when there is none', () => {
   const { G, b } = play('practice'); const st = curve(G, 'Stowe');
@@ -298,7 +301,7 @@ test('UI.renderRecords: saved laps and bests, or a hint when there are none', ()
   assert.match($('records').textContent, /Practice best2:10\.500/); assert.match($('records').textContent, /40\.00 \/ 45\.00 \/ 45\.50/); assert.equal($('btnClearRec').hidden, false);
 });
 test('UI.trainSpot: 350 m before the braking zone', () => {
-  const { G } = load(); const z = G.T.zones[1]; near(G.UI.trainSpot(z), G.T.wrapS(z.zi * G.T.DS - 350), 1e-9);
+  const { G } = load(); const z = G.T.zones[1]; assert.equal(G.UI.trainSpot(z), G.T.wrapS(z.zi * G.T.DS - 350));
 });
 test('UI.initTraining, UI.renderTraining: corner list, map pick and the info line', () => {
   const { G, env } = load(); const $ = id => env.doc.getElementById(id), o = G.UI.opts;

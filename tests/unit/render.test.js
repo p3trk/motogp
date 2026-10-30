@@ -55,7 +55,7 @@ test('camera storage on load: saved values kept, old defaults moved, the 1.13 Cl
 
 // --- layers, textures, geometry, scenery ------------------------------------
 test('tiltP: camera distance, shorter when the view widens at speed', () => {
-  const { G } = load(); G.CAM.w = 0; near(G.tiltP(), G.TILT.p * G.VH, 1e-9);
+  const { G } = load(); G.CAM.w = 0; assert.equal(G.tiltP(), G.TILT.p * G.VH);
   G.CAM.w = 1; near(G.tiltP(), G.TILT.p * G.VH * (1 - G.TILT.wd), 1e-9);
 });
 test('tiltA: the tilt is lowered with the distance, so the horizon stays put', () => {
@@ -130,13 +130,15 @@ test('updateCamera: follows the bike, zooms out with speed, widens above 200 km/
   const slow = riding(100), fast = riding(340);
   near(fast.G.CAM.x, fast.b.x, 1e-9); assert.ok(fast.G.CAM.ppm < slow.G.CAM.ppm);
   assert.equal(slow.G.CAM.w, 0); assert.ok(fast.G.CAM.w > 0.95);
-  const off = riding(340); off.G.UI.opts.fx = 'off'; for (let k = 0; k < 200; k++) off.G.updateCamera(1 / 60); assert.ok(off.G.CAM.w < 0.01);
+  const off = riding(340); off.G.UI.opts.fx = 'off';
+  for (let k = 0; k < 200; k++) off.G.updateCamera(1 / 60);
+  assert.ok(off.G.CAM.w < 0.01);
   const top = riding(200, 'chase'); assert.ok(Math.hypot(top.G.CAM.x - top.b.x, top.G.CAM.y - top.b.y) > 10, 'Top-down looks ahead');
   const { G } = riding(200); G.W.player.v = 0; G.updateCamera(0.1); assert.ok(G.CAM.dec > 5, 'deceleration tracked');
 });
 test('worldToCanvas, canvasToWorld: inverse transforms around the camera', () => {
   const { G } = riding(150); const C = G.CAM;
-  const [cx, cy] = G.worldToCanvas(C.x, C.y); near(cx, G.RW * C.ax, 1e-9); near(cy, G.RH * C.ay, 1e-9);
+  assert.deepEqual(G.worldToCanvas(C.x, C.y), [G.RW * C.ax, G.RH * C.ay]);
   const [wx, wy] = G.canvasToWorld(...G.worldToCanvas(C.x + 13, C.y - 7)); near(wx, C.x + 13, 1e-9); near(wy, C.y - 7, 1e-9);
 });
 test('worldToScreen: the perspective of the tilted view; plain in Top-down', () => {
@@ -180,7 +182,7 @@ test('drawWorldLayer: tiles, bikes, ghosts faded, speed guide in practice', () =
   G.drawWorldLayer(Ly, 0, 0);
   const spr = G.bikeSprite(b.team, b.num); assert.ok(ops(c, 'drawImage').some(o => o[1] === spr.c), 'the player bike');
   assert.ok(ops(c, 'stroke').length > 100, 'speed guide segments');
-  assert.ok(c.calls.some(o => o[0] === '=globalAlpha' && o[1] === 0.42), 'ghost alpha');
+  assert.ok(c.calls.some(o => o[0] === '=globalAlpha' && Math.abs(o[1] - 0.42) < 1e-12), 'ghost alpha');
 });
 test('drawTrackPaint: start line, pit markings, braking boards, Long Lap and corner names', () => {
   const { G } = load(); const c = rec(G); G.drawTrackPaint(all);

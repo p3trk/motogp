@@ -87,11 +87,12 @@ test('recStart: the saved start, or one guessed for old files', () => {
 });
 test('recLaunch: the last standing sample before the bike moves', () => {
   const { G } = load(); const R = makeRec(G, { stand: 2, laps: 1 });
-  near(G.recLaunch(R, 0), 1.9, 1e-9); near(G.recLaunch(R, 5), 5, 1e-9, 'already moving');
+  near(G.recLaunch(R, 0), 1.9, 1e-9); assert.equal(G.recLaunch(R, 5), 5, 'already moving');
   near(G.recLaunch(makeRec(G, { v: 0.1, laps: 0, end: 3 }), 0.5), 0.5, 1e-9, 'never moves');
 });
 test('recTimeAt: when the lap passes a track distance', () => {
   const { G } = load(); const R = makeRec(G, { v: 60, laps: 2 }), l = R.laps[1];
+  assert.ok(G.recTimeAt(R, l, 600) < G.recTimeAt(R, l, 1200), 'further along the lap is later');
   near(G.recTimeAt(R, l, 600), l.start + 10, 0.05);
   near(G.recTimeAt(R, l, G.T.L - 1), l.start + (G.T.L - 1) / 60, 0.05);
 });
@@ -227,7 +228,7 @@ test('recAt: smooth position, speed and track distance at any time', () => {
   const q = G.recAt(R, 10.05);
   near(q.v, 60, 1e-9); near(q.p, (S.p[100] + S.p[101]) / 2, 1e-9);
   near(Math.hypot(q.x - (S.x[100] + S.x[101]) / 2, q.y - (S.y[100] + S.y[101]) / 2), 0, 0.3);
-  near(G.recAt(R, -5).p, S.p[0], 1e-9); near(G.recAt(R, 1e6).p, S.p.at(-1), 1e-9);
+  assert.equal(G.recAt(R, -5).p, S.p[0]); near(G.recAt(R, 1e6).p, S.p.at(-1), 1e-9);
 });
 test('bestPool: own valid laps, autopilot laps only when there are no others', () => {
   const { G } = load();
@@ -258,7 +259,7 @@ test('Ghost.place: pose from a sample, brake light when slowing', () => {
 });
 test('Ghost.step, Ghost.stepPractice: ghosts stand until the first input, then ride from the line', () => {
   const g = load(); const R = makeRec(g.G, { id: 'li', v: 60 });
-  const { G, W, b } = session('practice', { ghosts: [R] }); const gh = W.ghosts[0];
+  const { G, W } = session('practice', { ghosts: [R] }); const gh = W.ghosts[0];
   G.Ghost.step(); assert.equal(gh.show, false, 'line ghost waits for a line crossing');
   W.startT = 0; W.lineT = 10; W.time = 15; G.Ghost.step();
   assert.equal(gh.show, true); near(gh.s, G.T.wrapS(G.recAt(R, gh.best.start + 5).p), 1e-6);
@@ -280,7 +281,7 @@ test('Ghost.stepRace, Ghost.raceSample: a race ghost rides its race and finishes
 test('Ghost.raceSample: a practice recording loops its laps from the line', () => {
   const g = load(); const R = makeRec(g.G, { v: 60, laps: 2 });
   const { G, T } = session('sprint'); const gh = G.makeGhost(R), lt = R.laps[0].time;
-  near(G.Ghost.raceSample(gh, 10).p, 600, 1); near(G.Ghost.raceSample(gh, lt + 10).p, T.L + 600, 1);
+  near(G.Ghost.raceSample(gh, 10).p, 600, 1); assert.ok(G.Ghost.raceSample(gh, lt + 10).p > T.L); near(G.Ghost.raceSample(gh, lt + 10).p, T.L + 600, 1);
   near(G.Ghost.raceSample(gh, 2 * lt + 10).p, 2 * T.L + 600, 1, 'second time round the chain');
 });
 

@@ -98,7 +98,7 @@ test('setupSession: races have 22 riders on the grid, laps and fuel', () => {
   const s = session('sprint', { fuelPct: 0.5, gridPos: 'pole' }), W = s.W;
   assert.equal(W.bikes.length, 22); assert.equal(W.totalLaps, 10); assert.equal(W.phase, 'grid');
   assert.ok(W.bikes.every(b => b.held && b.gridCross)); assert.equal(s.b.grid, 1); assert.equal(s.b.fuel, 11);
-  assert.ok(W.bikes.filter(b => !b.isPlayer).every(b => b.fuel === 10 * s.G.PHYS.lapFuel + 0.6));
+  assert.ok(W.bikes.filter(b => !b.isPlayer).every(b => Math.abs(b.fuel - (10 * s.G.PHYS.lapFuel + 0.6)) < 1e-9));
   assert.equal(session('gp').W.totalLaps, 20);
   const teams = {}; for (const b of W.bikes) teams[b.team] = (teams[b.team] || 0) + 1;
   assert.ok(Object.values(teams).every(n => n === 2), 'two riders per team');
@@ -179,7 +179,7 @@ test('startMoment: lap 1 timed from the first input on the grid; the recording l
   assert.equal(t.b.lapStartT, 0, 'curve training: no lap timed from the spot');
 });
 test('playerControl: keys, touch halves, tilt, grid and pit limiter', () => {
-  const { G, W, b } = session('practice'); const K = G.Input.k, c = b.ctl, dt = 0.05;
+  const { G, b } = session('practice'); const K = G.Input.k, c = b.ctl, dt = 0.05;
   K.KeyW = true; G.playerControl(b, dt); near(c.thr, 0.35, 1e-9);
   K.KeyW = false; K.KeyS = true; G.playerControl(b, dt); near(c.brk, 0.4, 1e-9); assert.equal(c.thr, 0);
   K.KeyS = false; K.KeyA = true; G.playerControl(b, dt); assert.equal(c.steer, -1); near(c.leanT, -G.PHYS.maxLean, 1e-9);
@@ -215,7 +215,7 @@ test('pitWall: the pit wall cannot be crossed in the flat part of the lane', () 
   const { G, b, T } = session('practice'), P = T.PIT, s = (P.flatIn + P.flatOut) / 2;
   placeAt(G, b, s, P.wallD + 0.3); b.v = 10;
   G.pitWall(b, P.wallD - 1);
-  near(b.d, P.wallD - 0.45, 1e-9);
+  assert.equal(b.d, P.wallD - 0.45);
   placeAt(G, b, T.L / 2, P.wallD + 0.3); G.pitWall(b, P.wallD - 1); near(b.d, P.wallD + 0.3, 1e-9, 'not judged away from the pits');
 });
 test('pitLogic: pit lane, limiter zone and the stop in the box', () => {
@@ -285,7 +285,7 @@ test('sector: sector times and the best of each', () => {
 
 // --- track limits (GDD 6a) -------------------------------------------------
 test('overLimit: run-off, gravel and grass count; kerbs, the pit strip and the Long Lap do not', () => {
-  const { G, W, b, T, SURF } = session('sprint');
+  const { G, b, T, SURF } = session('sprint');
   const at = (surf, s, d) => { b.surf = surf; b.s = s; b.d = d; return G.overLimit(b); };
   assert.equal(at(SURF.GRAVEL, 1000, 20), true); assert.equal(at(SURF.GRASS, 1000, -20), true);
   assert.equal(at(SURF.KERB, 1000, 9), false); assert.equal(at(SURF.ASPH, 1000, 0), false);
@@ -294,7 +294,7 @@ test('overLimit: run-off, gravel and grass count; kerbs, the pit strip and the L
   assert.equal(at(SURF.RUN, LL.sM, LL.sg * LL.off(LL.sM)), false);
 });
 test('trackLimits: practice, beyond the kerb makes the lap invalid', () => {
-  const { G, W, b, SURF } = session('practice'); Object.assign(b, { trainHold: false, outLap: false });
+  const { G, b, SURF } = session('practice'); Object.assign(b, { trainHold: false, outLap: false });
   b.surf = SURF.GRAVEL; b.s = 1000; b.d = 20; G.trackLimits(b);
   assert.equal(b.lapInv, true); assert.equal(G.HUD.m.sub, 'Track limits');
   b.surf = SURF.ASPH; b.d = 0; G.trackLimits(b); assert.equal(b.offT, -1); assert.equal(b.pen, 0);

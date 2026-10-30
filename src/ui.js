@@ -575,12 +575,12 @@ const Touch = {
 };
 const $ = id => document.getElementById(id);
 const UI = {
-  state: 'menu', opts: { mode: 'sprint', trans: 'manual', controls: 'auto', side: 'brk', tilt: 'low', aids: 'on', ai: 'pro', cam: 'behind', guide: 'on', blur: 'on', train: 'on', trainS: -1, trainV: -1, fuel: 100, grid: 'mid', name: 'Petr', num: 25, team: 2 },
+  state: 'menu', opts: { mode: 'sprint', trans: 'manual', controls: 'auto', side: 'brk', tilt: 'low', aids: 'on', ai: 'pro', cam: 'behind', guide: 'on', blur: 'on', fx: 'on', train: 'on', trainS: -1, trainV: -1, fuel: 100, grid: 'mid', name: 'Petr', num: 25, team: 2 },
   init() {
     try { const s = JSON.parse(localStorage.getItem('sgp_opts') || 'null'); if (s) { if (!CAM_ORDER.includes(s.cam)) delete s.cam; if (!s.trainDef) delete s.train; Object.assign(this.opts, s); } this.opts.trainDef = 1; } catch (e) { }
     const sel = $('optTeam'); TEAMS.forEach((t, k) => { const o = document.createElement('option'); o.value = k; o.textContent = t.name; sel.appendChild(o); });
     document.querySelectorAll('.mode').forEach(m => m.addEventListener('click', () => { this.opts.mode = m.dataset.mode; this.sync(); }));
-    for (const [id, key] of [['optTrans', 'trans'], ['optAids', 'aids'], ['optAI', 'ai'], ['optCam', 'cam'], ['optGuide', 'guide'], ['optBlur', 'blur'], ['optTrain', 'train'], ['optCtl', 'controls'], ['optSide', 'side'], ['optTilt', 'tilt']]) $(id).querySelectorAll('button').forEach(bt => bt.addEventListener('click', () => { this.opts[key] = bt.dataset.v; this.sync(); }));
+    for (const [id, key] of [['optTrans', 'trans'], ['optAids', 'aids'], ['optAI', 'ai'], ['optCam', 'cam'], ['optGuide', 'guide'], ['optBlur', 'blur'], ['optFx', 'fx'], ['optTrain', 'train'], ['optCtl', 'controls'], ['optSide', 'side'], ['optTilt', 'tilt']]) $(id).querySelectorAll('button').forEach(bt => bt.addEventListener('click', () => { this.opts[key] = bt.dataset.v; this.sync(); }));
     $('optFuel').addEventListener('input', e => { this.opts.fuel = +e.target.value; this.sync(); });
     $('optGrid').addEventListener('change', e => { this.opts.grid = e.target.value; });
     $('optTeam').addEventListener('change', e => { this.opts.team = +e.target.value; });
@@ -626,7 +626,7 @@ const UI = {
   sync() {
     const o = this.opts;
     document.querySelectorAll('.mode').forEach(m => m.setAttribute('aria-pressed', String(m.dataset.mode === o.mode)));
-    for (const [id, key] of [['optTrans', 'trans'], ['optAids', 'aids'], ['optAI', 'ai'], ['optCam', 'cam'], ['optGuide', 'guide'], ['optBlur', 'blur'], ['optTrain', 'train'], ['optCtl', 'controls'], ['optSide', 'side'], ['optTilt', 'tilt']]) $(id).querySelectorAll('button').forEach(bt => bt.setAttribute('aria-pressed', String(bt.dataset.v === o[key])));
+    for (const [id, key] of [['optTrans', 'trans'], ['optAids', 'aids'], ['optAI', 'ai'], ['optCam', 'cam'], ['optGuide', 'guide'], ['optBlur', 'blur'], ['optFx', 'fx'], ['optTrain', 'train'], ['optCtl', 'controls'], ['optSide', 'side'], ['optTilt', 'tilt']]) $(id).querySelectorAll('button').forEach(bt => bt.setAttribute('aria-pressed', String(bt.dataset.v === o[key])));
     $('optFuel').value = o.fuel; $('optGrid').value = o.grid; $('optTeam').value = o.team; $('optName').value = o.name; $('optNum').value = o.num;
     const laps = o.mode === 'gp' ? 20 : 10; const L = PHYS.tank * o.fuel / 100; const range = L / PHYS.lapFuel;
     $('optFuelV').textContent = L.toFixed(1) + ' L';
@@ -893,7 +893,7 @@ function frame(now) {
     if (lerpPose) for (const b of W.bikes.concat(W.ghosts)) if (b.px !== undefined && !b.crashed) { saved.push([b, b.x, b.y, b.h]); b.x = b.px + (b.x - b.px) * al; b.y = b.py + (b.y - b.py) * al; b.h = b.ph + angWrap(b.h - b.ph) * al; }
     updateCamera((UI.state === 'play' && !W.paused) || UI.state === 'replay' ? dt : 0.0001); drawWorld();
     ctx = hudCtx; ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, hcv.width, hcv.height);
-    try { if (UI.state === 'play') drawHUD(dt); else if (UI.state === 'replay') drawReplayHUD(); } finally { ctx = mainCtx; for (const [b, x, y, h] of saved) { b.x = x; b.y = y; b.h = h; } }
+    try { drawSpeedLines(dt); if (UI.state === 'play') drawHUD(dt); else if (UI.state === 'replay') drawReplayHUD(); } finally { ctx = mainCtx; for (const [b, x, y, h] of saved) { b.x = x; b.y = y; b.h = h; } }
   }
   Sound.update(UI.state === 'play' ? W.player : null);
   requestAnimationFrame(frame);
@@ -911,5 +911,5 @@ function boot() {
   requestAnimationFrame(t => { last = t; requestAnimationFrame(frame); });
   setInterval(() => { if (UI.state === 'menu') { for (let k = 0; k < 4; k++) simStep(SUB); } }, 1000 / 30);
 }
-window.__sgp = { Touch, tiltProjectX: draw => { for (const Ly of LAYERS) { const g = Ly.g; g.setTransform(Ly.dpr, 0, 0, Ly.dpr, 0, 0); g.translate(-Ly.x0, -Ly.y0); draw(g, RW, RH); } projectTilted(); return { VW, VH, RW, RH }; }, worldToScreenX: (x, y) => worldToScreen(x, y), worldToCanvasX: (x, y) => worldToCanvas(x, y), frameX: t => frame(t), setCamModeX: m => setCamMode(m), CAM, RP, Rec, Lib, Ghost, W, T, PHYS, Input, FX, Records, completeLapX: b => completeLap(b), trackLimitsX: b => trackLimits(b), longLapX: b => longLap(b), applyDropX: b => applyDrop(b), limitRefX: (s0, s1) => limitRef(s0, s1), stepBikeX: (b, dt) => stepBike(b, dt, W), SURF, drawWorldX: () => drawWorld(), speedBlurX: () => speedBlur(), camNameX: () => TILT_CAM, setupSession, simStep, standings, UI, SUB, TILT, setAIReal: v => { AI_REAL = v; } };
+window.__sgp = { Touch, tiltProjectX: draw => { for (const Ly of LAYERS) { const g = Ly.g; g.setTransform(Ly.dpr, 0, 0, Ly.dpr, 0, 0); g.translate(-Ly.x0, -Ly.y0); draw(g, RW, RH); } projectTilted(); return { VW, VH, RW, RH }; }, worldToScreenX: (x, y) => worldToScreen(x, y), worldToCanvasX: (x, y) => worldToCanvas(x, y), frameX: t => frame(t), setCamModeX: m => setCamMode(m), CAM, RP, Rec, Lib, Ghost, W, T, PHYS, Input, FX, Records, completeLapX: b => completeLap(b), trackLimitsX: b => trackLimits(b), longLapX: b => longLap(b), applyDropX: b => applyDrop(b), limitRefX: (s0, s1) => limitRef(s0, s1), stepBikeX: (b, dt) => stepBike(b, dt, W), SURF, drawWorldX: () => drawWorld(), speedBlurX: () => speedBlur(), speedVibX: () => speedVib(), SPL, GEO, resizeX: () => resize(), drawSpeedLinesX: dt => { ctx = hudCtx; try { drawSpeedLines(dt); } finally { ctx = mainCtx; } }, camNameX: () => TILT_CAM, setupSession, simStep, standings, UI, SUB, TILT, setAIReal: v => { AI_REAL = v; } };
 if (document.fonts && document.fonts.ready) { Promise.race([document.fonts.ready, new Promise(r => setTimeout(r, 1500))]).then(boot).catch(e => { console.error("boot failed", e && e.stack); }); } else boot();

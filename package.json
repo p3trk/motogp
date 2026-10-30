@@ -2,7 +2,7 @@
   "name": "silverstone-gp",
   "private": true,
   "scripts": {
-    "test": "node tests/camera_shake.test.js && node tests/track_edges.test.js && node tests/tilt_seam.test.js && node tests/camera_tuning.test.js && node tests/practice_ghosts.test.js && node tests/practice_start.test.js && node tests/speed_blur.test.js && node tests/mobile_controls.test.js && node tests/race_result_order.test.js && node tests/track_limits.test.js && node tests/gravel_exit.test.js && node tests/menu_version.test.js && node tests/phone_emulation.test.js"
+    "test": "node tests/camera_shake.test.js && node tests/track_edges.test.js && node tests/tilt_seam.test.js && node tests/camera_tuning.test.js && node tests/practice_ghosts.test.js && node tests/practice_start.test.js && node tests/speed_blur.test.js && node tests/speed_feel.test.js && node tests/mobile_controls.test.js && node tests/race_result_order.test.js && node tests/track_limits.test.js && node tests/gravel_exit.test.js && node tests/menu_version.test.js && node tests/phone_emulation.test.js"
   },
   "devDependencies": {
     "playwright": "^1.64.1"

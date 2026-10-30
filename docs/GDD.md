@@ -315,7 +315,7 @@ Three cameras (since 1.14.0): **Behind**, **CLOSE** and **Top-down**. Chosen on 
   - Camera distance: 1.3 / 1.8 × screen height, 0.5–2.5.
   - Bike height on screen: 20 / 8 %, 5–40.
   - Zoom: maximum 20 / 30 px/m (10–30), base 30 / 12 m (10–60), speed factor 0.5 / 0.3 (0.1–2.0; was 1.0 / 0.4 and 0.3–2.0 before 1.23.0, §11h) in `ppm = min(max, min(VW, 1.25·VH) / (base + factor·v))`.
-  - Ground depth default for Behind is 4.0 × screen since 1.23.0 (was 2.6), so the road ahead at top speed stays about as long as before with the closer zoom (§11h).
+  - Ground depth default for Behind is 2.9 × screen since 1.23.0 (was 2.6), so the closer zoom loses less road ahead (§11h).
   - Speed effects (since 1.23.0, §11h): **Widen at speed** 15 / 15 % (0–30), **Vibration** 1.5 / 1.5 px (0–4).
   - Ground area: width 2.3 / 3.5 × screen (1.5–3.5), depth 2.6 / 6 × screen (1.5–6).
   - Image quality: near band 0.75 / 1.5 (0.4–2.0), far band 0.45 / 0.7 (0.25–0.8), fade zone 30 / 30 % (0–60).
@@ -586,14 +586,15 @@ Asked by Petr (2026-10-30): "How to make game feel faster?", then picked four of
   | Ground speed on screen at 320 km/h | 775 px/s | 1239 px/s (+60 %) | 1938 px/s | 2382 px/s (+23 %) |
   | 320 vs 160 km/h on screen | ×1.25 | ×1.40 | ×1.45 | ×1.79 |
 
-- A closer zoom shows less road ahead. To keep the corner coming up in view, the Behind **ground depth goes from 2.6 to 4.0 × screen height**: at 300 km/h the road ahead stays at about 195 m (was about 200 m). The ground reaches a little closer to the horizon, so there is a little less sky. CLOSE is already at its maximum depth (6); at 320 km/h it shows about 186 m ahead (was about 228 m). The corner countdown (§11b) still warns early.
+- A closer zoom shows less road ahead. The Behind **ground depth goes from 2.6 to 2.9 × screen height** (the design asked for 4.0; see Performance limit below for why it is 2.9). Measured at 300 km/h on the 1470 × 830 screen, the road visible ahead in Behind goes **from about 208 m to about 148 m**. Behind sky on a straight at speed is about 8 % of the screen. CLOSE is already at its maximum depth (6) and shows about 172 m ahead at 300 km/h. The corner countdown (§11b) still warns from about 400 m.
 - **Saved camera values:** a saved Behind value of exactly 1.0 for the speed factor or 2.6 for the depth, and a saved CLOSE speed factor of exactly 0.4, are the old defaults and move to the new ones on load. Any other saved value is the player's own choice and is kept. Reset to defaults gives the new values.
 - Top-down keeps its zoom (see open question 1).
 
 **2. Wider view at speed (Behind and CLOSE)**
 - Like a racing game widening its field of view: above 200 km/h the camera moves closer to the ground plane, so the perspective gets stronger. The near ground and the sides stretch outward and the road ahead seems to rush at the player.
 - Camera distance used for drawing: `P = p · VH · (1 − widen · w)`, with `w = smoothstep((v − 200) / (340 − 200))` (v in km/h, the speed the camera follows, as for the blur in §11f) and **widen 15 %** by default for both cameras. Below 200 km/h nothing changes. `w` is smoothed over about 0.4 s, so braking does not snap the view back.
-- The bike stays at its set height on screen (`tiltBikeH()` already uses the current distance). The horizon point of the speed blur follows the current distance.
+- **The horizon stays put** (implementation finding, 2026-10-30): the horizon sits at distance × cot(tilt), so a shorter distance alone lowered it and showed much more sky (CLOSE at 340 km/h: about 19 % of the screen instead of 8 %). The tilt used for drawing is lowered with the distance, `tan(a') = tan(a) · (1 − widen · w)`, so distance × cot(tilt) stays the same. Measured at 1470 × 830: CLOSE sky 8.4 % → 5.9 % at 340 km/h; Behind sky does not grow either. What is left of the effect is mostly the road ahead stretching taller: the point 20 m ahead moves up about 8 px in Behind and 17 px in CLOSE at full widen; the sides barely move.
+- The bike stays at its set height on screen (`tiltBikeH()` already uses the current distance and tilt). The horizon point of the speed blur and of the speed lines follows the current distance and tilt.
 - The ground layers are sized once in `resize()` for the smallest distance the setting can reach, so no canvas is reallocated while the speed changes.
 - Camera tuning gets a slider **Widen at speed**, 0–30 %, step 1, per tilted camera. 0 turns it off for that camera.
 
@@ -624,11 +625,11 @@ The eye judges speed from small things passing by. These are part of the world, 
 - The pause-menu Camera tuning panel gets the two new sliders above, saved with the other camera values (`sgp_cam`, `sgp_cam_close`) and reset by Reset to defaults. Older saves without them get the defaults.
 
 **Performance limit**
-- Everything in 1.23.0 together may add at most **10 % to the frame time** at top speed on the 1470 × 830 reference screen, compared with 1.22.0 in the same view. The bigger Behind ground depth (about 70 % more far-band pixels at 0.45 quality) is the main cost; if it is over the limit, the far-band quality for Behind drops from 0.45 to 0.4 first.
+- Everything in 1.23.0 together may add at most **10 % to the frame time** at top speed on the 1470 × 830 reference screen, compared with 1.22.0 in the same view. Measured (headless Chromium, 1470 × 830 @2x, Behind at 340 km/h; implementation finding, 2026-10-30): the zoom, wider view, speed lines and vibration together add about 2 %. The deeper ground is what costs: depth 4.0 added +23 %, +15 % with the far band at 0.4 and +8 % at 0.35. But a far band below 0.45 fails the seam test (§11a, `tilt_seam`): at 1024 × 700 the jump in sharpness where the near band hands over to the far band grows from 11 % to about 20 % (limit 15 %); near band 0.6 with far band 0.35 fails too. So the far band stays at 0.45 and the **Behind depth is 2.9**: about +8 %. Each 0.1 of depth costs about 2 %. A player whose machine is fast enough can set a deeper ground in Camera tuning.
 - When the slow-machine quality drop (`TILT.q` below 1, §11a) happens, the speed lines and the wider view stay (they are cheap); the speed blur goes off as before.
 
 **Tests**
-- `camera_tuning`: new defaults (zK 0.5 / 0.3, hk 4.0, widen 15, vib 1.5), the two new sliders, and the move of old saved defaults to the new values while custom values are kept.
+- `camera_tuning`: new defaults (zK 0.5 / 0.3, Behind depth 2.9, widen 15, vib 1.5), the two new sliders, and the move of old saved defaults to the new values while custom values are kept.
 - New `speed_feel` test: zoom at 160 and 320 km/h matches the table above; widen is 0 below 200 km/h and full at 340; no canvas reallocation while the speed changes; speed lines are drawn at 340 km/h and not at 250 km/h or with Speed effects Off; the world offset is 0 at rest, when paused and with Speed effects Off, and at most 2 × vib at top speed on a kerb; frame time within the limit above.
 
 ### Open questions for 1.23.0 (recommended answer in bold; the design above uses it)

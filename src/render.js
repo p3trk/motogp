@@ -16,7 +16,7 @@ let DPR_CAP = 1.5;
 // virtual ground canvas RW x RH (css px): the screen in top-down, larger when tilted, split into LAYERS
 let RW = 800, RH = 600, ODPR = 1;
 let LAYERS = [];
-const TILT = { a: 40 * DEG, p: 1.3, wk: 2.3, hk: 2.6, bike: 0.2, zMax: 20, zBase: 30, zK: 1.0, nearQ: 0.75, farQ: 0.45, fade: 0.3, minLen: 40, bv0: 260, bv1: 330, bs: 20, q: 1 }; // q: resolution scale, lowered on slow machines
+const TILT = { a: 40 * DEG, p: 1.3, wk: 2.3, hk: 2.9, bike: 0.2, zMax: 20, zBase: 30, zK: 0.5, nearQ: 0.75, farQ: 0.45, fade: 0.3, minLen: 40, bv0: 260, bv1: 330, bs: 20, wd: 0.15, vib: 1.5, q: 1 }; // zK 1.0 and hk 2.6 before 1.23.0 (GDD 11h) // q: resolution scale, lowered on slow machines
 // tilted camera tuning (GDD 11a): the pause-menu panel edits these in display units (deg, %), per camera (below)
 const CAM_SET = [ // k: TILT field, f: display unit -> TILT value, rs: needs resize()
   { k: 'a', lbl: 'Tilt', unit: '°', min: 20, max: 70, step: 1, f: DEG, rs: 1 },
@@ -24,7 +24,7 @@ const CAM_SET = [ // k: TILT field, f: display unit -> TILT value, rs: needs res
   { k: 'bike', lbl: 'Bike height on screen', unit: '%', min: 5, max: 40, step: 1, f: 0.01 },
   { k: 'zMax', lbl: 'Zoom maximum', unit: 'px/m', min: 10, max: 30, step: 1 },
   { k: 'zBase', lbl: 'Zoom base', unit: 'm', min: 10, max: 60, step: 1 },
-  { k: 'zK', lbl: 'Zoom speed factor', unit: '', min: 0.3, max: 2, step: 0.05 },
+  { k: 'zK', lbl: 'Zoom speed factor', unit: '', min: 0.1, max: 2, step: 0.05 },
   { k: 'wk', lbl: 'Ground width', unit: '× screen', min: 1.5, max: 3.5, step: 0.05, rs: 1 },
   { k: 'hk', lbl: 'Ground depth', unit: '× screen', min: 1.5, max: 6, step: 0.05, rs: 1 },
   { k: 'nearQ', lbl: 'Near band quality', unit: '', min: 0.4, max: 2, step: 0.05, rs: 1 },
@@ -34,6 +34,8 @@ const CAM_SET = [ // k: TILT field, f: display unit -> TILT value, rs: needs res
   { k: 'bv0', lbl: 'Blur start speed', unit: 'km/h', min: 150, max: 340, step: 5 }, // speed blur (GDD 11f)
   { k: 'bv1', lbl: 'Blur full speed', unit: 'km/h', min: 160, max: 345, step: 5 }, // always at least 10 above the start speed
   { k: 'bs', lbl: 'Blur strength', unit: 'px', min: 0, max: 40, step: 1 }, // 0 turns the blur off for this camera
+  { k: 'wd', lbl: 'Widen at speed', unit: '%', min: 0, max: 30, step: 1, f: 0.01, rs: 1 }, // sense of speed (GDD 11h); the ground layers are sized for the widest view
+  { k: 'vib', lbl: 'Vibration', unit: 'px', min: 0, max: 4, step: 0.5 },
 ];
 const TILT_DEF = Object.freeze(Object.fromEntries(CAM_SET.map(d => [d.k, TILT[d.k]])));
 const camGet = d => +(TILT[d.k] / (d.f || 1)).toFixed(4); // display value
@@ -41,9 +43,10 @@ const camGet = d => +(TILT[d.k] / (d.f || 1)).toFixed(4); // display value
 // localStorage 'sgp_cam' (Behind) and 'sgp_cam_close' (CLOSE); TILT holds the values of the tilted camera in use
 const CAM_DEF = {
   behind: Object.fromEntries(CAM_SET.map(d => [d.k, camGet(d)])),
-  close: { a: 55, p: 1.8, bike: 8, zMax: 30, zBase: 12, zK: 0.4, wk: 3.5, hk: 6, nearQ: 1.5, farQ: 0.7, fade: 30, minLen: 40, bv0: 260, bv1: 330, bs: 24 }, // 1.13.1: less sky, sees further
+  close: { a: 55, p: 1.8, bike: 8, zMax: 30, zBase: 12, zK: 0.3, wk: 3.5, hk: 6, nearQ: 1.5, farQ: 0.7, fade: 30, minLen: 40, bv0: 260, bv1: 330, bs: 24, wd: 15, vib: 1.5 }, // 1.13.1: less sky, sees further; 1.23.0: zK 0.4 -> 0.3
 };
 const CAM_KEY = { behind: 'sgp_cam', close: 'sgp_cam_close' };
+const CAM_OLD = { behind: { zK: 1, hk: 2.6 }, close: { zK: 0.4 } }; // defaults before 1.23.0: saved values equal to these move to the new defaults (GDD 11h)
 const CAM_VAL = { behind: Object.assign({}, CAM_DEF.behind), close: Object.assign({}, CAM_DEF.close) };
 let TILT_CAM = 'behind'; // the tilted camera whose values are in TILT
 function camSave(name) { try { localStorage.setItem(CAM_KEY[name], JSON.stringify(CAM_VAL[name])); } catch (e) { } }
@@ -62,12 +65,16 @@ for (const name in CAM_KEY) try {
   if (!s || typeof s !== 'object') continue;
   // 1.13.x kept the Close profile in 'sgp_cam': unchanged Close values there mean the player picked Close, which is
   // now the CLOSE camera, so Behind starts from its defaults; any other saved values (also Custom) stay with Behind
-  const wasClose = name === 'behind' && s.profile === 'close' && CAM_SET.every(d => !(d.k in s) && /^b[vs]/.test(d.k) || Math.abs(+s[d.k] - CAM_DEF.close[d.k]) < 1e-6); // 1.13.x had no blur fields
+  const close13 = Object.assign({}, CAM_DEF.close, CAM_OLD.close);
+  const wasClose = name === 'behind' && s.profile === 'close' && CAM_SET.every(d => !(d.k in s) && /^(b[vs]|wd$|vib$)/.test(d.k) || Math.abs(+s[d.k] - close13[d.k]) < 1e-6); // 1.13.x had no blur or speed effect fields
+  for (const k in CAM_OLD[name]) if (Math.abs(+s[k] - CAM_OLD[name][k]) < 1e-6) delete s[k];
   if (!wasClose) for (const d of CAM_SET) { const v = +s[d.k]; if (d.k in s && isFinite(v)) CAM_VAL[name][d.k] = clamp(v, d.min, d.max); }
   if ('profile' in s) camSave(name); // the profile field is no longer written
 } catch (e) { }
 camLoad('behind');
-function tiltBikeH() { const P = TILT.p * VH, ca = Math.cos(TILT.a), sa = Math.sin(TILT.a), s = Math.min(TILT.bike * VH, 0.8 * P * ca / sa); return s * P / (ca * P - s * sa); } // canvas px above the bottom edge that project to TILT.bike of the screen (kept below the horizon at P*cot(a), GDD 1.13.0)
+const tiltP = () => TILT.p * VH * (1 - TILT.wd * CAM.w); // camera distance used for drawing, shorter at speed: wider view (GDD 11h)
+const tiltA = () => CAM.w > 0 ? Math.atan(Math.tan(TILT.a) * (1 - TILT.wd * CAM.w)) : TILT.a; // tilt used for drawing: lowered with the distance, so the horizon (at distance x cot(tilt)) stays put
+function tiltBikeH() { const P = tiltP(), ca = Math.cos(tiltA()), sa = Math.sin(tiltA()), s = Math.min(TILT.bike * VH, 0.8 * P * ca / sa); return s * P / (ca * P - s * sa); } // canvas px above the bottom edge that project to TILT.bike of the screen (kept below the horizon at P*cot(a), GDD 1.13.0)
 function resize() {
   DPR = Math.min(DPR_CAP, window.devicePixelRatio || 1); VW = window.innerWidth; VH = window.innerHeight;
   hcv.width = Math.round(VW * DPR); hcv.height = Math.round(VH * DPR);
@@ -77,7 +84,7 @@ function resize() {
   RW = tilt ? Math.round(VW * TILT.wk) : VW; RH = tilt ? Math.round(VH * TILT.hk) : VH;
   const layer = (c, x0, y0, w, h, dpr) => { if (c !== cv) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); } return { c, g: c === cv ? mainCtx : c.getContext('2d', { alpha: false }), x0, y0, w, h, dpr }; };
   if (tilt) {
-    const P = TILT.p * VH, hN = Math.round(VH), wN = Math.min(RW, Math.ceil(VW * (P + hN * Math.sin(TILT.a)) / P) + 8);
+    const P = TILT.p * VH * (1 - TILT.wd), hN = Math.round(VH), wN = Math.min(RW, Math.ceil(VW * (P + hN * Math.sin(TILT.a)) / P) + 8);
     const hB = Math.round(hN * TILT.fade); // far band reaches this far into the near band, where the two cross-fade (GDD 1.11.6)
     LAYERS = [layer(farCv, 0, 0, RW, RH - hN + hB + 4, TILT.farQ * TILT.q), layer(nearCv, (RW - wN) / 2, RH - hN, wN, hN, TILT.nearQ * TILT.q)]; LAYERS[0].hB = hB;
   } else LAYERS = [layer(cv, 0, 0, VW, VH, DPR)];
@@ -184,8 +191,31 @@ function buildGeometry() {
   GEO.lines = new Path2D();
   for (let s = 0; s < 2; s++) { const sg = s ? -1 : 1; for (let i = 0; i <= N; i++) { const k = i % N; const [x, y] = P(k, sg * (T.EDGE[s][k] - 0.35)); i ? GEO.lines.lineTo(x, y) : GEO.lines.moveTo(x, y); } }
   GEO.rubber = new Path2D(); for (let i = 0; i <= N; i++) { const k = i % N; i ? GEO.rubber.lineTo(T.RX[k], T.RY[k]) : GEO.rubber.moveTo(T.RX[k], T.RY[k]); }
+  // sense of speed (GDD 11h): mowing stripes, 6 m bands from the track edge to the wall (on the inside of a tight
+  // corner no deeper than 0.8 x its radius, so the bands do not cross), asphalt joints every 40 m, distance posts every 25 m on the straights
+  const PIT = T.PIT, SB = Math.max(1, Math.round(6 / T.DS));
+  GEO.mowL = new Path2D(); GEO.mowD = new Path2D(); GEO.joints = new Path2D(); GEO.posts = [];
+  for (let s = 0; s < 2; s++) {
+    const sg = s ? -1 : 1, E = T.EDGE[s], Wl = T.WALL[s];
+    const d1 = k => { const ins = T.KS[k] > 0 ? 0 : 1, ak = Math.abs(T.KS[k]); return Math.max(E[k], s === ins && ak > 1e-4 ? Math.min(Wl[k], 0.8 / ak) : Wl[k]); };
+    for (let i = 0; i < N; i += SB) {
+      const pth = (i / SB) % 2 ? GEO.mowD : GEO.mowL, k = [];
+      for (let j = 0; j <= SB; j++) k.push((i + j) % N);
+      k.forEach((q, j) => { const [x, y] = P(q, sg * E[q]); j ? pth.lineTo(x, y) : pth.moveTo(x, y); });
+      for (let j = k.length - 1; j >= 0; j--) { const [x, y] = P(k[j], sg * d1(k[j])); pth.lineTo(x, y); }
+      pth.closePath();
+    }
+  }
+  const JB = Math.round(40 / T.DS);
+  for (let i = JB; i < N - JB / 2; i += JB) { const a = P(i, T.WR[i]), b = P(i, -T.WL[i]); GEO.joints.moveTo(a[0], a[1]); GEO.joints.lineTo(b[0], b[1]); }
+  const PB = Math.round(25 / T.DS);
+  for (let i = 0; i < N; i += PB) for (let s = 0; s < 2; s++) {
+    let straight = true; for (let o = -6; o <= 6; o++) { const q = (i + o + N) % N; if (Math.abs(T.KS[q]) > 0.0028 || T.KERB[0][q] > 0 || T.KERB[1][q] > 0) straight = false; }
+    if (!straight || (s === 0 && PIT.inZone(T.rel(i * T.DS)))) continue;
+    const d = T.WALL[s][i] - 1, sd = s ? -d : d; if (T.surface(i, i * T.DS, sd) !== SURF.GRASS) continue;
+    const [x, y] = P(i, sd); GEO.posts.push({ x, y, h: T.H[i] });
+  }
   // walls: skip the garage frontage
-  const PIT = T.PIT;
   GEO.walls = new Path2D(); GEO.fence = new Path2D();
   for (let s = 0; s < 2; s++) {
     const sg = s ? -1 : 1; let pen = false;
@@ -326,7 +356,7 @@ function bikeSprite(team, num) {
 }
 
 // --- camera: 'behind' and 'close' = tilted chase views with their own values, 'chase' = top-down rotating (GDD 11a)
-const CAM = { x: 0, y: 0, rot: 0, v: 0, ppm: 10, mode: 'behind', init: false, ax: 0.5, ay: 0.6, boost: 1 };
+const CAM = { x: 0, y: 0, rot: 0, v: 0, ppm: 10, mode: 'behind', init: false, ax: 0.5, ay: 0.6, boost: 1, w: 0, dec: 0 }; // w: wider view at speed, dec: deceleration in m/s2 (GDD 11h)
 const CAM_ORDER = ['behind', 'close', 'chase'], CAM_NAME = { behind: 'Behind', close: 'CLOSE', chase: 'Top-down' }; // C goes through them in this order
 const camTilted = () => CAM.mode !== 'chase';
 function setCamMode(m) { if (CAM.mode === m || !CAM_NAME[m]) return; CAM.mode = m; if (m in CAM_KEY) camLoad(m); CAM.init = false; resize(); }
@@ -334,7 +364,10 @@ function updateCamera(dt) {
   const b = W.player; if (!b) return;
   let px = b.x, py = b.y, h = b.h, v = b.v;
   if (b.crashed && b.crash) { px = b.crash.rd.x; py = b.crash.rd.y; v = Math.hypot(b.crash.rd.vx, b.crash.rd.vy); }
+  if (dt > 0.001) CAM.dec += ((CAM.v - v) / dt - CAM.dec) * (1 - Math.exp(-dt * 10));
   CAM.v = v; // the speed the camera follows, also for the speed blur (GDD 11f)
+  const ww = camTilted() && UI.opts.fx !== 'off' ? sstep((v * 3.6 - 200) / 140) : 0; // wider view above 200 km/h (GDD 11h)
+  CAM.w = CAM.init ? CAM.w + (ww - CAM.w) * (1 - Math.exp(-dt / 0.4)) : ww;
   let tx, ty, targetPpm;
   if (camTilted()) {
     CAM.ay = 1 - tiltBikeH() / RH;
@@ -366,8 +399,8 @@ function worldToScreen(x, y) {
   const [cx, cy] = worldToCanvas(x, y);
   if (!camTilted()) return [cx, cy];
   // same projection as the CSS perspective(P) rotateX(a) about the canvas bottom centre
-  const P = TILT.p * VH, yy = cy - RH, sc = P / (P - yy * Math.sin(TILT.a));
-  return [VW / 2 + (cx - RW / 2) * sc, VH + yy * Math.cos(TILT.a) * sc];
+  const P = tiltP(), yy = cy - RH, sc = P / (P - yy * Math.sin(tiltA()));
+  return [VW / 2 + (cx - RW / 2) * sc, VH + yy * Math.cos(tiltA()) * sc];
 }
 
 // --- static world baked into cached tiles (track, run-off, walls, paint, buildings, trees)
@@ -377,6 +410,7 @@ const TLV = [{ m: 40, map: new Map(), cap: 160 }, { m: 80, map: new Map(), cap: 
 let tileFrame = 0;
 function drawStatic(vis, x0, y0, w, h) {
   ctx.fillStyle = TEX.pGrass; ctx.fillRect(x0, y0, w, h);
+  ctx.fillStyle = 'rgba(255,255,235,.06)'; ctx.fill(GEO.mowL); ctx.fillStyle = 'rgba(0,25,0,.07)'; ctx.fill(GEO.mowD); // mowing stripes (GDD 11h)
   ctx.fillStyle = TEX.pRun; for (const p of GEO.runoff) ctx.fill(p);
   ctx.fillStyle = TEX.pGravel; for (const p of GEO.gravel) ctx.fill(p);
   ctx.fillStyle = TEX.pPit; ctx.fill(GEO.pit);
@@ -384,6 +418,7 @@ function drawStatic(vis, x0, y0, w, h) {
   ctx.lineWidth = 0.22; ctx.stroke(GEO.pitLines);
   ctx.setLineDash([3, 3]); ctx.strokeStyle = 'rgba(255,214,40,.8)'; ctx.stroke(GEO.pitDash); ctx.setLineDash([]);
   ctx.fillStyle = TEX.pAsph; ctx.fill(GEO.track, 'evenodd');
+  ctx.strokeStyle = 'rgba(0,0,0,.08)'; ctx.lineWidth = 0.15; ctx.stroke(GEO.joints); // asphalt joints (GDD 11h)
   ctx.strokeStyle = 'rgba(12,12,14,.16)'; ctx.lineWidth = 2.2; ctx.stroke(GEO.rubber);
   ctx.strokeStyle = 'rgba(12,12,14,.10)'; ctx.lineWidth = 4.5; ctx.stroke(GEO.rubber);
   ctx.fillStyle = '#d42a24'; ctx.fill(GEO.kerbR); ctx.fillStyle = '#f2f0ec'; ctx.fill(GEO.kerbW);
@@ -397,6 +432,13 @@ function drawStatic(vis, x0, y0, w, h) {
   ctx.strokeStyle = 'rgba(40,46,50,.7)'; ctx.lineWidth = 0.15; ctx.stroke(GEO.fence);
   ctx.strokeStyle = '#b9b9b4'; ctx.lineWidth = 0.7; ctx.stroke(GEO.pitWall);
   ctx.strokeStyle = 'rgba(30,30,30,.6)'; ctx.lineWidth = 0.12; ctx.stroke(GEO.pitWall);
+  for (const q of GEO.posts) { // distance posts (GDD 11h)
+    if (!vis(q.x, q.y, 2)) continue;
+    ctx.save(); ctx.translate(q.x, q.y); ctx.rotate(q.h);
+    ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.fillRect(-0.25 + 0.25, -0.25 + 0.3, 0.5, 0.5);
+    ctx.fillStyle = '#f4f4f2'; ctx.fillRect(-0.25, -0.25, 0.5, 0.5); ctx.fillStyle = '#151515'; ctx.fillRect(-0.15, -0.15, 0.3, 0.3);
+    ctx.restore();
+  }
   drawPitBoxes(vis, true);
   drawBuildings(vis, true);
   drawTrees(vis);
@@ -420,6 +462,7 @@ function getTile(L, tx, ty, allowRender) {
 function drawWorld() {
   tileFrame++;
   let sx = 0, sy = 0; if (HUD.shake > 0.01) { sx = (Math.random() - 0.5) * 8 * HUD.shake; sy = (Math.random() - 0.5) * 8 * HUD.shake; }
+  const A = speedVib(); if (A > 0) { sx += (Math.random() - 0.5) * 2 * A; sy += (Math.random() - 0.5) * 2 * A; }
   try { for (const Ly of LAYERS) { ctx = Ly.g; drawWorldLayer(Ly, sx, sy); } } finally { ctx = mainCtx; }
   if (camTilted()) { projectTilted(); speedBlur(); }
 }
@@ -437,7 +480,7 @@ function speedBlur() {
   if (A.width !== w || A.height !== h) { A.width = B.width = w; A.height = B.height = h; }
   ga.setTransform(1, 0, 0, 1, 0, 0); ga.imageSmoothingEnabled = true; ga.drawImage(cv, 0, 0, cv.width, cv.height, 0, 0, w, h);
   // zoom about the horizon point: every pixel moves by k times its distance from it, so streaks grow to the edges
-  const P = TILT.p * VH, uTop = RH * Math.cos(TILT.a) * P / (P + RH * Math.sin(TILT.a)), hx = VW / 2, hy = Math.max(0, VH - uTop);
+  const P = tiltP(), uTop = RH * Math.cos(tiltA()) * P / (P + RH * Math.sin(tiltA())), hx = VW / 2, hy = Math.max(0, VH - uTop);
   const far = Math.hypot(VW / 2, Math.max(hy, VH - hy)), k = TILT.bs * s / far;
   gb.globalCompositeOperation = 'source-over'; gb.imageSmoothingEnabled = true;
   for (const [z, al] of [[1 + k, 1], [1 + k / 2, 1 / 2], [1, 1 / 3]]) { // equal thirds
@@ -452,7 +495,7 @@ function speedBlur() {
 }
 // the road (both edges plus kerb plus 0.3 m) on screen, as polygons of contiguous runs of track points in the ground area
 function blurRoadRuns() {
-  const N = T.N, P = TILT.p * VH, yMax = RH + 0.5 * P / Math.sin(TILT.a), runs = [];
+  const N = T.N, P = tiltP(), yMax = RH + 0.5 * P / Math.sin(tiltA()), runs = [];
   const inside = i => { const [cx, cy] = worldToCanvas(T.X[i], T.Y[i]); return cx > -0.3 * RW && cx < 1.3 * RW && cy > -0.05 * RH && cy < yMax; };
   const flags = new Uint8Array(N); let start = -1;
   for (let i = 0; i < N; i++) { flags[i] = inside(i) ? 1 : 0; if (!flags[i] && start < 0) start = i; }
@@ -474,7 +517,7 @@ function blurRoadRuns() {
 }
 // an ellipse around each bike and ghost on screen, 1.3 x its drawn length across (also off the road and crashed)
 function blurBikeSpots() {
-  const out = [], r = 0.65 * 2.5 * PHYS.VS * CAM.boost * CAM.ppm, P = TILT.p * VH, sa = Math.sin(TILT.a), ca = Math.cos(TILT.a);
+  const out = [], r = 0.65 * 2.5 * PHYS.VS * CAM.boost * CAM.ppm, P = tiltP(), sa = Math.sin(tiltA()), ca = Math.cos(tiltA());
   const add = (x, y) => {
     const [cx, cy] = worldToCanvas(x, y), yy = cy - RH; if (P - (yy + r) * sa <= 0) return;
     const scr = q => P / (P - q * sa), y0 = VH + (yy - r) * ca * scr(yy - r), y1 = VH + (yy + r) * ca * scr(yy + r);
@@ -485,9 +528,44 @@ function blurBikeSpots() {
   }
   return out;
 }
-// perspective: screen height u above the bottom edge <-> plane distance h, as seen from TILT.p*VH away at angle TILT.a
+// --- sense of speed (GDD 11h): camera vibration and speed lines, only while the session or the replay runs
+const fxLive = () => UI.opts.fx !== 'off' && ((UI.state === 'play' && !W.paused) || (UI.state === 'replay' && RP.playing));
+const VIBP = { i: 0, s: 0, d: 0 };
+function speedVib() { // amplitude in px: speed, kerbs above 50 km/h, braking harder than 1 g
+  const b = W.player; if (!b || b.crashed || !fxLive()) return 0;
+  const vib = camTilted() ? TILT.vib : CAM_DEF.behind.vib, kmh = CAM.v * 3.6;
+  T.project(b.x, b.y, b.i ?? -1, VIBP);
+  const k = kmh > 50 && T.surface(VIBP.i, VIBP.s, VIBP.d) === SURF.KERB ? 1 : 0;
+  const br = (UI.state === 'replay' ? b.ctl.brk > 0.5 && CAM.v > 5 : CAM.dec > 9.81) ? 0.5 : 0;
+  return vib * Math.min(2, sstep((kmh - 180) / 165) + k + br);
+}
+const SPL = { lines: [], acc: 0 };
+function speedOrigin() { // the point the lines streak out from: the horizon point straight ahead, or ahead of the bike in Top-down
+  if (!camTilted()) return [VW / 2, VH * 0.25];
+  const P = tiltP(), uTop = RH * Math.cos(tiltA()) * P / (P + RH * Math.sin(tiltA())); return [VW / 2, Math.max(0, VH - uTop)];
+}
+function drawSpeedLines(dt) { // on the HUD layer, before the HUD
+  const l = fxLive() && W.player && !W.player.crashed ? sstep((CAM.v * 3.6 - 280) / 60) : 0, L = SPL.lines;
+  if (l <= 0) { L.length = 0; SPL.acc = 0; return; }
+  const [ox, oy] = speedOrigin(), life = 0.15;
+  SPL.acc += dt * 16 * l / life;
+  for (; SPL.acc >= 1; SPL.acc--) { // a new line in the outer 30 % of the screen width, pointing away from the origin
+    const x = Math.random() < 0.5 ? Math.random() * 0.3 * VW : VW - Math.random() * 0.3 * VW, y = oy + Math.random() * (VH - oy);
+    const dx = x - ox, dy = y - oy, d = Math.hypot(dx, dy) || 1;
+    L.push({ x, y, ux: dx / d, uy: dy / d, len: 40 + Math.random() * 80, age: 0 });
+  }
+  const g = ctx; g.setTransform(DPR, 0, 0, DPR, 0, 0); g.lineWidth = 1; g.lineCap = 'butt';
+  for (const q of L) {
+    q.age += dt; const f = q.age / life; if (f >= 1) continue;
+    const mv = f * q.len * 1.5, a = 0.3 * l * Math.sin(Math.PI * f);
+    g.strokeStyle = `rgba(255,255,255,${a.toFixed(3)})`; g.beginPath();
+    g.moveTo(q.x + q.ux * mv, q.y + q.uy * mv); g.lineTo(q.x + q.ux * (mv + q.len), q.y + q.uy * (mv + q.len)); g.stroke();
+  }
+  SPL.lines = L.filter(q => q.age < life);
+}
+// perspective: screen height u above the bottom edge <-> plane distance h, as seen from tiltP() away at angle TILT.a
 function projectTilted() {
-  const P = TILT.p * VH, sa = Math.sin(TILT.a), ca = Math.cos(TILT.a);
+  const P = tiltP(), sa = Math.sin(tiltA()), ca = Math.cos(tiltA());
   const hOf = u => u * P / (ca * P - u * sa), uTop = RH * ca * P / (P + RH * sa);
   const g = mainCtx; g.setTransform(ODPR, 0, 0, ODPR, 0, 0); g.imageSmoothingEnabled = true;
   const sky = g.createLinearGradient(0, 0, 0, VH - uTop + 2); sky.addColorStop(0, '#6fa3d2'); sky.addColorStop(1, '#c9d8de');

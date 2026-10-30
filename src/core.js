@@ -28,11 +28,14 @@ const SURFP = [
   { mu: 1.0, roll: 0, brake: 1 },       // asphalt
   { mu: 0.88, roll: 0.01, brake: 0.9 }, // kerb
   { mu: 0.86, roll: 0.01, brake: 0.88 },// tarmac run-off
-  { mu: 0.34, roll: 0.55, brake: 0.4 }, // gravel trap
+  { mu: 0.34, roll: 0.12, brake: 0.4 }, // gravel trap (grows with speed, see gravelDrag)
   { mu: 0.42, roll: 0.16, brake: 0.45 },// grass
   { mu: 0.95, roll: 0, brake: 1 },      // pit lane
   { mu: 0.5, roll: 0.3, brake: 0.5 }
 ];
+// gravel traps (GDD 5): drag grows with speed, the loose stones limit the push, too much throttle digs the wheel in
+const GRAVEL = { dragV2: 0.0053, dragMax: 0.80, push: 0.30 * G, spinThr: 0.5, spinAfter: 0.3, spinPush: 0.13 * G };
+function gravelDrag(v) { return Math.min(GRAVEL.dragMax, SURFP[SURF.GRAVEL].roll + GRAVEL.dragV2 * v * v); }
 function powerFrac(r) { // normalised wheel power vs rpm fraction (V4/I4 big-bang style curve)
   const P = [[0, 0], [0.2, 0.16], [0.4, 0.4], [0.55, 0.6], [0.7, 0.78], [0.82, 0.9], [0.93, 1.0], [1.0, 0.96], [1.05, 0.9]];
   if (r <= 0) return 0; if (r >= 1.05) return 0.9;
@@ -414,10 +417,16 @@ function stepBike(b, dt, W) {
   let aDrive = Fd / m;
   b.wheelie = aDrive > PHYS.wheelie * 0.95 ? Math.min(1, b.wheelie + dt * 3) : Math.max(0, b.wheelie - dt * 4);
   aDrive = Math.min(aDrive, b.assist ? PHYS.wheelie : PHYS.wheelie * 1.1);
+  b.dig = false;
+  if (b.surf === SURF.GRAVEL) { // traction control feathers for you; without it a throttle held open spins the rear wheel
+    b.openT = c.thr > GRAVEL.spinThr ? (b.openT || 0) + dt : 0;
+    if (!b.assist && b.openT > GRAVEL.spinAfter && aDrive > GRAVEL.push) { aDrive = GRAVEL.spinPush; b.dig = true; } else aDrive = Math.min(aDrive, GRAVEL.push);
+  }
+  b.digT = b.dig ? (b.digT || 0) + dt : 0;
   let aBrake = c.brk * PHYS.brakeMax * SF.brake;
   const aEB = c.thr < 0.05 ? 1.0 * (rpmW / PHYS.redline) * Math.sqrt(kg / ((PHYS.redline * TAU / 60) / PHYS.gears[6])) : 0;
   const cda = PHYS.CdA * (1 + 0.35 * b.dmg.a) * (1 - 0.28 * b.draft);
-  const aDrag = 0.5 * PHYS.rho * cda * v * v / m + (PHYS.roll + SF.roll) * G * (v > 0.2 ? 1 : 0);
+  const aDrag = 0.5 * PHYS.rho * cda * v * v / m + (PHYS.roll + (b.surf === SURF.GRAVEL ? gravelDrag(v) : SF.roll)) * G;
   // --- tyre friction circle
   let aLatAbs = Math.abs(aLat);
   const longAvail = Math.sqrt(Math.max(0, gripMax * gripMax - aLatAbs * aLatAbs));
@@ -446,6 +455,7 @@ function stepBike(b, dt, W) {
   b.x += (ch * b.v - sh * b.vs) * dt; b.y += (sh * b.v + ch * b.vs) * dt;
   b.aLongPrev = Math.max(aDrive, aBrake); b.aLat = aLat; b.aLong = acc;
   b.rpm = slipping ? rpmE : Math.max(rpmW, PHYS.idle + c.thr * 1500);
+  if (b.dig) b.rpm = Math.max(b.rpm, lerp(PHYS.idle, 14000, c.thr)); // rear wheel spinning in the stones
   b.rpmVis = lerp(b.rpmVis, b.rpm, Math.min(1, dt * 18));
   if (b.fuel > 0 && !W.infiniteFuel) b.fuel = Math.max(0, b.fuel - PHYS.fuelK * (0.1 + c.thr * Math.min(1, rpmE / PHYS.redline)) * dt);
   b.dist += b.v * dt;

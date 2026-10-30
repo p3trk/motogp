@@ -1,4 +1,9 @@
 # Changelog
+## v1.23.0 (2026-10-30)
+- Gravel traps (GDD 5): drag now grows with speed (0.12 g + 0.0053 g per (m/s)², at most 0.80 g; was 0.55 g at every speed), so a fast bike stops harder and a slow one can ride out. The rear tyre pushes at most 0.30 g in gravel, which balances the drag at about 20 km/h.
+- Fix: a stopped bike in the gravel could only creep at about 1 km/h, because the drag was as big as the most push the tyre could give. A stopped bike with no throttle now stays still.
+- Feathering: with rider aids on, traction control feathers for you and holding W rides out at about 20 km/h. With aids off, holding W more than half open for over 0.3 s digs the rear wheel in (rpm flare, more stones fly, the bike barely moves); tapping W rides out at about 18 km/h. The first spin of over 1 s per session shows FEATHER THE THROTTLE.
+- Tests: new tests/gravel_exit.test.js, in npm test.
 
 ## v1.22.0 (2026-10-29)
 - No refuelling (GDD 7). Fuel use is about 1.0 L per lap (was 2.6), so a full 22 L tank covers the 20 lap Grand Prix. The starting fuel hint shows the least fuel that finishes the race (10 lap race 50 %, Grand Prix 95 %).

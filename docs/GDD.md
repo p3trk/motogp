@@ -1,6 +1,6 @@
 # Silverstone GP — Game Design Document
 
-**Version:** 1.22.0 · **Last updated:** 2026-10-29 · **Owner:** Petr
+**Version:** 1.23.0 · **Last updated:** 2026-10-30 · **Owner:** Petr
 
 This document is the source of truth for how the game should work. Every
 change starts here: update the GDD on a feature branch first, then change the
@@ -135,8 +135,18 @@ Model: point-mass bike on a 2D plane, integrated per frame with fixed sub-steps.
 | Kerb | 0.88 | low | 0.90 |
 | Tarmac run-off | 0.86 | low | 0.88 |
 | Grass | 0.42 | medium | 0.45 |
-| Gravel | 0.34 | very high | 0.40 |
+| Gravel | 0.34 | grows with speed (below) | 0.40 |
 | Pit lane | 0.95 | 0 | 1.00 |
+
+**Gravel traps (since 1.23.0).** As in real life, gravel stops a fast bike hard but lets a slow rider get out by feathering the throttle:
+
+- **Drag grows with speed:** 0.12 g + 0.0053 g × v² (v in m/s), at most 0.80 g: about 0.14 g at walking pace, 0.28 g at 20 km/h, the full 0.80 g from about 40 km/h (plus air drag, so about 1 g at 150 km/h). Before 1.23.0 it was 0.55 g at every speed.
+- **Push is limited by the loose stones:** the rear tyre can give at most 0.30 g in gravel. With feathered throttle this balances the drag at about **20 km/h**, the top speed while in the gravel. From a standstill the bike reaches about 18 km/h in 5 s.
+- **Too much throttle spins the rear wheel:** when the throttle stays more than half open for over 0.3 s (holding W), the wheel digs in: push falls to 0.13 g, the rpm flare up and more stones fly. That is below the drag, so the bike barely moves. Releasing W stops the spin. Tapping W (short presses, about three a second) keeps the wheel biting and rides out at about 18 km/h.
+- **Rider aids on:** traction control feathers the throttle for you, so holding W rides out at about 20 km/h. With aids off you have to feather yourself.
+- **A stopped bike stays still.** It no longer creeps forward at about 1 km/h (the bug before 1.23.0).
+- **Hint:** the first time per session that the player's wheel spins in the gravel for over 1 s, the HUD shows *FEATHER THE THROTTLE*.
+- Unchanged: the crash chance when leaning in gravel above 22 m/s (§6), braking 0.40, cornering grip 0.34, grass.
 
 ## 6. Collisions, crashes and damage
 
@@ -607,6 +617,7 @@ On phones (touch controls on, §3a) the HUD is made smaller and simpler. Desktop
 - Since 1.17.0 `tilt_seam.test.js` and `camera_shake.test.js` run with Speed blur Off, so their measurements stay as before; `camera_tuning.test.js` expects 15 sliders (the three blur sliders added) and checks that they are saved per camera and reset by Reset to defaults.
 - `npm test` runs all tests (needs `npm install` and `npx playwright install chromium` once).
 - Tests (since 1.20.0): `node tests/track_limits.test.js [index.html]` checks §6a: kerbs and the strip beside the pit lane are legal; gravel makes a practice lap invalid; the invalid lap is saved with `inv` and never becomes a best lap, mode best or all-time trace; the next lap starts valid; in a race a cut gives 2 s + the time gained, a slow run wide and a crash give no penalty, and the penalty counts in the result order. Since 1.21.0 the race part checks Phase 2: the count (10 lap race 2/3, Grand Prix 3/5), the gain given back, the clear advantage Long Lap, the 3 s change with fewer than 3 laps left, the Long Lap lane geometry (on tarmac run-off end to end, starts at the kerb, about 22 m out), serving it, the 2.5 s top-up, a missed lane, the 5 s penalty when not served, and the last lap position drop.
+- Tests (since 1.23.0): `node tests/gravel_exit.test.js [index.html]` checks the gravel traps of §5: a stopped bike rides out at 18 to 22 km/h with aids on and W held, digs in (under 5 km/h) with aids off and W held, reaches 15 to 22 km/h with W tapped, stays still with no throttle, and a bike at 150 km/h slows at over 0.6 g.
 - Tests (since 1.19.8, Phase 1): `node tests/phone_emulation.test.js [index.html]` runs the phone checks in emulated phones on the Mac, with no real device or account. It uses Playwright device profiles:
   - **iPhone** in WebKit (the engine of Safari, but not Safari itself) and **Pixel** in Chromium (the engine of Chrome on Android), both in landscape with touch, at the sizes of a current phone.
   - **Layout:** the phone HUD (§11g) is shown, the bottom-right panel and speed guide are absent, the pause button and both touch halves are visible, the menu shows the gearbox row hidden and the side and tilt rows shown.
@@ -641,7 +652,16 @@ After tagging, push `main`, the tag and the feature branch to GitHub (`p3trk/mot
 
 ## 16. Version history
 
-See `CHANGELOG.md`. Current: **1.22.0** (no refuelling, pit stop kept; consumption about 1.0 L per lap; §7). Previous: **1.21.0** (track limits, Phase 2: infraction count, warning, Long Lap loop at Stowe, last lap position drop; §6a). Previous: **1.20.0** (track limits, Phase 1: invalid laps in practice and qualifying, time penalty for cuts in races; §6a). Previous: **1.19.8** (phone emulation tests; §13). Previous: **1.19.7** (fix: no text selection or zoom while playing on iPhone browsers, Brave included; §3a). Previous: **1.19.6** (version number shown next to the menu title; §11). Previous: **1.19.5** (fix: no double-tap zoom or text selection on menus and overlays in iPhone browsers, Brave included; §3a). Previous: **1.19.4** (fix: race result order lists riders a lap down below lead-lap riders; §11). Previous: **1.19.3** (no browser zoom on phones; §3a). Before that: **1.19.2** (tilt dead zone 12 degrees; §3a).
+See `CHANGELOG.md`. Current: **1.23.0** (gravel traps: drag grows with speed, feathered throttle rides out at about 20 km/h; §5). Previous: **1.22.0** (no refuelling, pit stop kept; consumption about 1.0 L per lap; §7). Previous: **1.21.0** (track limits, Phase 2: infraction count, warning, Long Lap loop at Stowe, last lap position drop; §6a). Previous: **1.20.0** (track limits, Phase 1: invalid laps in practice and qualifying, time penalty for cuts in races; §6a). Previous: **1.19.8** (phone emulation tests; §13). Previous: **1.19.7** (fix: no text selection or zoom while playing on iPhone browsers, Brave included; §3a). Previous: **1.19.6** (version number shown next to the menu title; §11). Previous: **1.19.5** (fix: no double-tap zoom or text selection on menus and overlays in iPhone browsers, Brave included; §3a). Previous: **1.19.4** (fix: race result order lists riders a lap down below lead-lap riders; §11). Previous: **1.19.3** (no browser zoom on phones; §3a). Before that: **1.19.2** (tilt dead zone 12 degrees; §3a).
+
+### Open questions for 1.23.0 (recommended answer in bold; the design above uses it)
+
+1. Top speed while in the gravel: **20 km/h** with feathered throttle (Petr, 2026-10-30).
+2. Does traction control feather for you? **Yes**, rider aids on rides out at about 20 km/h while holding W. Alternative: feathering is always manual, also with aids on.
+3. Holding W with aids off: **the wheel digs in and the bike barely moves.** Alternative: a milder penalty, e.g. about 8 km/h.
+4. Show the *FEATHER THE THROTTLE* hint? **Yes, once per session.**
+5. Grass: **unchanged** (it already lets you ride out). Alternative: speed-dependent drag there too, with lower numbers.
+6. Test: **add `tests/gravel_exit.test.js`**: a stopped bike in gravel reaches 18 to 22 km/h with aids on and W held (at least 17 km/h after 5 s); with aids off and W held it stays under 5 km/h; with aids off and W tapped three times a second it reaches 15 to 22 km/h; a stopped bike with no throttle does not move; a bike at 150 km/h slows at over 0.6 g.
 
 ### Open questions for 1.22.0 (recommended answer in bold; the design above uses it)
 

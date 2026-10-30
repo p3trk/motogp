@@ -711,8 +711,8 @@ Every commit that changes JavaScript is scanned with ESLint and `eslint-plugin-s
 **Setup:**
 - `eslint` and `eslint-plugin-sonarjs` are dev dependencies in `package.json`, like Playwright (`node_modules` stays out of git; worktrees use a symlink to the main checkout's `node_modules`).
 - `eslint.config.js` (committed) uses ESLint's recommended rules and Sonar's recommended rules.
-  - `src/*.js` are browser scripts that are joined into one file by `tools/build.py`, so each file uses functions and constants from the others. For them, the rules for undefined and unused names (`no-undef`, `no-unused-vars`) are off; every other rule applies.
-  - `tests/` and `tools/` are Node scripts and get Node globals.
+  - `src/*.js` are browser scripts that are joined into one file by `tools/build.py`, so each file uses functions and constants from the others. For them, the rules for undefined, unused and implicit global names (`no-undef`, `no-unused-vars`, `sonarjs/no-implicit-global`) are off; every other rule applies. Sonar's own `sonarjs/no-unused-vars` stays on, since it checks only names local to a function.
+  - `tests/` and `tools/` are Node scripts and get Node globals. The tests are plain Playwright scripts, not `describe`/`it` blocks, so `sonarjs/no-empty-test-file` is off for them.
   - `index.html` (built), `node_modules/`, `saved_tracks/`, `shots/` and `.claude/` are ignored.
 - `npm run lint` scans the whole project and writes the list to `shots/lint-report.txt`.
 

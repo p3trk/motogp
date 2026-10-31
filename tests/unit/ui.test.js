@@ -294,6 +294,30 @@ test('UI.sync: buttons, fuel line and hint, rows per mode, saved', () => {
   assert.equal($('optGuideWrap').hidden, true); assert.equal(JSON.parse(env.ls.getItem('sgp_opts')).fuel, 50);
   G.UI.opts.mode = 'practice'; G.UI.sync(); assert.equal($('optFuelWrap').hidden, true); assert.equal($('optFuelHint').textContent, 'Practice starts with a full tank.');
 });
+test('parseChangelog: releases with date and notes; indented lines continue a note', () => {
+  const { G } = load(); const text = '# Changelog\n\n## v2.0.0 (2026-11-01)\n- First note\n  continued here\n- Second\n\n## v1.9.1\n- Only a note\n';
+  assert.deepEqual(G.parseChangelog(text), [
+    { v: '2.0.0', date: '2026-11-01', notes: ['First note continued here', 'Second'] },
+    { v: '1.9.1', date: '', notes: ['Only a note'] }
+  ]);
+  assert.deepEqual(G.parseChangelog('no releases here'), []);
+});
+test('releaseSummary: the first one or two sentences of the first note, without GDD references; test notes skipped', () => {
+  const { G } = load();
+  assert.equal(G.releaseSummary({ notes: ['Fix: the bike stops. Second sentence here. Third one.'] }), 'Fix: the bike stops. Second sentence here.');
+  assert.equal(G.releaseSummary({ notes: ['Tests: new file.', 'Gravel traps (GDD 5): drag 0.12 g + 0.0053 g per (m/s)². Next.'] }), 'Gravel traps: drag 0.12 g + 0.0053 g per (m/s)². Next.');
+  assert.equal(G.releaseSummary({ notes: ['Tests: only tests.'] }), '', 'a release with only test notes has no summary');
+  assert.equal(G.releaseSummary({ notes: [] }), '');
+});
+test('UI.renderNotes, UI.toggleNotes: newest summary, the last 10 releases in full, opened and closed by the note', () => {
+  const { G, env } = load(); const $ = id => env.doc.getElementById(id);
+  const rel = G.parseChangelog(G.CHANGELOG_RAW);
+  assert.equal($('relSum').textContent, G.releaseSummary(rel[0])); assert.ok($('relSum').textContent.length > 0, 'the newest release has a summary');
+  assert.equal($('changelog').querySelectorAll('h3').length, 10); assert.equal($('changelog').querySelectorAll('h3')[0].textContent.startsWith('v' + rel[0].v), true);
+  assert.equal($('changelog').hidden, true); assert.equal($('relNote').getAttribute('aria-expanded'), 'false');
+  $('relNote').click(); assert.equal($('changelog').hidden, false); assert.equal($('relNote').getAttribute('aria-expanded'), 'true');
+  $('relNote').click(); assert.equal($('changelog').hidden, true);
+});
 test('UI.renderRecords: saved laps and bests, or a hint when there are none', () => {
   const { G, env } = load(); const $ = id => env.doc.getElementById(id);
   G.UI.renderRecords(); assert.match($('records').textContent, /No laps saved yet/); assert.equal($('btnClearRec').hidden, true);

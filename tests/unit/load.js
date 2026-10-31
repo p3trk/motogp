@@ -213,7 +213,7 @@ const GLOBALS = ['window', 'document', 'localStorage', 'matchMedia', 'addEventLi
 let SOURCE = null;
 function source() {
   if (SOURCE) return SOURCE;
-  const parts = ORDER.map(read); parts[0] = parts[0].replace('__TRACK__', read('track.txt'));
+  const parts = ORDER.map(read); parts[0] = parts[0].replace('__TRACK__', read('track.txt')).replace('__CHANGELOG__', JSON.stringify(fs.readFileSync(path.join(ROOT, 'CHANGELOG.md'), 'utf-8')));
   SOURCE = parts.join('');
   return SOURCE;
 }

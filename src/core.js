@@ -1,6 +1,7 @@
 'use strict';
 // Silverstone GP centerline + track widths: TUMFTM racetrack-database (LGPL-3.0), x,y,w_right,w_left in metres.
 const TRACK_RAW = "__TRACK__";
+const CHANGELOG_RAW = __CHANGELOG__; // CHANGELOG.md as a string, for the menu release note (GDD 11)
 
 const G = 9.81, DEG = Math.PI / 180, TAU = Math.PI * 2;
 const clamp = (v, a, b) => { if (v < a) { return a; } return v > b ? b : v; };

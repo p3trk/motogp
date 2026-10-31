@@ -361,8 +361,7 @@ function tailNumber(g, num, x) {
 }
 function drawRiderTop(h, Tm, p = RIDER_REST) {
   h.lineCap = 'round';
-  // legs from the hips to the knees against the tank
-  for (const sg of [-1, 1]) { h.strokeStyle = shade(Tm.c1, -0.3); h.lineWidth = 0.12; h.beginPath(); h.moveTo(-0.32, sg * 0.18 + p.base + p.hip); h.lineTo(-0.05, sg * 0.27 * p.q + p.base); h.stroke(); }
+  for (const sg of [-1, 1]) drawLeg(h, Tm, p, sg, [-0.32, sg * 0.18 + p.base + p.hip], [-0.05, sg * 0.27 * p.q + p.base], [-0.3, sg * 0.29 * p.q + p.base], 0.12);
   const xh = -0.4, xs = 0.15;
   h.save(); riderBend(h, p, xh, xs);
   h.fillStyle = 'rgba(0,0,0,.22)'; h.beginPath(); h.ellipse(-0.15, 0.05, 0.34, 0.2, 0, 0, TAU); h.fill(); // the rider's shadow on the bike
@@ -383,10 +382,10 @@ function drawHelmet(h, Tm, x, y, r, visor) {
 // --- rider on the bike (GDD 11i): the hands stay on the grips and the boots on the pegs; the body bends from the seat
 // to the inside of the bend (hips 0.12, shoulders 0.30, helmet 0.40 x sin(lean)), sits up and back when braking and
 // tucks in at full throttle. base and q follow the chassis (its shift and narrowing with lean)
-const RIDER_REST = { base: 0, q: 1, hip: 0, sh: 0, hel: 0, hf: 0, fwd: 0, sg: 0, elbow: 0 };
+const RIDER_REST = { base: 0, q: 1, hip: 0, sh: 0, hel: 0, hf: 0, fwd: 0, sg: 0, elbow: 0, knee: 0 };
 function riderPose(b) {
   const sl = Math.sin(b.lean), brk = clamp(b.ctl.brk, 0, 1), tuck = clamp((b.ctl.thr - 0.7) / 0.3, 0, 1) * (1 - brk);
-  return { base: sl * 0.16, q: 0.72 + 0.28 * Math.cos(b.lean), hip: 0.12 * sl, sh: 0.3 * sl, hel: 0.4 * sl, hf: 0.05 * Math.abs(sl), fwd: 0.06 * tuck - 0.08 * brk, sg: Math.sign(sl), elbow: 0.08 * Math.abs(sl) };
+  return { base: sl * 0.16, q: 0.72 + 0.28 * Math.cos(b.lean), hip: 0.12 * sl, sh: 0.3 * sl, hel: 0.4 * sl, hf: 0.05 * Math.abs(sl), fwd: 0.06 * tuck - 0.08 * brk, sg: Math.sign(sl), elbow: 0.08 * Math.abs(sl), knee: 0.22 * clamp((Math.abs(b.lean) - 0.3) / 0.5, 0, 1) };
 }
 // bend what is drawn next: the hips (at x xh) move by the hip shift, the shoulders (at x xs) by the shoulder shift and
 // forward or back, everything between in proportion
@@ -398,6 +397,17 @@ function riderBend(h, p, xh, xs) {
 function riderAt(p, xh, xs, x, y) {
   const sx = (xs + p.fwd - xh) / (xs - xh), k = (p.sh - p.hip) / (xs - xh);
   return [xh + (x - xh) * sx, y + p.base + p.hip + (x - xh) * k];
+}
+// a leg: thigh from the hip to the knee, shin from the knee back to the peg, one piece. The inside knee (side sg of the
+// lean) goes out by the knee value, far enough to clear the bent body, with a knee cap and the slider on it
+function drawLeg(h, Tm, p, sg, [hx, hy], [kx, ky], [px, py], w) {
+  const out = sg * p.sg > 0 ? sg * p.knee : 0, k = [kx, ky + out];
+  h.strokeStyle = shade(Tm.c1, -0.42); h.lineWidth = w * 0.8; h.beginPath(); h.moveTo(k[0], k[1]); h.lineTo(px, py); h.stroke(); // shin
+  h.strokeStyle = shade(Tm.c1, -0.3); h.lineWidth = w; h.beginPath(); h.moveTo(hx, hy); h.lineTo(k[0], k[1]); h.stroke(); // thigh
+  if (Math.abs(out) > 0.04) { // knee cap with the slider on its outside
+    h.fillStyle = shade(Tm.c1, -0.3); h.beginPath(); h.arc(k[0], k[1], w * 0.6, 0, TAU); h.fill();
+    h.fillStyle = '#e8e8e8'; h.beginPath(); h.arc(k[0], k[1] + sg * w * 0.3, 0.045, 0, TAU); h.fill();
+  }
 }
 // an arm from the shoulder to the grip with a glove; out pushes the elbow away from the bike (the inside elbow)
 function drawArm(h, Tm, [sx, sy], [gx, gy], out) {
@@ -435,7 +445,7 @@ function drawRiderRear(h, Tm, k, p = RIDER_REST) {
   for (const sg of [-1, 1]) {
     const py = sg * 0.29 * p.q + p.base;
     h.fillStyle = '#151515'; spriteRect(h, -0.52, py - 0.05, 0.24, 0.1, 0.04); h.fill(); h.fillStyle = Tm.c1; h.fillRect(-0.52, py - 0.02, 0.05, 0.04); // boots on the pegs
-    h.strokeStyle = shade(Tm.c1, -0.3); h.lineWidth = 0.13; h.beginPath(); h.moveTo(xh, sg * 0.15 + p.base + p.hip); h.lineTo(-0.12, sg * 0.28 * p.q + p.base); h.stroke(); // thighs
+    drawLeg(h, Tm, p, sg, [xh, sg * 0.15 + p.base + p.hip], [-0.12, sg * 0.28 * p.q + p.base], [-0.3, py], 0.13);
   }
   h.save(); riderBend(h, p, xh, xs);
   h.fillStyle = 'rgba(0,0,0,.22)'; h.beginPath(); h.ellipse(-0.18, 0.05, 0.36, 0.2, 0, 0, TAU); h.fill();
@@ -914,13 +924,8 @@ function drawBike(b, vis) {
   ctx.save(); ctx.translate(0, sl * 0.16); ctx.scale(1, 0.72 + 0.28 * cl); ctx.drawImage(sp.c, -w / 2, -h / 2, w, h); ctx.restore();
   // brake light on the tail of the drawing (GDD 11i)
   if (b.ctl.brk > 0.3 && b.v > 5) { ctx.fillStyle = 'rgba(255,40,30,.6)'; ctx.beginPath(); ctx.arc(-0.94, sl * 0.16, 0.13, 0, TAU); ctx.fill(); }
-  // the rider, posed each frame (GDD 11i), and the inside knee out from the hips when leaning
+  // the rider, posed each frame, with the inside knee out as part of the leg (GDD 11i)
   const p = riderPose(b), Tm = TEAMS[b.team], k = BIKE_REAR[bikeView()];
-  if (Math.abs(b.lean) > 0.45) {
-    const sg = p.sg, as = Math.abs(sl), y0 = p.base + p.hip;
-    ctx.fillStyle = shade(Tm.c1, -0.35); ctx.beginPath(); ctx.ellipse(-0.1, y0 + sg * (0.3 + as * 0.1), 0.17, 0.075, sg * 0.5, 0, TAU); ctx.fill();
-    ctx.fillStyle = '#e8e8e8'; ctx.beginPath(); ctx.arc(-0.04, y0 + sg * (0.36 + as * 0.11), 0.04, 0, TAU); ctx.fill();
-  }
   if (k) drawRiderRear(ctx, Tm, k, p); else drawRiderTop(ctx, Tm, p);
   ctx.restore();
 }

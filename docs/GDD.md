@@ -674,12 +674,12 @@ Asked by Petr (2026-10-28, planning session): "Help to plan change to improve: 1
 **Rule** (distances in sprite units, the bike is about 2 units long)
 - **Hands and feet stay on the bike:** the hands stay on the grips and the boots on the pegs at every lean, braking and throttle.
 - **Hang-off from the seat:** the hips move to the inside by 0.12 × sin(lean), the shoulders by 0.30 × sin(lean) and the helmet by 0.40 × sin(lean), so the body bends from the seat towards the inside of the bend instead of sliding. The helmet also moves forward by 0.05 × |sin(lean)| (the head looks into the bend).
-- **Knees:** the inside knee goes out from the hip, as now from 0.45 rad, and moves with the hips; the outside knee stays against the tank.
+- **Knees:** each leg is one piece, thigh from the hip to the knee and shin back to the peg. The inside knee goes out with lean, from nothing at 0.3 rad to 0.22 at 0.8 rad, far enough to clear the bent body, with a knee cap and the knee slider on it (from about 0.45 rad). The outside knee stays against the tank. (2026-10-31, Petr: the knee patch drawn beside the leg looked detached; it is now part of the leg.)
 - **Arms:** drawn each frame from the shoulders to the grips: the inside elbow drops out, the outside arm reaches across the tank.
 - **Braking** (by the brake value, 0–1): the rider sits up and back: shoulders and helmet 0.08 back, arms straight.
 - **Accelerating** (by the throttle above 0.7): the rider tucks in: shoulders and helmet 0.06 forward, the back flatter and lower behind the screen. Full throttle on a straight shows a tucked rider.
 - Smooth by itself: lean, brake and throttle already change smoothly, so the rider moves smoothly with them.
-- The rider is drawn each frame from these parts instead of one cached image; the cached image is kept for a crashed rider. The knee slider moves with the hips; the separate elbow patch is gone (the arm itself drops the elbow out).
+- The rider is drawn each frame from these parts instead of one cached image; the cached image is kept for a crashed rider. The separate knee and elbow patches are gone: the leg carries the knee, the arm drops the elbow out.
 - In all three cameras, with each camera's drawing (top view, Behind, CLOSE).
 
 **Tests**

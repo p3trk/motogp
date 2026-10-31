@@ -134,7 +134,7 @@ test('drawChassisTop, tailNumber: tyres, fairing in team colours, windscreen, th
 });
 test('drawRiderTop, drawHelmet: legs, arms, back and helmet with visor from above, none from behind', () => {
   const { G } = load(); const c = makeCtx({}); G.drawRiderTop(c, G.TEAMS[0]);
-  assert.equal(ops(c, 'stroke').length, 4, 'two legs, two arms'); assert.equal(ops(c, 'closePath').length, 1, 'visor');
+  assert.equal(ops(c, 'stroke').length, 6, 'two thighs, two shins, two arms'); assert.equal(ops(c, 'closePath').length, 1, 'visor');
   assert.deepEqual(ops(c, 'arc').at(-1).slice(1, 4), [0.26, 0, 0.145], 'helmet in the middle at rest');
   const r = makeCtx({}); G.drawHelmet(r, G.TEAMS[0], 0.3, 0.1, 0.17, 0); assert.equal(ops(r, 'closePath').length, 0, 'no visor from behind'); assert.deepEqual(ops(r, 'arc')[0].slice(1, 4), [0.3, 0.1, 0.17]);
 });
@@ -144,6 +144,7 @@ test('riderPose: hang-off grows from hips to shoulders to helmet, braking sits u
   const p = pose(0.8, 0, 0), sl = Math.sin(0.8);
   near(p.hip, 0.12 * sl, 1e-12); near(p.sh, 0.3 * sl, 1e-12); near(p.hel, 0.4 * sl, 1e-12); near(p.base, 0.16 * sl, 1e-12); near(p.hf, 0.05 * sl, 1e-12); assert.equal(p.sg, 1);
   assert.equal(pose(-0.8, 0, 0).sg, -1); near(pose(-0.8, 0, 0).hel, -p.hel, 1e-12);
+  assert.equal(pose(0.3, 0, 0).knee, 0, 'knee in up to 0.3 rad'); near(pose(0.55, 0, 0).knee, 0.11, 1e-12); near(pose(-0.9, 0, 0).knee, 0.22, 1e-12, 'fully out from 0.8 rad');
   near(pose(0, 1, 0).fwd, -0.08, 1e-12); near(pose(0, 0, 1).fwd, 0.06, 1e-12); near(pose(0, 0, 0.7).fwd, 0, 1e-12); near(pose(0, 1, 1).fwd, -0.08, 1e-12, 'braking wins');
 });
 test('riderBend, riderAt: hips and shoulders move by their shifts, the shoulders forward by fwd', () => {
@@ -159,6 +160,15 @@ test('drawArm: from the shoulder to the grip, the elbow pushed out, a glove on t
   assert.deepEqual(ops(c, 'moveTo')[0].slice(1), [0, 0.2]); const q = ops(c, 'quadraticCurveTo')[0]; near(q[2], 0.25 + 0.04 + 0.08, 1e-12); assert.deepEqual(q.slice(3), [0.4, 0.3]);
   assert.deepEqual(ops(c, 'arc')[0].slice(1, 3), [0.4, 0.3]);
 });
+test('drawLeg: thigh and shin meet at the knee, the inside knee goes out with the slider on it', () => {
+  const { G } = load(); const leg = (p, sg) => { const c = makeCtx({}); G.drawLeg(c, G.TEAMS[0], p, sg, [-0.4, 0.15], [-0.1, 0.28], [-0.3, 0.29], 0.12); return c; };
+  const p = G.riderPose({ lean: 0.9, ctl: { brk: 0, thr: 0 } });
+  let c = leg(p, 1); const [shin, thigh] = [ops(c, 'moveTo')[0], ops(c, 'lineTo')[1]];
+  assert.deepEqual(shin.slice(1), thigh.slice(1), 'one piece: the shin starts where the thigh ends'); near(thigh[2], 0.28 + p.knee, 1e-12, 'knee out');
+  assert.ok(c.calls.some(o => o[0] === '=fillStyle' && o[1] === '#e8e8e8'), 'slider'); const [cap, sl] = ops(c, 'arc'); assert.deepEqual(cap.slice(1, 3), thigh.slice(1), 'knee cap on the knee'); near(sl[2] - cap[2], 0.036, 1e-12, 'slider on the cap');
+  c = leg(p, -1); near(ops(c, 'lineTo')[1][2], 0.28, 1e-12, 'outside knee stays'); assert.equal(ops(c, 'arc').length, 0, 'no slider outside');
+  c = leg(G.RIDER_REST, 1); assert.equal(ops(c, 'arc').length, 0, 'no slider upright');
+});
 test('drawChassisRear: more rear tyre and less fairing the lower the camera, tail light, number', () => {
   const { G } = load(); const tyre = k => { const c = makeCtx({}); G.drawChassisRear(c, G.TEAMS[0], 7, k); return [ops(c, 'roundRect')[0], c]; };
   const [b] = tyre(0.5), [cl, c] = tyre(1);
@@ -168,7 +178,7 @@ test('drawChassisRear: more rear tyre and less fairing the lower the camera, tai
 test('drawRiderRear: boots on the pegs, back bent to the inside, helmet further inside, bigger in CLOSE', () => {
   const { G } = load(); const draw = (k, p) => { const c = makeCtx({}); G.drawRiderRear(c, G.TEAMS[0], k, p); return c; };
   const hb = ops(draw(0.5), 'arc').at(-1), c = draw(1), hc = ops(c, 'arc').at(-1);
-  assert.ok(hc[1] > hb[1], 'further forward'); assert.ok(hc[3] > hb[3], 'bigger'); assert.equal(ops(c, 'stroke').length, 4, 'two thighs, two arms');
+  assert.ok(hc[1] > hb[1], 'further forward'); assert.ok(hc[3] > hb[3], 'bigger'); assert.equal(ops(c, 'stroke').length, 6, 'two thighs, two shins, two arms');
   const p = G.riderPose({ lean: 0.8, ctl: { brk: 0, thr: 0 } }), l = draw(1, p);
   near(ops(l, 'arc').at(-1)[2], p.base + p.hel, 1e-12, 'helmet inside'); assert.ok(ops(l, 'transform').length === 1, 'the back bent');
   const boots = cc => ops(cc, 'roundRect').map(o => o[2]); near(boots(l)[0] - boots(c)[0], p.base + 0.29 * (1 - p.q), 1e-12, 'boots stay on the pegs of the leaning bike');

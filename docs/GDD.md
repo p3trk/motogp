@@ -215,6 +215,8 @@ This replaces the Phase 1 rule (a fixed 2 s penalty for every cut).
 - **Serving:** the rider rides through the lane: the bike's centre must be inside it at three checkpoints (entry, apex, exit) on the same pass. Then the HUD shows **LONG LAP SERVED** in green.
 - **Cost:** a Long Lap always costs at least **2.5 s**. The time through the loop is compared with the reference time for the same stretch of track (as above). If the loop cost less than 2.5 s, the difference is added as a time penalty, so riding the loop well never makes it cheap.
 - Riding the loop to serve a Long Lap is not a track limits trip. Riding it without a Long Lap pending counts as a normal trip off track.
+- After the exit, the run-off up to 40 m past the end of the loop is part of the loop: rejoining the track there is not a trip either, so the way back never counts as a track limits infraction.
+- A trip that reaches the loop, from the run-off just before the lane as well as inside it, is not counted when the rider gets back on track. The rider is judged only on trips that stay off the loop.
 - **Window:** 3 laps. A panel under the lap stopwatch shows **LONG LAP · Stowe · 3 laps** and counts down at every line crossing. The real rule gives 3 laps too.
 - **Not served** in time: **5 s time penalty** (more than the loop costs, so it never pays to ignore it), message **LONG LAP NOT SERVED · +5 s**.
 - Given with **fewer than 3 laps left:** changed to a **3 s time penalty** at once (in real races the stewards change it to a time penalty).

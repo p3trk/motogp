@@ -542,7 +542,7 @@ function makeBike(o) {
     crashed: false, crash: null, held: false, dnf: false, finished: false, finishT: 0, crashes: 0, pits: 0,
     service: false, serviceT: 0, inPitLane: false, limiter: false, box: 0, needRelease: false,
     ai: null, fuelLapStart: PHYS.tank, fuelPerLap: PHYS.lapFuel, progress: 0, msgs: [],
-    offT: -1, offS: 0, offCr: 0, lapInv: false, lapsInv: [], pen: 0, tl: 0, llPend: [], llRun: null, llGiven: 0, dropBehind: null, dropPen: 0
+    offT: -1, offS: 0, offCr: 0, offLL: false, lapInv: false, lapsInv: [], pen: 0, tl: 0, llPend: [], llRun: null, llExitLap: -1, llGiven: 0, dropBehind: null, dropPen: 0
   }, o);
 }
 const Pj = { i: 0, s: 0, d: 0 };
@@ -1086,14 +1086,25 @@ function timing(b) {
   }
   if (b.isPlayer && !b.outLap && !b.gridCross && W.curTrace) { const bin = Math.floor(s / 10); if (W.curTrace[bin] < 0) W.curTrace[bin] = W.time - b.lapStartT; }
 }
+// the Long Lap loop (GDD 6a): the lane while a Long Lap is pending, and the run-off after the exit until the rider is back on track
+function inLongLap(b) {
+  const LL = T.LL;
+  if (b.llPend?.length && T.inLL(b.s, b.d)) return true; // serving a Long Lap
+  return b.llExitLap === b.lap && b.s >= LL.sB && b.s <= LL.sB + 40;
+}
 // track limits (GDD 6a): run-off, gravel and grass beyond the kerb; the strip beside the pit lane is not judged
 function overLimit(b) {
   const sf = b.surf; if (sf !== SURF.RUN && sf !== SURF.GRAVEL && sf !== SURF.GRASS) return false;
-  if (W.mode === 'race' && b.llPend?.length && T.inLL(b.s, b.d)) return false; // serving a Long Lap
+  if (W.mode === 'race' && inLongLap(b)) return false;
   return !(b.d >= 0 && T.PIT.inZone(T.rel(b.s)));
 }
 function trackLimits(b) {
   const race = W.mode === 'race', judged = !b.autopilot && !b.trainHold && (race ? W.phase === 'run' && !b.finished : !b.outLap);
+  const off = b.surf === SURF.RUN || b.surf === SURF.GRAVEL || b.surf === SURF.GRASS;
+  if (race && off && inLongLap(b)) { // in the loop, not a trip; a trip that reaches the loop is not counted
+    if (b.offT >= 0) b.offLL = true;
+    return;
+  }
   if (overLimit(b)) {
     if (b.offT >= 0) return;
     b.offT = W.time; b.offS = b.s; b.offCr = b.crashes;
@@ -1101,8 +1112,8 @@ function trackLimits(b) {
     return;
   }
   if (b.offT < 0) return;
-  const t = W.time - b.offT, s0 = b.offS, crashed = b.crashes !== b.offCr; b.offT = -1;
-  if (!race || !judged || crashed) return; // a crash and respawn is not a rejoin
+  const t = W.time - b.offT, s0 = b.offS, crashed = b.crashes !== b.offCr, loop = b.offLL; b.offT = -1; b.offLL = false;
+  if (!race || !judged || crashed || loop) return; // a crash and respawn is not a rejoin; a trip through the Long Lap loop is not counted
   const ref = limitRef(s0, b.s); if (ref === null) return;
   const lost = t - ref; if (lost >= 0.5) return; // ran wide and paid for it already
   const gain = Math.max(0, -lost), back = Math.ceil(gain * 10 - 1e-6) / 10; // a cut never pays: the gain comes back at once
@@ -1133,7 +1144,7 @@ function longLap(b) {
   LL.cps.forEach((c, k) => { if (crossed(c) && T.inLL(s, b.d)) R.ok |= 1 << k; });
   if (!crossed(LL.sB)) return;
   b.llRun = null; if (R.ok !== 7) return;
-  b.llPend.shift();
+  b.llPend.shift(); b.llExitLap = b.lap;
   const top = Math.ceil((2.5 - (W.time - R.t0 - limitRef(LL.sA, LL.sB))) * 10 - 1e-6) / 10;
   if (top > 0) b.pen += top;
   HUD.msg('LONG LAP SERVED', top > 0 ? '+' + top.toFixed(1) + ' s to make it 2.5 s' : '', '#3ad17a', 2);

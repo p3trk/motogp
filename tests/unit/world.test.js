@@ -337,6 +337,39 @@ test('longLap: served through entry, apex and exit, topped up to 2.5 s', () => {
   assert.equal(b.llPend.length, 1, 'missed the lane at the entry');
   W.mode = 'practice'; b.llRun = {}; G.longLap(b); assert.equal(b.llRun, null);
 });
+test('inLongLap: the lane while a Long Lap is pending, then 40 m of run-off after the exit on the same lap', () => {
+  const { G, b, T } = session('sprint'); const LL = T.LL, at = (s, d) => { b.s = s; b.d = d; return G.inLongLap(b); }; b.lap = 2;
+  b.llPend = [{ until: 5 }]; assert.equal(at(LL.sM, 0), false); assert.equal(at(LL.sM, LL.sg * LL.off(LL.sM)), true);
+  b.llPend = []; assert.equal(at(LL.sM, LL.sg * LL.off(LL.sM)), false, 'the lane is a trip again once nothing is pending');
+  b.llExitLap = 2; assert.equal(at(LL.sB - 1, 0), false); assert.equal(at(LL.sB + 20, 0), true); assert.equal(at(LL.sB + 41, 0), false);
+  b.lap = 3; assert.equal(at(LL.sB + 20, 0), false, 'the next lap');
+});
+test('trackLimits: back on track after a served Long Lap is not a track limits trip', () => {
+  const { G, W, b, T, SURF } = session('sprint'); const LL = T.LL; W.phase = 'run'; b.lap = 2; b.llPend = [{ until: 5 }];
+  const ref = G.limitRef(LL.sA, LL.sB), step = (s0, s1, t, surf, d) => { W.time = t; b.prevS = s0; b.s = s1; b.surf = surf; b.d = d; G.longLap(b); G.trackLimits(b); };
+  step(LL.sA - 1, LL.sA + 1, 10, SURF.RUN, LL.sg * LL.off(LL.sA + 1));
+  for (const c of LL.cps) step(c - 1, c + 1, 11, SURF.RUN, LL.sg * LL.off(c + 1));
+  step(LL.sB - 1, LL.sB + 1, 10 + ref + 1, SURF.RUN, LL.sg * LL.off(LL.sB + 1));
+  assert.equal(b.llPend.length, 0); const pen = b.pen;
+  step(LL.sB + 1, LL.sB + 5, 30, SURF.RUN, LL.sg * (LL.off(LL.sB) + 3)); // off the exit, onto the run-off
+  step(LL.sB + 5, LL.sB + 12, 31, SURF.ASPH, 0); // back on the track
+  assert.equal(b.tl, 0); assert.equal(b.offT, -1); assert.equal(b.pen, pen); assert.equal(b.llPend.length, 0);
+  assert.notEqual(G.HUD.m.t, 'TRACK LIMITS 1/3');
+});
+test('trackLimits: a trip that runs into the Long Lap from the run-off is not counted', () => {
+  const { G, W, b, T, SURF } = session('sprint'); const LL = T.LL; W.phase = 'run'; b.lap = 2; b.llPend = [{ until: 5 }];
+  const step = (s0, s1, t, surf, d) => { W.time = t; b.prevS = s0; b.s = s1; b.surf = surf; b.d = d; G.longLap(b); G.trackLimits(b); };
+  // a quick run: the rejoin after the exit is faster than the reference time, so a counted trip would give a penalty
+  step(LL.sA - 9, LL.sA - 6, 10, SURF.RUN, LL.sg * (LL.off(LL.sA) + 4)); // onto the run-off just before the lane, outside it
+  assert.ok(b.offT >= 0, 'the trip starts');
+  step(LL.sA - 6, LL.sA + 1, 10.2, SURF.RUN, LL.sg * LL.off(LL.sA + 1)); // into the lane
+  for (const c of LL.cps) step(c - 1, c + 1, 10.3, SURF.RUN, LL.sg * LL.off(c + 1));
+  step(LL.sB - 1, LL.sB + 1, 10.5, SURF.RUN, LL.sg * LL.off(LL.sB + 1));
+  assert.equal(b.llPend.length, 0); const pen = b.pen;
+  step(LL.sB + 1, LL.sB + 5, 11, SURF.RUN, LL.sg * (LL.off(LL.sB) + 3)); // off the exit, onto the run-off
+  step(LL.sB + 5, LL.sB + 12, 11.5, SURF.ASPH, 0); // back on the track
+  assert.equal(b.tl, 0); assert.equal(b.offT, -1); assert.equal(b.pen, pen); assert.equal(b.llGiven, 0);
+});
 test('longLapDue: not served in its laps: 5 s', () => {
   const { G, b } = session('sprint'); b.llPend = [{ until: 4 }, { until: 6 }]; b.lap = 4;
   G.longLapDue(b); assert.equal(b.pen, 5); assert.equal(b.llPend.length, 1); assert.equal(G.HUD.m.t, 'LONG LAP NOT SERVED');

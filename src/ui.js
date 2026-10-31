@@ -624,6 +624,7 @@ const UI = {
     $('optName').addEventListener('input', e => { this.opts.name = e.target.value.trim() || 'Rider'; });
     $('optNum').addEventListener('input', e => { this.opts.num = clamp(parseInt(e.target.value) || 25, 1, 99); });
     $('btnStart').addEventListener('click', () => this.start());
+    this.renderNotes(); $('relNote').addEventListener('click', () => this.toggleNotes());
     $('btnClearRec').addEventListener('click', e => { const bt = e.currentTarget; if (bt.dataset.armed) { Records.clear(); delete bt.dataset.armed; this.renderRecords(); } else { bt.dataset.armed = '1'; bt.textContent = 'Click again to delete all saved laps'; setTimeout(() => { delete bt.dataset.armed; this.renderRecords(); }, 3500); } });
     $('btnResume').addEventListener('click', () => this.togglePause());
     $('btnCentre').addEventListener('click', () => TouchCtl.recentre());
@@ -672,6 +673,14 @@ const UI = {
     $('optFuelWrap').hidden = o.mode === 'practice'; $('optGuideWrap').hidden = o.mode !== 'practice'; $('optTrainWrap').hidden = o.mode !== 'practice'; $('trainBox').hidden = o.train !== 'on'; this.renderTraining(); this.renderRecords(); $('optGridWrap').hidden = !(o.mode === 'sprint' || (o.mode === 'practice' && o.train !== 'on')); // one setting for the race and the practice grid start (GDD 2a)
     TouchCtl.opts();
     try { localStorage.setItem('sgp_opts', JSON.stringify(o)); } catch { /* storage blocked: the options are not saved */ }
+  },
+  renderNotes() { // menu release note (GDD 11): the newest summary; the last 10 releases in full open under it on click
+    const rel = parseChangelog(CHANGELOG_RAW);
+    $('relSum').textContent = rel[0] ? releaseSummary(rel[0]) : '';
+    $('changelog').innerHTML = rel.slice(0, 10).map(r => '<h3>v' + esc(r.v) + (r.date ? ' <span>' + esc(r.date) + '</span>' : '') + '</h3><ul>' + r.notes.map(n => '<li>' + esc(n) + '</li>').join('') + '</ul>').join('');
+  },
+  toggleNotes() {
+    const open = $('changelog').hidden; $('changelog').hidden = !open; $('relNote').setAttribute('aria-expanded', String(open));
   },
   renderRecords() {
     const d = Records.d, el = $('records'); if (!el) return;
@@ -904,6 +913,24 @@ const UI = {
   }
 };
 function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+// CHANGELOG.md (GDD 11): "## vX.Y.Z (date)" starts a release; "- " lines are its notes, and an indented line continues the note above it
+function parseChangelog(text) {
+  const out = [];
+  for (const line of text.split('\n')) {
+    const h = line.match(/^## v(\d+\.\d+\.\d+)(?: \(([^)]*)\))?/);
+    if (h) { out.push({ v: h[1], date: h[2] || '', notes: [] }); continue; }
+    const r = out[out.length - 1]; if (!r) { continue; }
+    if (line.startsWith('- ')) { r.notes.push(line.slice(2).trim()); } else if (line.trim() && r.notes.length) { r.notes[r.notes.length - 1] += ' ' + line.trim(); }
+  }
+  return out;
+}
+// the menu's release note (GDD 11): the first one or two sentences of the release's first note that is not a test note,
+// without the "(GDD 11h)" references; a release with only test notes has none
+function releaseSummary(r) {
+  const note = r.notes.find(n => !/^tests?\b/i.test(n)); if (!note) { return ''; }
+  const sentences = note.replace(/ \(GDD[^)]*\)/g, '').replace(/([.!?])\s+/g, '$1\n').split('\n'); // a decimal point is not followed by a space
+  return sentences.slice(0, 2).join(' ');
+}
 function sw(team) { return `<span class="sw" style="background:${TEAMS[team].c1}"></span>`; }
 function teamForId(id, playerTeam) { const seats = []; for (let t = 0; t < TEAMS.length; t++) { seats.push(t, t); } seats.splice(seats.indexOf(playerTeam), 1); return seats[id - 1]; }
 

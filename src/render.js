@@ -308,20 +308,32 @@ function buildScenery() {
   }
 }
 
-// --- bike sprites (top-down, bike pointing +x, 48 px per metre)
-const SPR = 48, SPW = Math.ceil(2.5 * SPR), SPH = Math.ceil(1.3 * SPR);
+// --- bike sprites (bike pointing +x, SPR px per sprite unit): one drawing per camera (GDD 11i), the top view in
+// Top-down and rear three-quarter views in Behind and CLOSE, from the team colours and the race number
+const SPR = 96, SPW = Math.ceil(2.5 * SPR), SPH = Math.ceil(1.3 * SPR);
 const SPRITES = {};
+const BIKE_VIEW = { chase: 'top', behind: 'behind', close: 'close' }; // camera -> drawing
+const BIKE_REAR = { top: 0, behind: 0.5, close: 1 }; // how far the drawing turns from the top view to the rear view
 function shade(hex, f) { const n = parseInt(hex.slice(1), 16); let r = n >> 16, g = (n >> 8) & 255, b = n & 255; if (f < 0) { r *= 1 + f; g *= 1 + f; b *= 1 + f; } else { r += (255 - r) * f; g += (255 - g) * f; b += (255 - b) * f; } return `rgb(${r | 0},${g | 0},${b | 0})`; }
-function bikeSprite(team, num) {
-  const key = team + '_' + num; if (SPRITES[key]) return SPRITES[key];
-  const Tm = TEAMS[team];
+function spriteRect(g, x, y, w, h, r) { g.beginPath(); if (g.roundRect) g.roundRect(x, y, w, h, r); else g.rect(x, y, w, h); }
+// a gradient across the bike (y), dark at the sides and light in the middle: a rounded body or tyre
+function acrossGrad(g, w, dark, light) {
+  const gr = g.createLinearGradient(0, -w, 0, w); gr.addColorStop(0, dark); gr.addColorStop(0.5, light); gr.addColorStop(1, dark); return gr;
+}
+function bikeSprite(team, num, view = 'top') {
+  const key = team + '_' + num + '_' + view; if (SPRITES[key]) return SPRITES[key];
+  const Tm = TEAMS[team], k = BIKE_REAR[view] || 0;
   const mkc = () => { const c = mkCanvas(SPW, SPH), g = c.getContext('2d'); g.translate(SPW / 2, SPH / 2); g.scale(SPR, SPR); return [c, g]; };
-  const rr = (g, x, y, w, h, r) => { g.beginPath(); g.roundRect ? g.roundRect(x, y, w, h, r) : g.rect(x, y, w, h); };
-  // chassis
-  const [cc, g] = mkc();
-  g.fillStyle = '#121212'; rr(g, -1.02, -0.105, 0.62, 0.21, 0.08); g.fill(); rr(g, 0.44, -0.068, 0.58, 0.136, 0.06); g.fill();
+  const [cc, g] = mkc(), [rc, h] = mkc();
+  if (k) { drawChassisRear(g, Tm, num, k); drawRiderRear(h, Tm, k); } else { drawChassisTop(g, Tm, num); drawRiderTop(h, Tm); }
+  SPRITES[key] = { c: cc, r: rc };
+  return SPRITES[key];
+}
+function drawChassisTop(g, Tm, num) {
+  // tyres with a light tread down the middle, frame
+  for (const [x, w, hw] of [[-1.02, 0.62, 0.105], [0.44, 0.58, 0.068]]) { g.fillStyle = acrossGrad(g, hw, '#0c0c0c', '#2e3236'); spriteRect(g, x, -hw, w, 2 * hw, hw * 0.75); g.fill(); }
   g.fillStyle = 'rgba(255,255,255,.14)'; g.fillRect(-0.98, -0.02, 0.54, 0.04); g.fillRect(0.48, -0.015, 0.5, 0.03);
-  g.fillStyle = '#30353a'; rr(g, -0.78, -0.13, 0.5, 0.26, 0.05); g.fill();
+  g.fillStyle = '#30353a'; spriteRect(g, -0.78, -0.13, 0.5, 0.26, 0.05); g.fill();
   // brake discs
   g.fillStyle = '#7d7f82'; g.fillRect(0.6, -0.1, 0.26, 0.03); g.fillRect(0.6, 0.07, 0.26, 0.03);
   const body = new Path2D();
@@ -330,33 +342,96 @@ function bikeSprite(team, num) {
   body.bezierCurveTo(0.0, -0.27, 0.1, -0.3, 0.3, -0.31); body.lineTo(0.55, -0.3); body.bezierCurveTo(0.78, -0.22, 0.95, -0.12, 0.98, 0); body.closePath();
   const gr = g.createLinearGradient(0, -0.32, 0, 0.32); gr.addColorStop(0, shade(Tm.c1, -0.45)); gr.addColorStop(0.35, shade(Tm.c1, 0.12)); gr.addColorStop(0.5, shade(Tm.c1, 0.28)); gr.addColorStop(0.65, shade(Tm.c1, 0.05)); gr.addColorStop(1, shade(Tm.c1, -0.5));
   g.fillStyle = gr; g.fill(body);
-  g.save(); g.clip(body); g.fillStyle = Tm.c2; g.fillRect(-1, -0.055, 2, 0.11); g.fillStyle = shade(Tm.c2, -0.2); g.fillRect(0.05, -0.31, 0.2, 0.62); g.restore();
+  g.save(); g.clip(body); g.fillStyle = Tm.c2; g.fillRect(-1, -0.055, 2, 0.11); g.fillStyle = shade(Tm.c2, -0.2); g.fillRect(0.05, -0.31, 0.2, 0.62);
+  g.fillStyle = 'rgba(255,255,255,.12)'; g.fillRect(-1, -0.2, 2, 0.06); g.restore(); // shine along the fairing
   g.lineWidth = 0.012; g.strokeStyle = 'rgba(0,0,0,.5)'; g.stroke(body);
   // winglets
   g.fillStyle = '#16181a'; for (const sg of [-1, 1]) { g.beginPath(); g.moveTo(0.66, sg * 0.27); g.lineTo(0.5, sg * 0.4); g.lineTo(0.43, sg * 0.4); g.lineTo(0.5, sg * 0.28); g.closePath(); g.fill(); }
-  // windscreen + nose number
+  // windscreen
   g.fillStyle = 'rgba(25,35,48,.82)'; g.beginPath(); g.ellipse(0.66, 0, 0.17, 0.13, 0, 0, TAU); g.fill();
   g.fillStyle = 'rgba(255,255,255,.35)'; g.beginPath(); g.ellipse(0.7, -0.04, 0.08, 0.035, 0, 0, TAU); g.fill();
-  // seat + tail number
-  g.fillStyle = '#1b1d20'; rr(g, -0.56, -0.13, 0.32, 0.26, 0.06); g.fill();
-  g.save(); g.translate(-0.74, 0); g.rotate(Math.PI / 2); g.fillStyle = '#fff'; g.font = '800 0.2px "Saira Condensed", Arial Narrow, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-  g.lineWidth = 0.03; g.strokeStyle = '#000'; g.strokeText(String(num), 0, 0); g.fillText(String(num), 0, 0); g.restore();
+  // seat + tail number + exhaust tips
+  g.fillStyle = '#1b1d20'; spriteRect(g, -0.56, -0.13, 0.32, 0.26, 0.06); g.fill();
+  tailNumber(g, num, -0.74);
   g.fillStyle = '#b8bcc0'; g.beginPath(); g.arc(-0.95, 0.06, 0.035, 0, TAU); g.arc(-0.95, -0.06, 0.035, 0, TAU); g.fill();
-  // rider
-  const [rc, h] = mkc();
+}
+function tailNumber(g, num, x) {
+  g.save(); g.translate(x, 0); g.rotate(Math.PI / 2); g.fillStyle = '#fff'; g.font = '800 0.2px "Saira Condensed", Arial Narrow, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.lineWidth = 0.03; g.strokeStyle = '#000'; g.strokeText(String(num), 0, 0); g.fillText(String(num), 0, 0); g.restore();
+}
+function drawRiderTop(h, Tm) {
   h.lineCap = 'round';
+  h.fillStyle = 'rgba(0,0,0,.22)'; h.beginPath(); h.ellipse(-0.15, 0.05, 0.34, 0.2, 0, 0, TAU); h.fill(); // the rider's shadow on the bike
   for (const sg of [-1, 1]) { h.strokeStyle = shade(Tm.c1, -0.3); h.lineWidth = 0.12; h.beginPath(); h.moveTo(-0.32, sg * 0.18); h.lineTo(-0.05, sg * 0.27); h.stroke(); }
   for (const sg of [-1, 1]) { h.strokeStyle = shade(Tm.c1, -0.15); h.lineWidth = 0.085; h.beginPath(); h.moveTo(0.02, sg * 0.19); h.quadraticCurveTo(0.25, sg * 0.3, 0.42, sg * 0.29); h.stroke(); h.fillStyle = '#151515'; h.beginPath(); h.arc(0.44, sg * 0.29, 0.045, 0, TAU); h.fill(); }
-  const tg = h.createLinearGradient(0, -0.22, 0, 0.22); tg.addColorStop(0, shade(Tm.c1, -0.5)); tg.addColorStop(0.5, shade(Tm.c1, 0.2)); tg.addColorStop(1, shade(Tm.c1, -0.5));
-  h.fillStyle = tg; h.beginPath(); h.ellipse(-0.12, 0, 0.34, 0.205, 0, 0, TAU); h.fill();
+  h.fillStyle = acrossGrad(h, 0.22, shade(Tm.c1, -0.5), shade(Tm.c1, 0.2)); h.beginPath(); h.ellipse(-0.12, 0, 0.34, 0.205, 0, 0, TAU); h.fill();
   h.fillStyle = Tm.c2; h.beginPath(); h.ellipse(-0.16, 0, 0.3, 0.05, 0, 0, TAU); h.fill();
   h.fillStyle = shade(Tm.c2, -0.1); h.beginPath(); h.ellipse(-0.42, 0, 0.12, 0.12, 0, 0, TAU); h.fill();
-  const hg = h.createRadialGradient(0.22, -0.05, 0.02, 0.26, 0, 0.16); hg.addColorStop(0, shade(Tm.c3, 0.5)); hg.addColorStop(0.7, Tm.c3); hg.addColorStop(1, shade(Tm.c3, -0.5));
-  h.fillStyle = hg; h.beginPath(); h.arc(0.26, 0, 0.145, 0, TAU); h.fill();
-  h.fillStyle = Tm.c1; h.fillRect(0.14, -0.025, 0.24, 0.05);
-  h.fillStyle = 'rgba(10,14,20,.9)'; h.beginPath(); h.arc(0.26, 0, 0.145, -0.75, 0.75); h.lineTo(0.3, 0); h.closePath(); h.fill();
-  SPRITES[key] = { c: cc, r: rc };
-  return SPRITES[key];
+  drawHelmet(h, Tm, 0.26, 0.145, 1);
+}
+// helmet seen from above (visor 1) or from behind (visor 0): shell in the third team colour, a stripe in the first
+function drawHelmet(h, Tm, x, r, visor) {
+  const hg = h.createRadialGradient(x - 0.04, -0.05, 0.02, x, 0, r + 0.015); hg.addColorStop(0, shade(Tm.c3, 0.5)); hg.addColorStop(0.7, Tm.c3); hg.addColorStop(1, shade(Tm.c3, -0.5));
+  h.fillStyle = hg; h.beginPath(); h.arc(x, 0, r, 0, TAU); h.fill();
+  h.fillStyle = Tm.c1; h.fillRect(x - r * 0.85, -0.025, r * 1.65, 0.05);
+  if (visor > 0) { h.globalAlpha = visor; h.fillStyle = 'rgba(10,14,20,.9)'; h.beginPath(); h.arc(x, 0, r, -0.75, 0.75); h.lineTo(x + 0.04, 0); h.closePath(); h.fill(); h.globalAlpha = 1; }
+}
+// rear three-quarter chassis (GDD 11i): k 0.5 Behind, 1 CLOSE. The lower the camera, the more of the rear tyre and
+// the tail is seen and the less of the fairing ahead of the rider
+function drawChassisRear(g, Tm, num, k) {
+  const tl = 0.36 + 0.22 * k, tw = 0.11 + 0.025 * k, nose = 0.98 - 0.3 * k, sh = nose - 0.45;
+  g.fillStyle = acrossGrad(g, tw, '#0a0a0a', '#383c40'); spriteRect(g, -1.1, -tw, tl, 2 * tw, tw * 0.9); g.fill(); // rear tyre
+  g.fillStyle = '#16181a'; spriteRect(g, nose - 0.08, -0.06, 0.2, 0.12, 0.05); g.fill(); // front tyre, under the nose
+  g.fillStyle = '#3a3e42'; spriteRect(g, -0.98, 0.13, 0.3, 0.1, 0.045); g.fill(); g.fillStyle = '#a3a9ae'; g.beginPath(); g.arc(-0.96, 0.18, 0.045, 0, TAU); g.fill(); // exhaust
+  const body = new Path2D();
+  body.moveTo(nose, 0); body.bezierCurveTo(nose - 0.02, 0.14, sh + 0.12, 0.27, sh, 0.31); body.bezierCurveTo(sh - 0.3, 0.31, -0.2, 0.26, -0.42, 0.19);
+  body.bezierCurveTo(-0.7, 0.15, -0.86, 0.12, -0.9, 0); body.bezierCurveTo(-0.86, -0.12, -0.7, -0.15, -0.42, -0.19);
+  body.bezierCurveTo(-0.2, -0.26, sh - 0.3, -0.31, sh, -0.31); body.bezierCurveTo(sh + 0.12, -0.27, nose - 0.02, -0.14, nose, 0); body.closePath();
+  g.fillStyle = acrossGrad(g, 0.32, shade(Tm.c1, -0.5), shade(Tm.c1, 0.25)); g.fill(body);
+  g.save(); g.clip(body); g.fillStyle = Tm.c2; g.fillRect(-1, -0.05, 2, 0.1); g.fillStyle = 'rgba(255,255,255,.14)'; g.fillRect(-1, -0.21, 2, 0.06); g.restore();
+  g.lineWidth = 0.012; g.strokeStyle = 'rgba(0,0,0,.5)'; g.stroke(body);
+  g.fillStyle = '#16181a'; for (const sg of [-1, 1]) { g.beginPath(); g.moveTo(sh + 0.1, sg * 0.28); g.lineTo(sh - 0.04, sg * 0.4); g.lineTo(sh - 0.11, sg * 0.4); g.lineTo(sh - 0.04, sg * 0.29); g.closePath(); g.fill(); } // winglets
+  g.fillStyle = 'rgba(25,35,48,.82)'; g.beginPath(); g.ellipse(nose - 0.2, 0, 0.12, 0.11, 0, 0, TAU); g.fill(); // windscreen
+  g.fillStyle = '#1b1d20'; spriteRect(g, -0.62, -0.12, 0.26, 0.24, 0.06); g.fill(); // seat
+  tailNumber(g, num, -0.73);
+  // the back of the tail, facing the camera, with the tail light
+  g.fillStyle = shade(Tm.c1, -0.55); spriteRect(g, -0.97, -0.09, 0.09, 0.18, 0.04); g.fill();
+  g.fillStyle = '#5a0c0c'; spriteRect(g, -0.955, -0.065, 0.035, 0.13, 0.015); g.fill();
+}
+// rider from behind (GDD 11i): boots, thighs, the back with the hump and the rear of the helmet; the lower the camera
+// (k 1 CLOSE), the longer the back looks and the further forward the helmet sits
+function drawRiderRear(h, Tm, k) {
+  const xs = 0.04 + 0.16 * k, hr = 0.15 + 0.03 * k;
+  h.lineCap = 'round';
+  h.fillStyle = 'rgba(0,0,0,.22)'; h.beginPath(); h.ellipse(-0.18, 0.05, 0.36, 0.2, 0, 0, TAU); h.fill();
+  for (const sg of [-1, 1]) {
+    h.fillStyle = '#151515'; spriteRect(h, -0.52, sg * 0.29 - 0.05, 0.24, 0.1, 0.04); h.fill(); h.fillStyle = Tm.c1; h.fillRect(-0.52, sg * 0.29 - 0.02, 0.05, 0.04); // boots
+    h.strokeStyle = shade(Tm.c1, -0.3); h.lineWidth = 0.13; h.beginPath(); h.moveTo(-0.42, sg * 0.15); h.lineTo(-0.12, sg * 0.28); h.stroke(); // thighs
+    h.strokeStyle = shade(Tm.c1, -0.15); h.lineWidth = 0.085; h.beginPath(); h.moveTo(xs - 0.04, sg * 0.19); h.quadraticCurveTo(xs + 0.1, sg * 0.31, xs + 0.24 - 0.06 * k, sg * 0.3); h.stroke(); // arms
+    h.fillStyle = '#151515'; h.beginPath(); h.arc(xs + 0.26 - 0.06 * k, sg * 0.3, 0.045, 0, TAU); h.fill(); // gloves
+  }
+  const back = new Path2D();
+  back.moveTo(-0.52, 0); back.bezierCurveTo(-0.52, 0.16, -0.36, 0.17, -0.2, 0.17); back.bezierCurveTo(xs - 0.15, 0.2, xs, 0.23, xs + 0.02, 0.12);
+  back.bezierCurveTo(xs + 0.04, 0.04, xs + 0.04, -0.04, xs + 0.02, -0.12); back.bezierCurveTo(xs, -0.23, xs - 0.15, -0.2, -0.2, -0.17); back.bezierCurveTo(-0.36, -0.17, -0.52, -0.16, -0.52, 0); back.closePath();
+  h.fillStyle = acrossGrad(h, 0.22, shade(Tm.c1, -0.5), shade(Tm.c1, 0.22)); h.fill(back);
+  h.save(); h.clip(back); h.fillStyle = Tm.c2; h.fillRect(-0.6, -0.045, xs + 0.7, 0.09); h.fillStyle = 'rgba(0,0,0,.28)'; h.fillRect(-0.4, -0.3, 0.04, 0.6); h.restore(); // spine stripe, belt
+  h.fillStyle = shade(Tm.c2, -0.1); h.beginPath(); h.ellipse(xs - 0.17, 0, 0.13, 0.09, 0, 0, TAU); h.fill(); // aero hump
+  h.fillStyle = 'rgba(255,255,255,.25)'; h.beginPath(); h.ellipse(xs - 0.2, -0.03, 0.06, 0.03, 0, 0, TAU); h.fill();
+  drawHelmet(h, Tm, xs + 0.12, hr, 1 - k);
+}
+// the drawing and the stretch for the camera in use (GDD 11i): in Behind and CLOSE the drawing is stretched along the
+// screen's up direction so the road's squash at that spot is cancelled: the tilt (cos(tilt)) and the perspective (rows
+// further up are squashed more, by the row's scale), with the tilt of the moment; at most 2.5 near the horizon
+function bikeView() { return BIKE_VIEW[CAM.mode] || 'top'; }
+function bikeStretch(x, y) {
+  if (!camTilted()) return 1;
+  const P = tiltP(), a = tiltA(), yy = worldToCanvas(x, y)[1] - RH, sc = P / (P - yy * Math.sin(a));
+  return clamp(1 / (Math.cos(a) * sc), 1, 2.5);
+}
+// stretch what is drawn next around the world point (x, y), along the camera's forward direction
+function stretchAt(x, y) {
+  const s = bikeStretch(x, y); if (s === 1) return;
+  ctx.translate(x, y); ctx.rotate(-CAM.rot); ctx.scale(1, s); ctx.rotate(CAM.rot); ctx.translate(-x, -y);
 }
 
 // --- camera: 'behind' and 'close' = tilted chase views with their own values, 'chase' = top-down rotating (GDD 11a)
@@ -781,30 +856,40 @@ function drawTrees(vis) {
 }
 function drawBikeShadow(b, vis) {
   const VS = PHYS.VS * CAM.boost;
-  if (b.crashed && b.crash) { for (const o of [b.crash.bk, b.crash.rd]) { if (!vis(o.x, o.y, 4)) { continue; } ctx.save(); ctx.translate(o.x + 0.35, o.y + 0.45); ctx.rotate(o.rot); ctx.globalAlpha = 0.6; ctx.drawImage(TEX.shadow, -1.2 * VS, -0.55 * VS, 2.4 * VS, 1.1 * VS); ctx.restore(); } ctx.globalAlpha = 1; return; }
+  if (b.crashed && b.crash) { for (const o of [b.crash.bk, b.crash.rd]) { if (!vis(o.x, o.y, 4)) { continue; } ctx.save(); stretchAt(o.x, o.y); ctx.translate(o.x + 0.35, o.y + 0.45); ctx.rotate(o.rot); ctx.globalAlpha = 0.6; ctx.drawImage(TEX.shadow, -1.2 * VS, -0.55 * VS, 2.4 * VS, 1.1 * VS); ctx.restore(); } ctx.globalAlpha = 1; return; }
   if (b.dnf || !vis(b.x, b.y, 4)) return;
   const sl = Math.sin(b.lean);
-  ctx.save(); ctx.translate(b.x + 0.45, b.y + 0.6); ctx.rotate(b.h); ctx.translate(0, sl * 0.55 * VS); ctx.globalAlpha = 0.7; ctx.drawImage(TEX.shadow, -1.25 * VS, -0.55 * VS, 2.5 * VS, 1.1 * VS); ctx.restore(); ctx.globalAlpha = 1;
+  ctx.save(); stretchAt(b.x, b.y);
+  ctx.save(); ctx.translate(b.x + 0.25, b.y + 0.35); ctx.rotate(b.h); ctx.translate(0, sl * 0.55 * VS); ctx.globalAlpha = 0.7; ctx.drawImage(TEX.shadow, -1.2 * VS, -0.45 * VS, 2.4 * VS, 0.9 * VS); ctx.restore();
+  // darker where the tyres touch the road (GDD 11i)
+  ctx.translate(b.x, b.y); ctx.rotate(b.h); ctx.globalAlpha = 0.35; ctx.fillStyle = '#000';
+  for (const x of [-0.72, 0.73]) { ctx.beginPath(); ctx.ellipse(x * VS, sl * 0.1 * VS, 0.28 * VS, 0.1 * VS, 0, 0, TAU); ctx.fill(); }
+  ctx.restore(); ctx.globalAlpha = 1;
 }
 function drawBike(b, vis) {
-  const VS = PHYS.VS * CAM.boost; const sp = bikeSprite(b.team, b.num); const w = SPW / SPR, h = SPH / SPR;
+  const VS = PHYS.VS * CAM.boost; const sp = bikeSprite(b.team, b.num, bikeView()); const w = SPW / SPR, h = SPH / SPR;
   if (b.crashed && b.crash) {
     const C = b.crash;
-    if (vis(C.bk.x, C.bk.y, 4)) { ctx.save(); ctx.translate(C.bk.x, C.bk.y); ctx.rotate(C.bk.rot); ctx.scale(VS, VS * 0.8); ctx.translate(0, C.bk.side * 0.2); ctx.drawImage(sp.c, -w / 2, -h / 2, w, h); ctx.restore(); }
-    if (vis(C.rd.x, C.rd.y, 4)) { ctx.save(); ctx.translate(C.rd.x, C.rd.y); ctx.rotate(C.rd.rot); ctx.scale(VS, VS); ctx.drawImage(sp.r, -w / 2, -h / 2, w, h); ctx.restore(); }
+    if (vis(C.bk.x, C.bk.y, 4)) { ctx.save(); stretchAt(C.bk.x, C.bk.y); ctx.translate(C.bk.x, C.bk.y); ctx.rotate(C.bk.rot); ctx.scale(VS, VS * 0.8); ctx.translate(0, C.bk.side * 0.2); ctx.drawImage(sp.c, -w / 2, -h / 2, w, h); ctx.restore(); }
+    if (vis(C.rd.x, C.rd.y, 4)) { ctx.save(); stretchAt(C.rd.x, C.rd.y); ctx.translate(C.rd.x, C.rd.y); ctx.rotate(C.rd.rot); ctx.scale(VS, VS); ctx.drawImage(sp.r, -w / 2, -h / 2, w, h); ctx.restore(); }
     return;
   }
   if (b.dnf || !vis(b.x, b.y, 4)) return;
   const sl = Math.sin(b.lean), cl = Math.cos(b.lean);
-  ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.h); ctx.scale(VS, VS);
+  ctx.save(); stretchAt(b.x, b.y); ctx.translate(b.x, b.y); ctx.rotate(b.h); ctx.scale(VS, VS);
   if (b.wheelie > 0.05) ctx.scale(1 + b.wheelie * 0.04, 1);
   ctx.save(); ctx.translate(0, sl * 0.16); ctx.scale(1, 0.72 + 0.28 * cl); ctx.drawImage(sp.c, -w / 2, -h / 2, w, h); ctx.restore();
-  // inside knee out when leaning
-  if (Math.abs(b.lean) > 0.45) { const sg = Math.sign(b.lean); const TmC = TEAMS[b.team]; ctx.fillStyle = shade(TmC.c1, -0.35); ctx.beginPath(); ctx.ellipse(-0.08, sg * (0.36 + Math.abs(sl) * 0.12), 0.17, 0.075, sg * 0.5, 0, TAU); ctx.fill(); ctx.fillStyle = '#e8e8e8'; ctx.beginPath(); ctx.arc(-0.02, sg * (0.42 + Math.abs(sl) * 0.13), 0.04, 0, TAU); ctx.fill(); }
+  // brake light on the tail of the drawing (GDD 11i)
+  if (b.ctl.brk > 0.3 && b.v > 5) { ctx.fillStyle = 'rgba(255,40,30,.6)'; ctx.beginPath(); ctx.arc(-0.94, sl * 0.16, 0.13, 0, TAU); ctx.fill(); }
+  // inside knee and elbow out when leaning
+  if (Math.abs(b.lean) > 0.45) {
+    const sg = Math.sign(b.lean), TmC = TEAMS[b.team], as = Math.abs(sl);
+    ctx.fillStyle = shade(TmC.c1, -0.35); ctx.beginPath(); ctx.ellipse(-0.08, sg * (0.36 + as * 0.12), 0.17, 0.075, sg * 0.5, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(0.2, sg * (0.36 + as * 0.1), 0.1, 0.05, sg * 0.3, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#e8e8e8'; ctx.beginPath(); ctx.arc(-0.02, sg * (0.42 + as * 0.13), 0.04, 0, TAU); ctx.fill();
+  }
   ctx.translate(0, sl * 0.5); ctx.drawImage(sp.r, -w / 2, -h / 2, w, h);
   ctx.restore();
-  // brake light glow for nearby riders
-  if (b.ctl.brk > 0.3 && b.v > 5) { ctx.save(); ctx.translate(b.x - Math.cos(b.h) * 1.3 * VS, b.y - Math.sin(b.h) * 1.3 * VS); ctx.fillStyle = 'rgba(255,40,30,.55)'; ctx.beginPath(); ctx.arc(0, 0, 0.18, 0, TAU); ctx.fill(); ctx.restore(); }
 }
 function drawParticles(vis) {
   for (const p of FX.parts) {

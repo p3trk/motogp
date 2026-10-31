@@ -656,8 +656,8 @@ Asked by Petr (2026-10-28, planning session): "Help to plan change to improve: 1
 | Camera | Drawing |
 |---|---|
 | Top-down | The top view as in 1.24.0, refined: shading on the fairing and the rider, visible front and rear tyres, the inside knee and elbow when leaning. |
-| Behind | A rear three-quarter view seen from above: more of the rider's back and the rear of the helmet, the tail section and the rear tyre. Stretched front to back to cancel the 23 % squash. |
-| CLOSE | A stronger rear three-quarter view: the rider's back and shoulders, the rear of the helmet, the tail light, a wide rear tyre. Stretched front to back to cancel the 43 % squash. |
+| Behind | A rear three-quarter view seen from above: more of the rider's back and the rear of the helmet, the tail section and the rear tyre. Stretched front to back to cancel the camera's squash. |
+| CLOSE | A stronger rear three-quarter view: the rider's back and shoulders, the rear of the helmet, the tail light, a wide rear tyre. Stretched front to back to cancel the camera's squash. |
 
 - All drawings are made by the game from the team colours and the race number, as in 1.24.0, so all 11 teams get them at once and no image files are needed.
 
@@ -666,7 +666,8 @@ Asked by Petr (2026-10-28, planning session): "Help to plan change to improve: 1
 - Lean as in 1.24.0: the chassis narrows (0.72 + 0.28 × cos(lean)) and shifts by 0.16 × sin(lean); the rider shifts to the inside by 0.5 × sin(lean); the inside knee shows above 0.45 rad. Sparks from 58°, brake light from brake 0.3 and 5 km/h, as now.
 
 **Stretch rule**
-- In Behind and CLOSE the drawing is stretched along the screen's up direction (the camera's forward direction on the road), around the bike's position, by 1 / cos(tilt), using the tilt of the moment (it is lowered at speed, §11h). Behind: × 1.31. CLOSE: × 1.74.
+- In Behind and CLOSE the drawing is stretched along the screen's up direction (the camera's forward direction on the road), around the bike's position, by 1 / (cos(tilt) × the perspective scale of the bike's screen row), using the tilt of the moment (it is lowered at speed, §11h). At most × 2.5 (near the horizon).
+- The tilt alone squashes by cos(tilt) (Behind × 1.31, CLOSE × 1.74). The perspective squashes rows further up the screen more (implementation finding, 2026-10-31: with the tilt alone the Behind bike, 20 % above the bottom edge, still came out 9 % short and a 20° turn showed as 25°). So the player's bike is stretched × 1.50 in Behind and × 1.86 in CLOSE, and bikes further ahead more (CLOSE: × 2.46 at 20 m).
 - The stretch follows the camera, not the bike, so a bike that turns still rotates on the road as before; only its proportions on screen are corrected.
 - The shadow is stretched the same way, so it stays under the bike.
 - Crashed bikes and riders, ghosts (§11c, at their ghost alpha) and other riders use the same drawing and stretch.
@@ -679,7 +680,8 @@ Asked by Petr (2026-10-28, planning session): "Help to plan change to improve: 1
 - Each drawing is made once per team, number and camera and cached, as in 1.24.0. The change adds at most **5 % to the frame time** at top speed on the 1470 × 830 reference screen, compared with 1.24.0.
 
 **Tests**
-- New `bike_views` test: the three cameras use three different cached drawings; in CLOSE and Behind the bike's on-screen length-to-width ratio is within 10 % of the Top-down one; a bike that turns 20° rotates about 20° on the road in all cameras; lean moves the rider to the inside; frame cost limit as above.
+- New `bike_views` browser test (the bike found on screen by the Viola Corse violet): in all three cameras the bike's on-screen length-to-width ratio is within 10 % of its drawing's own (the squash is cancelled; the drawings differ, so each is compared with itself), a bike turned 20° shows turned 20° ± 4°, and lean moves the rider to the inside. Behind is zoomed in for the test (zoom limit 30 px/m, base 12, near quality 1.5) to have enough pixels. Frame cost: drawing a 22-bike field in CLOSE takes at most 5 % of the frame (measured on a fresh page: reading pixels back slows Chrome's canvases).
+- Unit tests (GDD 13b) for each new function: the per-camera drawings, the stretch and where it is applied.
 
 **Clean-up from the upright sprite trial**
 - Removed: the upright sprite drawing, the lean and speed rules for it, `tests/bike_upright.test.js`, and the `--allow-file-access-from-files` Chromium flag added to the 14 tests (the game loads no image files again).

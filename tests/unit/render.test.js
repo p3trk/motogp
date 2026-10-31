@@ -111,10 +111,62 @@ test('buildScenery: grandstands, paddock buildings and trees off the track', () 
 test('shade: darker and lighter tints of a colour', () => {
   const { G } = load(); assert.equal(G.shade('#808080', -0.5), 'rgb(64,64,64)'); assert.equal(G.shade('#808080', 0.5), 'rgb(191,191,191)'); assert.equal(G.shade('#ff0000', 0), 'rgb(255,0,0)');
 });
-test('bikeSprite: chassis and rider sprites per team and number, cached', () => {
+test('bikeSprite: chassis and rider sprites per team, number and camera drawing, cached', () => {
   const { G } = load(); const s = G.bikeSprite(3, 77);
   assert.equal(s.c.width, G.SPW); assert.equal(s.r.height, G.SPH); assert.equal(G.bikeSprite(3, 77), s); assert.notEqual(G.bikeSprite(4, 77), s);
   assert.ok(texts(s.c.getContext('2d')).includes('77'), 'tail number');
+  const b = G.bikeSprite(3, 77, 'behind'), c = G.bikeSprite(3, 77, 'close');
+  assert.equal(G.bikeSprite(3, 77, 'top'), s, 'top is the default'); assert.notEqual(b, s); assert.notEqual(c, b); assert.equal(G.bikeSprite(3, 77, 'close'), c);
+  assert.ok(texts(c.c.getContext('2d')).includes('77'), 'tail number in the rear view too');
+});
+test('spriteRect: a rounded rectangle path', () => {
+  const { G } = load(); const c = makeCtx({}); G.spriteRect(c, 1, 2, 3, 4, 0.5);
+  assert.deepEqual(c.calls.map(o => o.slice(0, 1)[0]), ['beginPath', 'roundRect']); assert.deepEqual(ops(c, 'roundRect')[0].slice(1), [1, 2, 3, 4, 0.5]);
+});
+test('acrossGrad: dark at both sides of the bike, light in the middle', () => {
+  const { G } = load(); const c = makeCtx({}); const gr = G.acrossGrad(c, 0.3, '#000', '#fff');
+  assert.deepEqual(ops(c, 'createLinearGradient')[0].slice(1), [0, -0.3, 0, 0.3]); assert.deepEqual(gr.stops, [[0, '#000'], [0.5, '#fff'], [1, '#000']]);
+});
+test('drawChassisTop, tailNumber: tyres, fairing in team colours, windscreen, the number on the tail', () => {
+  const { G } = load(); const c = makeCtx({}); G.drawChassisTop(c, G.TEAMS[2], 25);
+  assert.equal(ops(c, 'roundRect').length, 4, 'two tyres, frame, seat'); assert.ok(c.calls.some(o => o[0] === '=fillStyle' && o[1] === G.TEAMS[2].c2), 'stripe');
+  assert.deepEqual(texts(c), ['25']); const t = makeCtx({}); G.tailNumber(t, 9, -0.7); assert.deepEqual(ops(t, 'translate')[0].slice(1), [-0.7, 0]); assert.deepEqual(texts(t), ['9']);
+});
+test('drawRiderTop, drawHelmet: arms, legs, back and helmet with visor from above, none from behind', () => {
+  const { G } = load(); const c = makeCtx({}); G.drawRiderTop(c, G.TEAMS[0]);
+  assert.equal(ops(c, 'stroke').length, 4, 'two legs, two arms'); assert.equal(ops(c, 'closePath').length, 1, 'visor');
+  const r = makeCtx({}); G.drawHelmet(r, G.TEAMS[0], 0.3, 0.17, 0); assert.equal(ops(r, 'closePath').length, 0, 'no visor from behind'); assert.deepEqual(ops(r, 'arc')[0].slice(1, 4), [0.3, 0, 0.17]);
+});
+test('drawChassisRear: more rear tyre and less fairing the lower the camera, tail light, number', () => {
+  const { G } = load(); const tyre = k => { const c = makeCtx({}); G.drawChassisRear(c, G.TEAMS[0], 7, k); return [ops(c, 'roundRect')[0], c]; };
+  const [b] = tyre(0.5), [cl, c] = tyre(1);
+  assert.ok(cl[3] > b[3], 'longer rear tyre in CLOSE'); assert.ok(cl[4] > b[4], 'wider rear tyre in CLOSE');
+  assert.ok(c.calls.some(o => o[0] === '=fillStyle' && o[1] === '#5a0c0c'), 'tail light'); assert.deepEqual(texts(c), ['7']);
+});
+test('drawRiderRear: boots, thighs, arms, back, helmet further forward and bigger in CLOSE', () => {
+  const { G } = load(); const helmet = k => { const c = makeCtx({}); G.drawRiderRear(c, G.TEAMS[0], k); return [ops(c, 'arc').at(-1), c]; };
+  const [hb] = helmet(0.5), [hc, c] = helmet(1);
+  assert.ok(hc[1] > hb[1], 'further forward'); assert.ok(hc[3] > hb[3], 'bigger'); assert.equal(ops(c, 'stroke').length, 4, 'two thighs, two arms');
+});
+test('bikeView: the drawing for the camera in use', () => {
+  const { G } = load(); for (const [m, v] of [['chase', 'top'], ['behind', 'behind'], ['close', 'close']]) { G.CAM.mode = m; assert.equal(G.bikeView(), v); }
+});
+test('bikeStretch: none in Top-down, 1 / (cos(tilt) x row scale) in Behind and CLOSE, more further up, at most 2.5', () => {
+  const { G, b } = riding(0, 'chase'); assert.equal(G.bikeStretch(b.x, b.y), 1);
+  const row = (x, y) => { const P = G.tiltP(), yy = G.worldToCanvas(x, y)[1] - G.RH; return P / (P - yy * Math.sin(G.tiltA())); };
+  for (const cam of ['behind', 'close']) {
+    G.setCamMode(cam); G.CAM.w = 0; G.CAM.init = false; G.updateCamera(1 / 60);
+    near(G.bikeStretch(b.x, b.y), 1 / (Math.cos(G.tiltA()) * row(b.x, b.y)), 1e-9, cam);
+    const [ax, ay] = [b.x + Math.cos(b.h) * 60, b.y + Math.sin(b.h) * 60]; assert.ok(G.bikeStretch(ax, ay) > G.bikeStretch(b.x, b.y), cam + ': more for a bike further ahead');
+    assert.equal(G.bikeStretch(b.x + Math.cos(b.h) * 5000, b.y + Math.sin(b.h) * 5000), 2.5, cam + ': capped');
+  }
+  G.setCamMode('close'); const s0 = G.bikeStretch(b.x, b.y); G.CAM.w = 1; assert.ok(G.bikeStretch(b.x, b.y) < s0, 'lower tilt at speed');
+});
+test('stretchAt: nothing in Top-down, a stretch along the camera direction around the point in the tilted cameras', () => {
+  const { G } = load(); G.setCamMode('chase'); let c = rec(G); G.stretchAt(5, 6); assert.equal(c.calls.length, 0);
+  G.setCamMode('close'); G.CAM.w = 0; G.CAM.rot = 0.4; G.CAM.x = 5; G.CAM.y = 6; c = rec(G); G.stretchAt(5, 6);
+  assert.deepEqual(c.calls.map(o => o[0]), ['translate', 'rotate', 'scale', 'rotate', 'translate']);
+  assert.deepEqual(ops(c, 'rotate').map(o => o[1]), [-0.4, 0.4]); near(ops(c, 'scale')[0][2], G.bikeStretch(5, 6), 1e-12); assert.ok(ops(c, 'scale')[0][2] > 1.7); assert.deepEqual(ops(c, 'translate')[1].slice(1), [-5, -6]);
 });
 
 // --- camera and projection --------------------------------------------------
@@ -180,7 +232,7 @@ test('drawWorld: every layer drawn, then projected and blurred when tilted', () 
 test('drawWorldLayer: tiles, bikes, ghosts faded, speed guide in practice', () => {
   const { G, b } = riding(150); const Ly = G.LAYERS[1], c = rec(G); G.W.guide = true;
   G.drawWorldLayer(Ly, 0, 0);
-  const spr = G.bikeSprite(b.team, b.num); assert.ok(ops(c, 'drawImage').some(o => o[1] === spr.c), 'the player bike');
+  const spr = G.bikeSprite(b.team, b.num, 'behind'); assert.ok(ops(c, 'drawImage').some(o => o[1] === spr.c), 'the player bike, Behind drawing');
   assert.ok(ops(c, 'stroke').length > 100, 'speed guide segments');
   assert.ok(c.calls.some(o => o[0] === '=globalAlpha' && Math.abs(o[1] - 0.42) < 1e-12), 'ghost alpha');
 });
@@ -218,17 +270,19 @@ test('drawTrees: shadow and crown for each tree in view', () => {
   const { G } = load(); const c = rec(G); G.SCN.trees = G.SCN.trees.slice(0, 3); G.drawTrees(all);
   assert.equal(ops(c, 'drawImage').length, 6); const d = rec(G); G.drawTrees(none); assert.equal(d.calls.length, 0);
 });
-test('drawBikeShadow: one shadow, two after a crash, none when retired', () => {
+test('drawBikeShadow: one shadow with tyre contact patches, two after a crash, none when retired', () => {
   const { G, b } = riding(100); const sh = G.TEX.shadow, n = c => ops(c, 'drawImage').filter(o => o[1] === sh).length;
-  let c = rec(G); G.drawBikeShadow(b, all); assert.equal(n(c), 1);
+  let c = rec(G); G.drawBikeShadow(b, all); assert.equal(n(c), 1); assert.equal(ops(c, 'ellipse').length, 2, 'tyre contact patches');
   G.crashBike(b, G.W, 'lowside'); c = rec(G); G.drawBikeShadow(b, all); assert.equal(n(c), 2);
   b.crashed = false; b.dnf = true; c = rec(G); G.drawBikeShadow(b, all); assert.equal(n(c), 0);
 });
-test('drawBike: chassis and rider, brake light, crashed bike and rider apart', () => {
-  const { G, b } = riding(100); const spr = G.bikeSprite(b.team, b.num);
+test('drawBike: the drawing of the camera in use, stretched, brake light, knee and elbow, crashed bike and rider apart', () => {
+  const { G, b } = riding(100); const spr = G.bikeSprite(b.team, b.num, 'behind');
   let c = rec(G); b.ctl.brk = 1; G.drawBike(b, all);
   assert.deepEqual(ops(c, 'drawImage').map(o => o[1]), [spr.c, spr.r]); assert.ok(ops(c, 'arc').length >= 1, 'brake light');
-  b.lean = 0.8; c = rec(G); G.drawBike(b, all); assert.ok(ops(c, 'ellipse').length >= 1, 'knee out');
+  near(ops(c, 'scale')[0][2], G.bikeStretch(b.x, b.y), 1e-9, 'stretched first'); b.ctl.brk = 0;
+  b.lean = 0.8; c = rec(G); G.drawBike(b, all); assert.equal(ops(c, 'ellipse').length, 2, 'knee and elbow out');
+  G.setCamMode('chase'); c = rec(G); G.drawBike(b, all); assert.equal(ops(c, 'drawImage')[0][1], G.bikeSprite(b.team, b.num, 'top').c, 'top view, no stretch'); G.setCamMode('behind');
   G.crashBike(b, G.W, 'lowside'); c = rec(G); G.drawBike(b, all); assert.equal(ops(c, 'drawImage').length, 2);
   c = rec(G); G.drawBike(b, none); assert.equal(c.calls.length, 0);
 });

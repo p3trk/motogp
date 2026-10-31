@@ -17,7 +17,7 @@ const FILE = 'file://' + path.resolve(process.argv[2] || path.join(ROOT, 'index.
 
   const page = await browser.newPage();
   page.on('pageerror', e => { console.error('page error:', e.message); process.exitCode = 1; });
-  await page.addInitScript(() => { try { localStorage.clear(); } catch (e) { } });
+  await page.addInitScript(() => { try { localStorage.clear(); } catch { /* storage may be blocked */ } });
   await page.goto(FILE);
   await page.waitForFunction(() => window.__sgp && document.getElementById('loading').hidden);
 

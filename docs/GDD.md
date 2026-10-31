@@ -742,7 +742,7 @@ Asked by Petr (2026-10-28, planning session): "Help to plan change to improve: 1
   - **Frame cost:** over 300 frames at 340 km/h (1470×830, 2× pixels, CLOSE) the median time of drawing the world plus the blur is at most 15 % above the same with blur Off.
   - v1.16.0 fails it (no blur at top speed).
 - Since 1.17.0 `tilt_seam.test.js` and `camera_shake.test.js` run with Speed blur Off, so their measurements stay as before; `camera_tuning.test.js` expects 15 sliders (the three blur sliders added) and checks that they are saved per camera and reset by Reset to defaults.
-- `npm test` runs all tests (needs `npm install` and `npx playwright install chromium` once).
+- `npm test` runs the full suite, unit tests and browser tests (§13b; needs `npm install` and `npx playwright install chromium` once).
 - Tests (since 1.20.0): `node tests/track_limits.test.js [index.html]` checks §6a: kerbs and the strip beside the pit lane are legal; gravel makes a practice lap invalid; the invalid lap is saved with `inv` and never becomes a best lap, mode best or all-time trace; the next lap starts valid; in a race a cut gives 2 s + the time gained, a slow run wide and a crash give no penalty, and the penalty counts in the result order. Since 1.21.0 the race part checks Phase 2: the count (10 lap race 2/3, Grand Prix 3/5), the gain given back, the clear advantage Long Lap, the 3 s change with fewer than 3 laps left, the Long Lap lane geometry (on tarmac run-off end to end, starts at the kerb, about 22 m out), serving it, the 2.5 s top-up, a missed lane, the 5 s penalty when not served, and the last lap position drop.
 - Tests (since 1.23.0): `node tests/gravel_exit.test.js [index.html]` checks the gravel traps of §5: a stopped bike rides out at 18 to 22 km/h with aids on and W held, digs in (under 5 km/h) with aids off and W held, reaches 15 to 22 km/h with W tapped, stays still with no throttle, and a bike at 150 km/h slows at over 0.6 g.
 - Tests (since 1.19.8, Phase 1): `node tests/phone_emulation.test.js [index.html]` runs the phone checks in emulated phones on the Mac, with no real device or account. It uses Playwright device profiles:
@@ -756,18 +756,93 @@ Asked by Petr (2026-10-28, planning session): "Help to plan change to improve: 1
   - **Limits:** WebKit here is not Safari. The pinch and double-tap checks run only in Chromium, and the portrait prompt check runs only in Chromium, because WebKit's orientation query does not follow a resized emulated viewport. Real iPhone Safari and real Android are not covered; those need Phase 2 or 3, or one manual check.
   - Added to `npm test`. The test writes nothing outside the repository (screenshots go to `shots/`).
 
+## 13a. Code scanning (ESLint with Sonar's rules)
+
+Every commit that changes JavaScript is scanned with ESLint and `eslint-plugin-sonarjs` (Sonar's JavaScript rules packaged for ESLint). A commit that adds a new issue is stopped, the issue is reported, and it is fixed on the same branch before the commit goes in. There is no server and nothing is uploaded.
+
+**Setup:**
+- `eslint` and `eslint-plugin-sonarjs` are dev dependencies in `package.json`, like Playwright (`node_modules` stays out of git; worktrees use a symlink to the main checkout's `node_modules`).
+- `eslint.config.js` (committed) uses ESLint's recommended rules and Sonar's recommended rules.
+  - `src/*.js` are browser scripts that are joined into one file by `tools/build.py`, so each file uses functions and constants from the others. For them, the rules for undefined, unused and implicit global names (`no-undef`, `no-unused-vars`, `sonarjs/no-implicit-global`) are off; every other rule applies. Sonar's own `sonarjs/no-unused-vars` stays on, since it checks only names local to a function.
+  - `tests/` and `tools/` are Node scripts and get Node globals. The tests are plain Playwright scripts, not `describe`/`it` blocks, so `sonarjs/no-empty-test-file` is off for them.
+  - `index.html` (built), `node_modules/`, `saved_tracks/`, `shots/` and `.claude/` are ignored.
+- `npm run lint` scans the whole project and writes the list to `shots/lint-report.txt`.
+
+**Pre-commit hook:**
+- `tools/hooks/pre-commit` (committed), switched on once with `git config core.hooksPath tools/hooks`. The setting is shared by the main checkout and all worktrees; a branch made before this change has no hook file, so its commits are not scanned until it includes the change.
+- It scans only the staged `.js` files under `src/`, `tests/` and `tools/`, using their staged content (not the working copy). Commits with no such file (GDD-only, CHANGELOG-only, `index.html`) are not scanned.
+- It keeps only the issues on lines this commit adds or changes (from `git diff --cached`). Issues already in the code before the commit do not block it.
+- If any are left, the commit is stopped and the hook prints each one: file, line, rule and message. It takes about 1–2 s.
+- If ESLint is missing (no `node_modules`), the commit is stopped with a message saying how to install it. `git commit --no-verify` skips the scan; it is used only when the owner says so.
+
+**Workflow:** when the hook stops a commit, the issues are reported to the owner in the reply, fixed on the same branch, and the commit is made again. `CLAUDE.md` gets the same rule so every session follows it.
+
+**Existing issues:** the first full scan (`npm run lint`) is reported to the owner as a summary. These issues do not stop commits; they are fixed in their own feature branches when the owner asks.
+
+**Cleanup of the existing issues (feature/lint-cleanup, 2026-10-30).** The first full scan found 355 issues. The cleanup changes how the code is written, never what the game does.
+
+| Rule | Count | Plan |
+|---|---|---|
+| `sonarjs/no-unenclosed-multiline-block` | 130 | Statements after a one-line `if` or loop go on their own line, or get braces if they belong inside. Each is checked; the samples read so far all run as intended |
+| `sonarjs/no-nested-conditional` | 65 | Nested `? :` become `if`/`else` or a small lookup |
+| `sonarjs/cognitive-complexity` | 48 | **Not changed now.** Splitting the large functions (HUD, physics, AI, replay) is a redesign with real risk; they stay listed and are done later, one area per branch, when the owner asks |
+| `no-empty`, `sonarjs/no-ignored-exceptions` | 36 | Empty `catch` blocks get a comment that says why the error is ignored (for example, storage not available) |
+| unused names, dead stores, useless assignments | 37 | Removed |
+| `sonarjs/pseudo-random` | 12 | **Rule off for `src/`.** `Math.random` is used only for camera shake, speed lines, sound noise and recording ids, not for anything that needs to be unpredictable. The race itself uses its own seeded generator |
+| `sonarjs/no-fixed-wait-in-tests` | 8 | Fixed waits in tests become waits for a condition where one exists; where a test must wait for frames to be drawn, the wait stays with a comment and the rule is turned off for that line |
+| `no-redeclare` (`Touch`) | 1 | The game's `Touch` object hides the browser's built-in `Touch`. It is renamed `TouchCtl`; the test hook keeps the name `Touch`, so the tests do not change |
+| The rest | 18 | Fixed one by one (nested functions in tests, inverted conditions, assignments inside expressions, floating point `==`, loop counters, duplicated branches) |
+
+- Expected result: about 48 issues left, all `sonarjs/cognitive-complexity`.
+- **Proof that the game does not change:** a one-off check (kept in `shots/`, not committed) loads the build from before the cleanup and the build after it, with `Math.random` fixed to the same seeded sequence in both:
+  - **Simulation:** a 10 lap race with 22 riders, a practice session and qualifying, each simulated for 3 minutes of game time. The position, speed, lean, gear, fuel and lap times of every rider must be identical in both builds.
+  - **Picture:** frames drawn with the Behind, CLOSE and Top-down cameras, and with the phone HUD, must have identical pixels in both builds.
+- `npm test` must pass, and every commit goes through the pre-commit hook.
+- Commits are split by area (`core.js`, `world.js`, `render.js`, `ui.js`, `replay.js`, tests), so a problem can be traced to one of them.
+
+**Limits:**
+- JavaScript only: the CSS and HTML in `src/head.html` and the Python in `tools/build.py` are not scanned.
+- No duplicated-code check across files, no dashboard or history; that needs the SonarQube server, which can be added later as a scan at release.
+- Because `no-undef` is off in `src/`, a misspelled name used across files is not caught by the scan; the tests still catch most of these.
+
+## 13b. Test levels
+
+The full suite takes about 5 minutes (measured 2026-10-30 on the Mac: `speed_blur` about 125 s, `camera_shake` about 110 s, `speed_feel` about 50 s, the other 11 under 10 s each). So there are two levels:
+
+- **Unit tests** (`tests/unit/*.test.js`): Node's built-in test runner (`node --test`), no browser and no new packages.
+  - `tests/unit/load.js` joins `src/` in the same order as `tools/build.py` and runs it in Node, with small stand-ins for the page passed in as the page globals: a DOM tree parsed from the markup in `src/head.html`, canvases whose 2D contexts record every call, `localStorage` in memory, timers and animation frames that do not run unless the test asks, and a seeded `Math.random`. It returns every top-level function and object of the game to the test, so `src/` needs no export hooks for testing. `load()` gives a fresh game in about 0.15 s, so most tests start from their own.
+  - Each test sets its own state (bike, track position, session) and checks the result of one function: values, state changes, and for drawing functions the calls made on the recording canvas (it draws, or does not draw when it should not, without errors). HUD text and panels must lie inside the screen.
+  - Recordings for the replay and ghost tests are made in the test (`makeRec`), no files.
+  - What only shows in real pixels or in the real frame loop (blur sharpness, seams, camera smoothness, frame cost, phones) stays in the browser tests.
+  - Target: the whole unit suite runs in **under 30 s**. Measured (2026-10-30, the Mac): 254 tests in about 15 s.
+- **Browser tests** (`tests/*.test.js`): the 14 Playwright tests of §13, unchanged.
+
+**Every function has a unit test.** This covers every top-level function in `src/*.js` and every method of the top-level objects (`T`, `FX`, `Records`, `Rec`, `Lib`, `Ghost`, `RP`, `HUD`, `Sound`, `Touch`, `UI`, …), and the track helpers `T.*`, `T.PIT.*` and `T.LL.*`: 270 on 2026-10-30. Each one is named in at least one unit test title, as `name` or `Obj.method`, for example `test('fmtTime: minutes, seconds and thousandths', …)`. `tests/unit/inventory.test.js` reads the function list from the source and fails if a function has no test, or if a test names a function that no longer exists. Helper functions defined inside another function are covered through that function and are not listed.
+
+**Commands:**
+
+- `npm run test:unit`: unit tests only, with the inventory check.
+- `npm run test:browser`: browser tests only.
+- `npm test`: the full suite, unit tests first and then the browser tests.
+
 ## 14. Change process
 
-1. Create a feature branch from `main`: `git checkout -b feature/<short-name>`.
-2. **Update this GDD first** (and bump the version at the top) and commit it.
-3. Change the code in `src/`, run `python3 tools/build.py`, test, commit.
-4. Add an entry to `CHANGELOG.md`.
-5. Merge into `main` with `--no-ff` and tag `vMAJOR.MINOR.PATCH`.
-   - MINOR for features.
-   - PATCH for fixes.
-   - MAJOR for big redesigns.
+1. Create a worktree with a feature branch from `dev`: `git worktree add .claude/worktrees/<name> -b feature/<short-name> dev`.
+2. **Update this GDD first** and commit it. Do not change the version here.
+3. Wait for approval of the design before changing the code.
+4. Change the code in `src/`, run `python3 tools/build.py`, and write or update the unit tests (§13b) for every new or changed function. Run the browser tests that cover the change when it touches what they measure. Commit. The pre-commit hook scans the code (§13a); a commit it stops is fixed and made again. Feature commits add no tags, no version bump and no `CHANGELOG.md` version entry.
+5. Before merging into `dev`: `npm run test:unit` must pass on the feature branch. The browser tests are not required here.
+6. Merge the feature branch into `dev` with `--no-ff`, through the `.claude/worktrees/dev` worktree. Feature branches never merge straight into `main`.
 
-After tagging, push `main`, the tag and the feature branch to GitHub (`p3trk/motogp`).
+**Release** (only when the owner says "Release"):
+
+1. Compare `main` and `dev`.
+2. Choose the new version: MINOR for features, PATCH for fixes, MAJOR for big redesigns.
+3. On `dev`, add the `CHANGELOG.md` entry and bump the version at the top of this GDD. Commit.
+4. On `dev`, run the **full suite** (`npm test`). It must pass before `dev` is merged into `main`. A failure is fixed on a feature branch and merged into `dev` first.
+5. Merge `dev` into `main` with `--no-ff`, then tag `vMAJOR.MINOR.PATCH` on `main`.
+
+**Push** (only when the owner says "Push"): push `main` to GitHub (`p3trk/motogp`). Tags, `dev` and feature branches are not pushed unless asked.
 
 ## 15. Deviations from real MotoGP (intentional)
 

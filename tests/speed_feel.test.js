@@ -12,7 +12,7 @@ const COST = 0.10; // largest share 1.24.0 may add to drawing the world at top s
 (async () => {
   const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
   let failed = 0, total = 0;
-  const check = (ok, name, info) => { total++; if (!ok) failed++; console.log(`${ok ? 'PASS' : 'FAIL'}  ${name.padEnd(56)} ${info || ''}`); };
+  const check = (ok, name, info) => { total++; if (!ok) { failed++; } console.log(`${ok ? 'PASS' : 'FAIL'}  ${name.padEnd(56)} ${info || ''}`); };
   const open = async (w, h, sf) => {
     const page = await browser.newPage({ viewport: { width: w, height: h }, deviceScaleFactor: sf });
     page.on('pageerror', e => { console.error('page error:', e.message); process.exitCode = 1; });
@@ -28,7 +28,7 @@ const COST = 0.10; // largest share 1.24.0 may add to drawing the world at top s
     await page.evaluate(() => {
       for (const k of ['sgp_cam', 'sgp_cam_close', 'sgp_opts']) localStorage.removeItem(k);
       const S = window.__sgp; let t = 1000; window.__tick(t);
-      window.__frame = snap => { t += 1000 / 60; if (snap) S.CAM.init = false; window.__tick(t); };
+      window.__frame = snap => { t += 1000 / 60; if (snap) { S.CAM.init = false; } window.__tick(t); };
       window.__place = (cam, kmh, fx) => { // practice spot start on the Hangar Straight, held at this speed
         const T = S.T, c = T.corners.find(c => c.name === 'Hangar Straight');
         S.UI.opts.mode = 'practice'; S.UI.opts.cam = cam; S.UI.opts.fx = fx || 'on'; S.UI.opts.train = 'on'; S.UI.opts.trainS = T.wrapS(c.s + 200); S.UI.opts.trainV = 100;
@@ -48,7 +48,7 @@ const COST = 0.10; // largest share 1.24.0 may add to drawing the world at top s
 
   const page = await open(1470, 830, 2);
   // 1) zoom at 160 and 320 km/h on the 1470 x 830 screen (GDD 11h table)
-  const zoom = await page.evaluate(() => { const out = {}; for (const cam of ['behind', 'close']) for (const kmh of [160, 320]) { window.__place(cam, kmh); out[cam + kmh] = window.__sgp.CAM.ppm; } return out; });
+  const zoom = await page.evaluate(() => { const out = {}; for (const cam of ['behind', 'close']) { for (const kmh of [160, 320]) { window.__place(cam, kmh); out[cam + kmh] = window.__sgp.CAM.ppm; } } return out; });
   check(near(zoom.behind160, 19.9, 0.15) && near(zoom.behind320, 13.9, 0.15), 'Behind zoom 19.9 / 13.9 px/m at 160 / 320 km/h', `${zoom.behind160.toFixed(2)} / ${zoom.behind320.toFixed(2)} px/m`);
   check(near(zoom.close160, 30, 0.01) && near(zoom.close320, 26.8, 0.15), 'CLOSE zoom 30 / 26.8 px/m at 160 / 320 km/h', `${zoom.close160.toFixed(2)} / ${zoom.close320.toFixed(2)} px/m`);
 
@@ -78,12 +78,12 @@ const COST = 0.10; // largest share 1.24.0 may add to drawing the world at top s
 
   // 4) speed lines: drawn at 340 km/h, none at 250 km/h, with Speed effects Off or when paused
   const sl = await page.evaluate(() => {
-    const S = window.__sgp, n = (cam, kmh, fx, pause) => { window.__place(cam, kmh, fx); if (pause) S.W.paused = true; for (let k = 0; k < 10; k++) window.__frame(); const c = S.SPL.lines.length; S.W.paused = false; return c; };
+    const S = window.__sgp, n = (cam, kmh, fx, pause) => { window.__place(cam, kmh, fx); if (pause) { S.W.paused = true; } for (let k = 0; k < 10; k++) { window.__frame(); } const c = S.SPL.lines.length; S.W.paused = false; return c; };
     return { b340: n('behind', 340), c340: n('close', 340), t340: n('chase', 340), b250: n('behind', 250), off: n('behind', 340, 'off'), paused: n('behind', 340, 'on', true) };
   });
   check(sl.b340 >= 8 && sl.c340 >= 8 && sl.t340 >= 8, 'speed lines at 340 km/h in all three cameras', `Behind ${sl.b340}  CLOSE ${sl.c340}  Top-down ${sl.t340} lines`);
   check(sl.b250 === 0 && sl.off === 0 && sl.paused === 0, 'no speed lines at 250 km/h, Off, or paused', `${sl.b250} / ${sl.off} / ${sl.paused}`);
-  const edge = await page.evaluate(() => { const S = window.__sgp; window.__place('behind', 340); for (let k = 0; k < 10; k++) window.__frame(); return S.SPL.lines.every(q => q.x < 0.3 * innerWidth + 1e-6 || q.x > 0.7 * innerWidth - 1e-6); });
+  const edge = await page.evaluate(() => { const S = window.__sgp; window.__place('behind', 340); for (let k = 0; k < 10; k++) { window.__frame(); } return S.SPL.lines.every(q => q.x < 0.3 * innerWidth + 1e-6 || q.x > 0.7 * innerWidth - 1e-6); });
   check(edge, 'speed lines start in the outer 30 % of the width');
 
   // 5) camera vibration
@@ -94,7 +94,7 @@ const COST = 0.10; // largest share 1.24.0 may add to drawing the world at top s
     S.W.paused = true; r.paused = S.speedVibX(); S.W.paused = false;
     window.__place('behind', 340, 'off'); r.off = S.speedVibX();
     // on a kerb at top speed, braking hard: the most it shakes
-    window.__place('behind', 340); const b = S.W.player; let k = 0; while (!(T.KERB[0][k] > 1)) k++;
+    window.__place('behind', 340); const b = S.W.player; let k = 0; while (Number.isNaN(+T.KERB[0][k]) || T.KERB[0][k] <= 1) k++;
     [b.x, b.y] = T.pt(k, T.WR[k] + T.KERB[0][k] / 2); b.i = k; S.CAM.dec = 15; r.kerb = S.speedVibX();
     return r;
   });

@@ -3,10 +3,10 @@
 const TRACK_RAW = "__TRACK__";
 
 const G = 9.81, DEG = Math.PI / 180, TAU = Math.PI * 2;
-const clamp = (v, a, b) => v < a ? a : (v > b ? b : v);
+const clamp = (v, a, b) => { if (v < a) { return a; } return v > b ? b : v; };
 const lerp = (a, b, t) => a + (b - a) * t;
-const angWrap = a => { while (a > Math.PI) a -= TAU; while (a < -Math.PI) a += TAU; return a; };
-const sstep = t => t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t);
+const angWrap = a => { while (a > Math.PI) { a -= TAU; } while (a < -Math.PI) { a += TAU; } return a; };
+const sstep = t => { if (t <= 0) { return 0; } return t >= 1 ? 1 : t * t * (3 - 2 * t); };
 function mulberry(seed) { return function () { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 
 // ---------------------------------------------------------------------------
@@ -38,7 +38,7 @@ const GRAVEL = { dragV2: 0.0053, dragMax: 0.80, push: 0.30 * G, spinThr: 0.5, sp
 function gravelDrag(v) { return Math.min(GRAVEL.dragMax, SURFP[SURF.GRAVEL].roll + GRAVEL.dragV2 * v * v); }
 function powerFrac(r) { // normalised wheel power vs rpm fraction (V4/I4 big-bang style curve)
   const P = [[0, 0], [0.2, 0.16], [0.4, 0.4], [0.55, 0.6], [0.7, 0.78], [0.82, 0.9], [0.93, 1.0], [1.0, 0.96], [1.05, 0.9]];
-  if (r <= 0) return 0; if (r >= 1.05) return 0.9;
+  if (r <= 0) { return 0; } if (r >= 1.05) return 0.9;
   for (let i = 1; i < P.length; i++) if (r <= P[i][0]) { const t = (r - P[i - 1][0]) / (P[i][0] - P[i - 1][0]); return lerp(P[i - 1][1], P[i][1], t); }
   return 0.9;
 }
@@ -74,7 +74,7 @@ const T = {};
     const t = (s - cum[j]) / (cum[j + 1] - cum[j] || 1), j2 = (j + 1) % m;
     X[i] = lerp(dx[j], dx[j2], t); Y[i] = lerp(dy[j], dy[j2], t); WR[i] = lerp(dwr[j], dwr[j2], t); WL[i] = lerp(dwl[j], dwl[j2], t);
   }
-  const smoothArr = (A, r, passes) => { for (let p = 0; p < passes; p++) { const B = Float32Array.from(A); for (let i = 0; i < N; i++) { let s = 0; for (let o = -r; o <= r; o++) s += B[(i + o + N) % N]; A[i] = s / (2 * r + 1); } } };
+  const smoothArr = (A, r, passes) => { for (let p = 0; p < passes; p++) { const B = Float32Array.from(A); for (let i = 0; i < N; i++) { let s = 0; for (let o = -r; o <= r; o++) { s += B[(i + o + N) % N]; } A[i] = s / (2 * r + 1); } } };
   smoothArr(WR, 6, 2); smoothArr(WL, 6, 2);
   for (let i = 0; i < N; i++) { WR[i] = Math.max(WR[i], 6.2); WL[i] = Math.max(WL[i], 6.2); }
   const TX = new Float64Array(N), TY = new Float64Array(N), NX = new Float64Array(N), NY = new Float64Array(N), H = new Float64Array(N);
@@ -96,7 +96,7 @@ const T = {};
   for (let i = 0; i < N; i++) { minx = Math.min(minx, X[i]); maxx = Math.max(maxx, X[i]); miny = Math.min(miny, Y[i]); maxy = Math.max(maxy, Y[i]); }
   T.bbox = { minx, miny, maxx, maxy };
   const grid = new Map(); const key = (cx, cy) => (cx + 1000) * 4096 + (cy + 1000);
-  for (let i = 0; i < N; i++) { const k = key(Math.floor(X[i] / CELL), Math.floor(Y[i] / CELL)); if (!grid.has(k)) grid.set(k, []); grid.get(k).push(i); }
+  for (let i = 0; i < N; i++) { const k = key(Math.floor(X[i] / CELL), Math.floor(Y[i] / CELL)); if (!grid.has(k)) { grid.set(k, []); } grid.get(k).push(i); }
   T.near = function (x, y, rad, cb) { // iterate samples near point
     const r = Math.ceil(rad / CELL), cx = Math.floor(x / CELL), cy = Math.floor(y / CELL);
     for (let a = -r; a <= r; a++) for (let b = -r; b <= r; b++) { const l = grid.get(key(cx + a, cy + b)); if (l) for (const i of l) cb(i); }
@@ -144,7 +144,7 @@ const T = {};
     if (sr > PIT.flatOut) { const t = sstep((PIT.sOut - sr) / PIT.ramp); return lerp(WR[T.idx(sr)] + 1.2, PIT.d, t); }
     return PIT.d;
   };
-  PIT.halfW = function (sr) { if (sr < PIT.flatIn) return lerp(3.6, PIT.hw, sstep((sr - PIT.sIn) / PIT.ramp)); if (sr > PIT.flatOut) return lerp(3.6, PIT.hw, sstep((PIT.sOut - sr) / PIT.ramp)); return PIT.hw; };
+  PIT.halfW = function (sr) { if (sr < PIT.flatIn) { return lerp(3.6, PIT.hw, sstep((sr - PIT.sIn) / PIT.ramp)); } if (sr > PIT.flatOut) { return lerp(3.6, PIT.hw, sstep((PIT.sOut - sr) / PIT.ramp)); } return PIT.hw; };
   PIT.inZone = sr => sr >= PIT.sIn - 4 && sr <= PIT.sOut + 4;
   T.PIT = PIT;
 
@@ -154,7 +154,7 @@ const T = {};
   const gD = [new Float32Array(N), new Float32Array(N)], tD = [new Float32Array(N), new Float32Array(N)];
   for (let i = 0; i < N; i++) {
     const k = KS[i], ak = Math.abs(k); const outside = k > 0 ? 1 : 0;
-    if (ak > 0.0028) { const dep = clamp(14 + 1900 * ak, 14, 40); if (ak > 0.0155) gD[outside][i] = dep; else tD[outside][i] = dep; tD[1 - outside][i] = Math.max(tD[1 - outside][i], 3.5); }
+    if (ak > 0.0028) { const dep = clamp(14 + 1900 * ak, 14, 40); if (ak > 0.0155) gD[outside][i] = dep; else { tD[outside][i] = dep; } tD[1 - outside][i] = Math.max(tD[1 - outside][i], 3.5); }
   }
   for (let s = 0; s < 2; s++) for (const A of [gD[s], tD[s]]) {
     const B = Float32Array.from(A);
@@ -169,12 +169,12 @@ const T = {};
   // kerbs on both sides of corners
   const kerbRaw = new Uint8Array(N);
   for (let i = 0; i < N; i++) if (Math.abs(KS[i]) > 0.0052) kerbRaw[i] = 1;
-  for (let i = 0; i < N; i++) { let on = 0; for (let o = -6; o <= 6; o++) if (kerbRaw[(i + o + N) % N]) on = 1; if (on) { const ins = KS[i] > 0 ? 0 : 1; KERB[ins][i] = 1.6; KERB[1 - ins][i] = 1.25; } }
+  for (let i = 0; i < N; i++) { let on = 0; for (let o = -6; o <= 6; o++) { if (kerbRaw[(i + o + N) % N]) on = 1; } if (on) { const ins = KS[i] > 0 ? 0 : 1; KERB[ins][i] = 1.6; KERB[1 - ins][i] = 1.25; } }
   // kerb ends narrow to nothing over 8 m instead of ending square (GDD 1.11.3)
   for (let s = 0; s < 2; s++) {
     const K = KERB[s], B = Float32Array.from(K);
     for (let i = 0; i < N; i++) {
-      if (!B[i]) continue; let d = 1;
+      if (!B[i]) { continue; } let d = 1;
       while (d < 5 && B[(i + d) % N] && B[(i - d + N) % N]) d++;
       K[i] = B[i] * Math.min(1, (d - 1) / 4);
     }
@@ -185,14 +185,14 @@ const T = {};
     const sg = s === 0 ? 1 : -1; let cap = 1e9;
     for (let t = e + 3; t < want + 14; t += 2) {
       const qx = X[i] + NX[i] * sg * t, qy = Y[i] + NY[i] * sg * t; let hit = false;
-      T.near(qx, qy, 30, j => { if (hit) return; let di = Math.abs(j - i); di = Math.min(di, N - di); if (di < 40) return; const dd = Math.hypot(X[j] - qx, Y[j] - qy); if (dd < Math.max(WR[j], WL[j]) + 5) hit = true; });
+      T.near(qx, qy, 30, j => { if (hit) { return; } let di = Math.abs(j - i); di = Math.min(di, N - di); if (di < 40) { return; } const dd = Math.hypot(X[j] - qx, Y[j] - qy); if (dd < Math.max(WR[j], WL[j]) + 5) hit = true; });
       if (hit) { cap = Math.max(e + 3.2, (e + t) / 2 - 1); break; }
     }
     WALL[s][i] = Math.min(want, cap);
   }
   for (let s = 0; s < 2; s++) { // smooth walls: min filter then average
     const W = WALL[s], B = Float32Array.from(W);
-    for (let i = 0; i < N; i++) { let mn = 1e9; for (let o = -5; o <= 5; o++) mn = Math.min(mn, B[(i + o + N) % N]); W[i] = mn; }
+    for (let i = 0; i < N; i++) { let mn = 1e9; for (let o = -5; o <= 5; o++) { mn = Math.min(mn, B[(i + o + N) % N]); } W[i] = mn; }
     smoothArr(W, 4, 3);
     for (let i = 0; i < N; i++) { W[i] = Math.max(W[i], EDGE[s][i] + 3); RUN[s][i] = Math.min(RUN[s][i], Math.max(0, W[i] - EDGE[s][i] - KERB[s][i] - 1.5)); }
   }
@@ -225,8 +225,10 @@ const T = {};
   // pit lane outline as drawn: the lane ends merge into the track edge over 20 m instead of ending square (GDD 1.11.4)
   PIT.PX = 20;
   PIT.edge = function (k, sgn, inset) { // offset of a pit lane edge at point k (sgn -1 inner, +1 outer)
-    const PX = PIT.PX, sr = T.rel(k * DS), ce = sr < PIT.sIn ? PIT.sIn : sr > PIT.sOut ? PIT.sOut : sr;
-    const c = PIT.center(ce) ?? WR[k], w = sgn * (PIT.halfW(ce) - inset), f = sr < PIT.sIn ? 1 - (PIT.sIn - sr) / PX : sr > PIT.sOut ? 1 - (sr - PIT.sOut) / PX : 1;
+    const PX = PIT.PX, sr = T.rel(k * DS), ce = clamp(sr, PIT.sIn, PIT.sOut);
+    const c = PIT.center(ce) ?? WR[k], w = sgn * (PIT.halfW(ce) - inset);
+    let f = 1; // share of the full lane width: it grows before the entry and shrinks after the exit
+    if (sr < PIT.sIn) f = 1 - (PIT.sIn - sr) / PX; else if (sr > PIT.sOut) f = 1 - (sr - PIT.sOut) / PX;
     const e = f >= 1 ? c + w : WR[k] + (c + w - WR[T.idx(ce)]) * Math.max(0, f);
     return sgn < 0 ? Math.max(e, EDGE[0][k] + inset) : e; // the lane never covers the track's white edge line
   };
@@ -261,7 +263,7 @@ const T = {};
     }
   };
   relax(14, 90); relax(7, 140); relax(3, 120);
-  for (let p = 0; p < 3; p++) { const B = Float64Array.from(lat); for (let i = 0; i < N; i++) { let a = 0; for (let o = -5; o <= 5; o++) a += B[(i + o + N) % N]; lat[i] = clamp(a / 11, -(WL[i] - 1.2), WR[i] - 1.2); } }
+  for (let p = 0; p < 3; p++) { const B = Float64Array.from(lat); for (let i = 0; i < N; i++) { let a = 0; for (let o = -5; o <= 5; o++) { a += B[(i + o + N) % N]; } lat[i] = clamp(a / 11, -(WL[i] - 1.2), WR[i] - 1.2); } }
   const RX = new Float64Array(N), RY = new Float64Array(N), RK = new Float32Array(N), RDS = new Float32Array(N);
   for (let i = 0; i < N; i++) { RX[i] = X[i] + NX[i] * lat[i]; RY[i] = Y[i] + NY[i] * lat[i]; }
   for (let i = 0; i < N; i++) {
@@ -369,7 +371,7 @@ function shift(b, dir) {
   if (b.crashed || b.dnf) return false;
   const ng = b.gear + dir; if (ng < 1 || ng > 6) return false;
   if (dir < 0 && rpmFor(b.v, ng) > PHYS.redline + 400) { b.overrev = 0.8; return false; } // ECU over-rev protection
-  b.gear = ng; if (dir > 0) b.shiftCut = 0.025; b.shiftFlash = 0.25; return true;
+  b.gear = ng; if (dir > 0) { b.shiftCut = 0.025; } b.shiftFlash = 0.25; return true;
 }
 function autoBox(b) {
   const r = rpmFor(b.v, b.gear);
@@ -446,7 +448,8 @@ function stepBike(b, dt, W) {
   if (b.slip > 0.5) { crashBike(b, W, c.thr > 0.5 ? 'highside' : 'lowside'); return; }
   if (b.surf === SURF.GRAVEL && v > 22 && Math.abs(b.lean) > 0.35 && W.rand() < dt * 1.2) { crashBike(b, W, 'gravel'); return; }
   // --- integrate
-  const kapEff = v > 0.5 ? (v < 7 ? kap : aLat / (v * v)) : 0;
+  let kapEff = 0;
+  if (v > 0.5) kapEff = v < 7 ? kap : aLat / (v * v);
   b.h = angWrap(b.h + v * kapEff * dt);
   let acc = aDrive - aBrake - aDrag - aEB;
   b.v = Math.max(0, v + acc * dt);
@@ -459,7 +462,7 @@ function stepBike(b, dt, W) {
   b.rpmVis = lerp(b.rpmVis, b.rpm, Math.min(1, dt * 18));
   if (b.fuel > 0 && !W.infiniteFuel) b.fuel = Math.max(0, b.fuel - PHYS.fuelK * (0.1 + c.thr * Math.min(1, rpmE / PHYS.redline)) * dt);
   b.dist += b.v * dt;
-  if (b.overrev > 0) b.overrev -= dt; if (b.shiftFlash > 0) b.shiftFlash -= dt;
+  if (b.overrev > 0) { b.overrev -= dt; } if (b.shiftFlash > 0) b.shiftFlash -= dt;
 }
 
 function crashBike(b, W, why) {
@@ -484,7 +487,9 @@ function stepCrash(b, dt, W) {
     if (sp > 0.01) {
       T.project(o.x, o.y, b.i, Pj);
       const sf = T.surface(Pj.i, Pj.s, Pj.d);
-      const dec = (sf === SURF.GRAVEL ? 2.6 : sf === SURF.GRASS ? 1.3 : 0.62) * G * (o === C.rd ? 1.15 : 1);
+      let grip = 0.62; // slide deceleration in g on tarmac, more on grass and gravel
+      if (sf === SURF.GRAVEL) grip = 2.6; else if (sf === SURF.GRASS) grip = 1.3;
+      const dec = grip * G * (o === C.rd ? 1.15 : 1);
       const ns = Math.max(0, sp - dec * dt); o.vx *= ns / sp; o.vy *= ns / sp;
       o.x += o.vx * dt; o.y += o.vy * dt; o.rot += o.rv * dt; o.rv *= Math.exp(-dt * 1.2);
       if (sf === SURF.WALL) { const side = Pj.d >= 0 ? 0 : 1; const wd = T.WALL[side][Pj.i] - 0.6; const [px, py] = T.pt(Pj.i, side === 0 ? wd : -wd); o.x = px; o.y = py; o.vx *= 0.2; o.vy *= 0.2; }
@@ -526,7 +531,7 @@ function aiControl(b, dt, W) {
     let best = 1e9;
     for (const o of W.bikes) {
       if (o === b || o.crashed || o.dnf || o.held) continue;
-      let ds = o.s - b.s; if (ds < -T.L / 2) ds += T.L; if (ds > T.L / 2) ds -= T.L;
+      let ds = o.s - b.s; if (ds < -T.L / 2) { ds += T.L; } if (ds > T.L / 2) ds -= T.L;
       const dd = o.d - b.d;
       if (ds > 1.5 && ds < 45 && Math.abs(dd) < 2.4) { if (ds < best) { best = ds; A.block = { o, ds }; } }
       if (Math.abs(ds) < 3.2 && Math.abs(dd) < 2.2) A.side += (dd > 0 ? -1 : 1) * (2.2 - Math.abs(dd)); // shy away from rider alongside

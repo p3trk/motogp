@@ -20,17 +20,17 @@ const Rec = {
     };
   },
   sample() { // samples land exactly on the 0.1 s grid, interpolated between the last two physics steps (1.11.2)
-    const R = this.cur; if (!R) return; const S = R.samples, b = W.player;
+    const R = this.cur; if (!R) { return; } const S = R.samples, b = W.player;
     const c = { t: W.time, x: b.crashed && b.crash ? b.crash.bk.x : b.x, y: b.crashed && b.crash ? b.crash.bk.y : b.y, h: b.h, v: b.crashed ? 0 : b.v, lean: b.crashed ? 0 : b.lean, s: b.s, p: b.progress };
     const q = this.prev; this.prev = c;
     const tg = S.x.length * REC_DT; if (W.time < tg) return;
     let f = 1; if (q && W.time > q.t && Math.abs(c.p - q.p) < T.L / 2) f = clamp((tg - q.t) / (W.time - q.t), 0, 1);
     const m = (k) => q && f < 1 ? q[k] + (c[k] - q[k]) * f : c[k];
-    S.x.push(r2(m('x'), 100)); S.y.push(r2(m('y'), 100)); S.h.push(r2(q && f < 1 ? q.h + angWrap(c.h - q.h) * f : c.h, 1000)); S.v.push(r2(m('v'), 100)); S.lean.push(r2(m('lean'), 1000)); S.s.push(r2(f < 1 ? c.s : c.s, 10)); S.p.push(r2(m('p'), 10));
+    S.x.push(r2(m('x'), 100)); S.y.push(r2(m('y'), 100)); S.h.push(r2(q && f < 1 ? q.h + angWrap(c.h - q.h) * f : c.h, 1000)); S.v.push(r2(m('v'), 100)); S.lean.push(r2(m('lean'), 1000)); S.s.push(r2(c.s, 10)); S.p.push(r2(m('p'), 10));
   },
-  lap(start, end, t, ap, inv) { if (!this.cur) return; const l = { start: r2(start, 1000), end: r2(end, 1000), time: r2(t, 1000) }; if (ap) l.ap = 1; if (inv) l.inv = 1; this.cur.laps.push(l); },
+  lap(start, end, t, ap, inv) { if (!this.cur) { return; } const l = { start: r2(start, 1000), end: r2(end, 1000), time: r2(t, 1000) }; if (ap) { l.ap = 1; } if (inv) { l.inv = 1; } this.cur.laps.push(l); },
   snapshot() { // finished copy of the session so far
-    const R = this.cur; if (!R) return null; const b = W.player;
+    const R = this.cur; if (!R) { return null; } const b = W.player;
     const pool = bestPool(R);
     R.bestLap = pool.length ? Math.min(...pool.map(l => l.time)) : 0;
     if (W.mode === 'race') { R.raceStart = W.raceStartT > 0 ? r2(W.raceStartT, 1000) : 0; R.start.t = R.raceStart; R.finishT = b.finished ? r2(b.finishT, 1000) : 0; R.position = b.dnf ? 0 : standings().indexOf(b) + 1; }
@@ -38,7 +38,7 @@ const Rec = {
     return JSON.parse(JSON.stringify(R));
   },
   stop() { // end of session: keep it when it holds a timed lap or a started race
-    if (!this.cur) return null; const R = this.snapshot(); this.cur = null;
+    if (!this.cur) { return null; } const R = this.snapshot(); this.cur = null;
     if (!R.laps.length && !R.raceStart) return null;
     this.last = R; Lib.add(R, 'auto'); return R;
   }
@@ -97,8 +97,8 @@ function recMeta(R, src) {
 
 // compact storage form: channels delta-encoded as Int16 in base64; s is rebuilt from p (GDD 11c, 1.9.1)
 const PACK = { x: 100, y: 100, h: 1000, v: 100, lean: 1000, p: 10 }, LS_KEY = 'sgp_sessions', LS_MAX = 10;
-function b64(u8) { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); }
-function unb64(str) { const s = atob(str), u = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return u; }
+function b64(u8) { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) { s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); } return btoa(s); }
+function unb64(str) { const s = atob(str), u = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) { u[i] = s.charCodeAt(i); } return u; }
 function packCh(a, k) {
   const o = []; let prev = 0;
   for (const x of a) { const q = Math.round(x * k), d = q - prev; prev = q; if (d > -32768 && d < 32768) o.push(d); else o.push(-32768, q >> 16, q & 0xFFFF); }
@@ -106,10 +106,10 @@ function packCh(a, k) {
 }
 function unpackCh(str, k) {
   const u = unb64(str), a = new Int16Array(u.buffer, 0, u.length >> 1), o = []; let q = 0;
-  for (let i = 0; i < a.length; i++) { if (a[i] === -32768) { q = a[i + 1] * 65536 + (a[i + 2] & 0xFFFF); i += 2; } else q += a[i]; o.push(q / k); }
+  for (let i = 0; i < a.length; i++) { if (a[i] === -32768) { q = a[i + 1] * 65536 + (a[i + 2] & 0xFFFF); i += 2; } else { q += a[i]; } o.push(q / k); }
   return o;
 }
-function packRec(R) { const S = R.samples, P = { dt: S.dt, enc: 'd16' }; for (const k in PACK) P[k] = packCh(S[k], PACK[k]); return Object.assign({}, R, { samples: P }); }
+function packRec(R) { const S = R.samples, P = { dt: S.dt, enc: 'd16' }; for (const k in PACK) { P[k] = packCh(S[k], PACK[k]); } return Object.assign({}, R, { samples: P }); }
 function unpackRec(R) {
   const S = R.samples, U = { dt: S.dt }; for (const k in PACK) U[k] = unpackCh(S[k], PACK[k]);
   U.s = U.p.map(p => Math.round((((p % T.L) + T.L) % T.L) * 10) / 10);
@@ -124,8 +124,8 @@ const Lib = {
     try { this.ghosts = JSON.parse(localStorage.getItem('sgp_ghosts') || '[]').slice(0, GHOST_MAX); } catch (e) { this.ghosts = []; }
     try { this.sync = localStorage.getItem('sgp_ghost_sync') || ''; } catch (e) { this.sync = ''; }
     let had = false;
-    try { const raw = localStorage.getItem(LS_KEY); had = raw !== null; for (const P of JSON.parse(raw || '[]')) { try { const R = unpackRec(P); if (recValid(R)) { this.data[R.id] = R; this.meta.push(recMeta(R, 'auto')); } } catch (e) { } } }
-    catch (e) { this.stored = false; }
+    try { const raw = localStorage.getItem(LS_KEY); had = raw !== null; for (const P of JSON.parse(raw || '[]')) { try { const R = unpackRec(P); if (recValid(R)) { this.data[R.id] = R; this.meta.push(recMeta(R, 'auto')); } } catch { /* a damaged recording is skipped */ } } }
+    catch { /* storage blocked: recordings are kept for this session only */ this.stored = false; }
     this.sort(); this.loadGhosts(); this.changed();
     return new Promise(res => {
       let rq; try { rq = indexedDB.open('sgp_sessions', 1); } catch (e) { return res(); }
@@ -139,15 +139,16 @@ const Lib = {
       };
     }).then(() => { this.changed(); this.fetchIndex(); });
   },
+  dataOf(id) { return new Promise(r => { const q = this.tx('data').get(id); q.onsuccess = () => r(q.result); q.onerror = () => r(null); }); }, // a recording from the old IndexedDB library, or null
   migrate() { // one-time move of the newest 10 sessions from the 1.8.0/1.9.0 IndexedDB library
     return new Promise(res => {
       this.tx('meta').getAll().onsuccess = e => {
         const old = (e.target.result || []).sort((a, b) => (b.date > a.date ? 1 : -1)).slice(0, LS_MAX);
         if (!old.length) { this.persist(); return res(); }
-        Promise.all(old.map(m => new Promise(r => { const q = this.tx('data').get(m.id); q.onsuccess = () => r(q.result); q.onerror = () => r(null); }))).then(list => {
+        Promise.all(old.map(m => this.dataOf(m.id))).then(list => {
           for (const R of list.reverse()) if (R && recValid(R) && !this.data[R.id]) { this.data[R.id] = R; this.meta.push(recMeta(R, 'auto')); }
           this.sort(); this.persist(); this.loadGhosts();
-          try { this.tx('meta', 1).clear(); this.tx('data', 1).clear(); } catch (e) { }
+          try { this.tx('meta', 1).clear(); this.tx('data', 1).clear(); } catch { /* storage blocked: nothing to clear */ }
           res();
         });
       };
@@ -166,7 +167,7 @@ const Lib = {
     let packed = own.map(m => packRec(this.data[m.id]));
     while (true) {
       try { localStorage.setItem(LS_KEY, JSON.stringify(packed)); break; }
-      catch (e) {
+      catch { /* storage full: drop the oldest session and try again */
         if (packed.length <= 1) { this.status = 'Browser storage is full, this session could not be kept. Export it to keep it.'; break; }
         packed.pop(); this.del(own.pop().id, true, true);
         this.status = `Browser storage is full, keeping the last ${packed.length} sessions.`;
@@ -176,7 +177,7 @@ const Lib = {
   add(R, src) {
     if (!recValid(R)) return false;
     const m = recMeta(R, src), old = this.meta.findIndex(x => x.id === R.id);
-    if (old >= 0) { if (src === 'auto' || this.meta[old].src === 'auto') return true; this.meta.splice(old, 1); }
+    if (old >= 0) { if (src === 'auto' || this.meta[old].src === 'auto') { return true; } this.meta.splice(old, 1); }
     this.meta.push(m); this.sort(); this.data[R.id] = R;
     if (src === 'auto') { this.persist(); this.writeDir(R); }
     this.changed(); return true;
@@ -187,26 +188,27 @@ const Lib = {
     if (m && m.src === 'auto' && !noSave) this.persist();
     if (!quiet) this.changed();
   },
-  saveGhosts() { try { localStorage.setItem('sgp_ghosts', JSON.stringify(this.ghosts)); localStorage.setItem('sgp_ghost_sync', this.sync); } catch (e) { } },
+  saveGhosts() { try { localStorage.setItem('sgp_ghosts', JSON.stringify(this.ghosts)); localStorage.setItem('sgp_ghost_sync', this.sync); } catch { /* storage blocked: the ghost choice is not saved */ } },
   // sync reference for spot starts (GDD 11c): the marked ghost, else the first selected one
   syncId() { return this.ghosts.includes(this.sync) ? this.sync : this.ghosts[0] || ''; },
-  setSync(id) { if (!this.ghosts.includes(id)) return; this.sync = id; this.saveGhosts(); this.changed(); },
+  setSync(id) { if (!this.ghosts.includes(id)) { return; } this.sync = id; this.saveGhosts(); this.changed(); },
   toggleGhost(id) {
     const k = this.ghosts.indexOf(id);
     if (k >= 0) { this.ghosts.splice(k, 1); if (this.sync === id) this.sync = this.ghosts[0] || ''; } else { if (this.ghosts.length >= GHOST_MAX) { this.status = `Up to ${GHOST_MAX} ghosts at once. Switch one off first.`; this.changed(); return; } this.ghosts.push(id); }
     this.saveGhosts(); this.changed();
   },
   ghostRecs() { return this.ghosts.map(id => this.data[id]).filter(Boolean); },
-  importText(text, src) { try { const R = JSON.parse(text); return this.add(R, src) ? 1 : 0; } catch (e) { return 0; } },
+  importText(text, src) { try { const R = JSON.parse(text); return this.add(R, src) ? 1 : 0; } catch { /* not a valid recording file */ return 0; } },
   async importFiles(files, src) {
     let ok = 0, bad = 0;
-    for (const f of files) { if (!/\.json$/i.test(f.name) || /(^|\/)index\.json$/i.test(f.webkitRelativePath || f.name)) continue; (this.importText(await f.text(), src) ? ok++ : bad++); }
-    this.status = `Loaded ${ok} recording${ok === 1 ? '' : 's'}` + (bad ? `, skipped ${bad} file${bad === 1 ? '' : 's'} that are not Silverstone GP sessions.` : '.'); this.changed();
+    for (const f of files) { if (!/\.json$/i.test(f.name) || /(^|\/)index\.json$/i.test(f.webkitRelativePath || f.name)) { continue; } (this.importText(await f.text(), src) ? ok++ : bad++); }
+    const fileWord = bad === 1 ? 'file' : 'files', skipped = bad ? ', skipped ' + bad + ' ' + fileWord + ' that are not Silverstone GP sessions.' : '.';
+    this.status = `Loaded ${ok} recording${ok === 1 ? '' : 's'}` + skipped; this.changed();
   },
   // saved_tracks folder: Chrome/Edge folder picker with write access, remembered between visits
   canPickDir() { return typeof window.showDirectoryPicker === 'function'; },
   async pickDir() {
-    try { const h = await window.showDirectoryPicker({ id: 'saved_tracks', mode: 'readwrite' }); this.dir = h; this.dirOK = true; if (this.db) this.tx('kv', 1).put(h, 'dir'); await this.readDir(); }
+    try { const h = await window.showDirectoryPicker({ id: 'saved_tracks', mode: 'readwrite' }); this.dir = h; this.dirOK = true; if (this.db) { this.tx('kv', 1).put(h, 'dir'); } await this.readDir(); }
     catch (e) { if (e && e.name !== 'AbortError') { this.status = 'Could not open the folder: ' + e.message; this.changed(); } }
   },
   async reloadDir() {
@@ -226,16 +228,16 @@ const Lib = {
       if (!this.dirOK) return false;
       const fh = await this.dir.getFileHandle(recFileName(R), { create: true }); const w = await fh.createWritable(); await w.write(JSON.stringify(R)); await w.close();
       return true;
-    } catch (e) { return false; }
+    } catch { /* folder not writable or permission refused */ return false; }
   },
   async fetchIndex() { // served over http(s): saved_tracks/index.json lists the files to load
     if (!/^https?:$/.test(location.protocol)) return;
     try {
       const r = await fetch('saved_tracks/index.json', { cache: 'no-store' }); if (!r.ok) return;
       const list = await r.json(); let ok = 0;
-      for (const name of (Array.isArray(list) ? list : list.files || [])) { try { const f = await fetch('saved_tracks/' + encodeURIComponent(name), { cache: 'no-store' }); if (f.ok && this.importText(await f.text(), 'folder')) ok++; } catch (e) { } }
+      for (const name of (Array.isArray(list) ? list : list.files || [])) { try { const f = await fetch('saved_tracks/' + encodeURIComponent(name), { cache: 'no-store' }); if (f.ok && this.importText(await f.text(), 'folder')) ok++; } catch { /* a missing or damaged file is skipped */ } }
       if (ok) { this.status = `saved_tracks: loaded ${ok} recording${ok === 1 ? '' : 's'}.`; this.changed(); }
-    } catch (e) { }
+    } catch { /* no saved_tracks index on this server */ }
   },
   async export(R) {
     if (!R) return;
@@ -257,7 +259,8 @@ function recAt(R, t) { // sample at recording time t
   const hk = S.h[k], hB = hk + angWrap(S.h[i0] - hk) * w0 + angWrap(S.h[j] - hk) * w2 + angWrap(S.h[i3] - hk) * w3;
   const L = (a) => a[k] + (a[j] - a[k]) * f;
   const jump = Math.abs(S.p[j] - S.p[k]) > T.L / 2;
-  const p = jump ? (f < 0.5 ? S.p[k] : S.p[j]) : L(S.p);
+  let p;
+  if (jump) p = f < 0.5 ? S.p[k] : S.p[j]; else p = L(S.p);
   return { x: B(S.x), y: B(S.y), h: hB, v: B(S.v), lean: B(S.lean), p, dv: S.v[j] - S.v[k] };
 }
 // laps that can be a best or ghost lap: own laps first, autopilot laps if there are none, never invalid laps (GDD 6a, 10)
@@ -280,7 +283,7 @@ const Ghost = {
     if (W.mode === 'quali') return;
     for (const R of recs.slice(0, GHOST_MAX)) {
       const g = makeGhost(R);
-      if (W.mode !== 'practice') { if (g.isRace || g.chainT > 0) W.ghosts.push(g); continue; }
+      if (W.mode !== 'practice') { if (g.isRace || g.chainT > 0) { W.ghosts.push(g); } continue; }
       // practice (GDD 11c, 1.16.0): 'rec' plays a standing-start recording from its launch (grid start),
       // 'spot' starts on its best lap synced to the spot, 'line' waits for the player's first line crossing
       const st = recStart(R);
@@ -327,7 +330,7 @@ const Ghost = {
     if (!run) return;
     if (!g.lapStartT) g.lapStartT = W.time;
     const lap = Math.max(0, Math.floor(p / T.L));
-    if (lap > g.lap) { const lt = W.time - g.lapStartT; g.laps.push(lt); if (!g.bestLap || lt < g.bestLap) g.bestLap = lt; g.lap = lap; g.lapStartT = W.time; }
+    if (lap > g.lap) { const lt = W.time - g.lapStartT; g.laps.push(lt); if (!g.bestLap || lt < g.bestLap) { g.bestLap = lt; } g.lap = lap; g.lapStartT = W.time; }
     const bin = Math.floor(p / 10) + 150;
     if (bin >= 0 && bin < W.passT.length && W.passT[bin] < 0) W.passT[bin] = W.time;
     if (p >= W.totalLaps * T.L) {
@@ -337,7 +340,7 @@ const Ghost = {
   },
   raceSample(g, tau) {
     const R = g.rec;
-    if (g.isRace) { const t = R.raceStart + tau; if (t > (R.samples.x.length - 1) * REC_DT) return null; const q = recAt(R, t); return q; }
+    if (g.isRace) { const t = R.raceStart + tau; if (t > (R.samples.x.length - 1) * REC_DT) { return null; } const q = recAt(R, t); return q; }
     // practice / qualifying recording: chain its completed laps from the line, looping
     let rem = tau % g.chainT, n = Math.floor(tau / g.chainT) * g.chain.length, k = 0;
     while (k < g.chain.length - 1 && rem > g.chain[k].time) { rem -= g.chain[k].time; k++; n++; }
@@ -354,7 +357,8 @@ const Ghost = {
 const RP_SPEEDS = [-8, -4, -2, -1, 0.25, 0.5, 1, 2, 4, 8], RP_MAX = 6;
 function rpBestLap(R) { const pool = bestPool(R); return pool.slice().sort((a, b) => a.time - b.time)[0] || null; }
 function rpDist(R) { // continuous distance along the track for every sample (line crossings and invalid laps unwrapped)
-  const p = R.samples.p, c = new Float64Array(p.length); for (let k = 1; k < p.length; k++) { let d = p[k] - p[k - 1]; if (d < -T.L / 2) d += T.L; else if (d > T.L / 2) d -= T.L; c[k] = c[k - 1] + d; } return c;
+  const p = R.samples.p, c = new Float64Array(p.length); for (let k = 1; k < p.length; k++) { let d = p[k] - p[k - 1]; if (d < -T.L / 2) { d += T.L; } else if (d > T.L / 2) { d -= T.L; }
+  c[k] = c[k - 1] + d; } return c;
 }
 const RP = {
   items: [], align: 'best', lapN: 1, t: 0, dur: 1, speed: 1, playing: true, follow: 0, back: null, saved: null,
@@ -407,7 +411,7 @@ const RP = {
       const k = clamp(rt / REC_DT, 0, it.cum.length - 1), k0 = Math.floor(k), k1 = Math.min(it.cum.length - 1, k0 + 1);
       it.dist = it.cum[k0] + (it.cum[k1] - it.cum[k0]) * (k - k0) - it.d0;
       const R = it.R; let lap = 0; for (let j = 0; j < R.laps.length; j++) if (R.laps[j].start <= rt) lap = j;
-      it.lap = R.laps.length ? (R.laps[lap].start <= rt ? lap + 1 : 0) : 0; it.lapStart = R.laps.length && it.lap ? R.laps[lap].start : 0; it.rt = rt;
+      it.lap = R.laps.length && R.laps[lap].start <= rt ? lap + 1 : 0; it.lapStart = R.laps.length && it.lap ? R.laps[lap].start : 0; it.rt = rt;
     }
     W.player = this.items[this.follow] ? this.items[this.follow].g : this.items[0].g;
   },
@@ -422,11 +426,13 @@ const RP = {
   rew() { this.setSpeed(this.speed > 0 ? -1 : Math.max(-8, this.speed * 2)); },
   ff() { this.setSpeed(this.speed < 1 ? 2 : Math.min(8, Math.max(2, this.speed * 2))); },
   slow() { this.setSpeed(this.speed === 0.5 ? 0.25 : 0.5); },
-  toggle() { if (this.t >= this.dur && this.speed > 0) this.t = 0; if (this.t <= 0 && this.speed < 0) this.speed = 1; this.playing = !this.playing; },
+  toggle() { if (this.t >= this.dur && this.speed > 0) { this.t = 0; } if (this.t <= 0 && this.speed < 0) { this.speed = 1; } this.playing = !this.playing; },
   lapJump(dir) {
     const m = this.laps(); if (!m.length) { this.seek(dir < 0 ? 0 : this.dur); return; }
     const cur = this.t; const next = dir > 0 ? m.find(x => x.t > cur + 0.05) : m.slice().reverse().find(x => x.t < cur - 1);
-    this.seek(next ? next.t : dir > 0 ? this.dur : 0);
+    let to = dir > 0 ? this.dur : 0;
+    if (next) to = next.t;
+    this.seek(to);
   },
   cycle() { const vis = this.items.map((it, k) => k).filter(k => this.items[k].on); const j = vis.indexOf(this.follow); this.follow = vis[(j + 1) % vis.length]; this.place(); CAM.init = false; },
   close() {

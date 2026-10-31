@@ -14,7 +14,7 @@ const FILE = 'file://' + path.resolve(process.argv[2] || path.join(__dirname, '.
 
   const page = await browser.newPage();
   page.on('pageerror', e => { console.error('page error:', e.message); process.exitCode = 1; });
-  await page.addInitScript(() => { try { localStorage.clear(); } catch (e) { } });
+  await page.addInitScript(() => { try { localStorage.clear(); } catch { /* storage may be blocked */ } });
   await page.goto(FILE);
   await page.waitForFunction(() => window.__sgp && document.getElementById('loading').hidden);
 
@@ -54,7 +54,7 @@ const FILE = 'file://' + path.resolve(process.argv[2] || path.join(__dirname, '.
     return page.evaluate(fn);
   };
   const r = await race('sprint', () => {
-    const { W, T, SURF, trackLimitsX, limitRefX } = window.__sgp;
+    const { W, SURF, trackLimitsX, limitRefX } = window.__sgp;
     const b = W.player; W.phase = 'run'; b.finished = false; b.autopilot = false; b.lap = 2;
     const at = (surf, s, d, t) => { W.time = t; b.surf = surf; b.s = s; b.d = d; trackLimitsX(b); };
     const ref = limitRefX(1000, 1100), out = { ref };
@@ -69,17 +69,18 @@ const FILE = 'file://' + path.resolve(process.argv[2] || path.join(__dirname, '.
     return out;
   });
   const rnd = x => Math.round(x * 10) / 10;
+  const tenths = x => Math.round(x * 10);
   check('reference time is positive', r.ref > 0, r);
   check('an infraction that lost under 0.5 s is counted without time', r.c1.tl === 1 && r.c1.pen === 0 && r.c1.ll === 0, r.c1);
   check('a slow run wide is not counted', r.wide.tl === 1 && r.wide.pen === 0, r.wide);
-  check('a gain is given back as time and counted', r.c2.tl === 2 && rnd(r.c2.pen) === 0.4, r.c2);
+  check('a gain is given back as time and counted', r.c2.tl === 2 && tenths(r.c2.pen) === 4, r.c2);
   check('10 lap race: the 3rd infraction gives a Long Lap and resets the count', r.c3.tl === 0 && r.c3.ll === 1 && r.c3.until === 5, r.c3);
-  check('a clear advantage gives a Long Lap at once, not counted', r.adv.tl === 0 && r.adv.ll === 2 && rnd(r.adv.pen) === 1.7, r.adv);
-  check('a crash and respawn is not judged', r.crash.tl === 0 && rnd(r.crash.pen) === 1.7, r.crash);
+  check('a clear advantage gives a Long Lap at once, not counted', r.adv.tl === 0 && r.adv.ll === 2 && tenths(r.adv.pen) === 17, r.adv);
+  check('a crash and respawn is not judged', r.crash.tl === 0 && tenths(r.crash.pen) === 17, r.crash);
   check('a Long Lap with fewer than 3 laps left is 3 s at once', rnd(r.late.pen) === 4.5 && r.late.ll === 0, r.late);
 
   const g = await race('gp', () => {
-    const { W, T, SURF, trackLimitsX, limitRefX } = window.__sgp;
+    const { W, SURF, trackLimitsX, limitRefX } = window.__sgp;
     const b = W.player; W.phase = 'run'; b.finished = false; b.autopilot = false; b.lap = 2;
     const ref = limitRefX(1000, 1100), seen = [];
     for (let k = 0; k < 5; k++) { W.time = 100 * k + 100; b.surf = SURF.GRASS; b.s = 1000; b.d = -20; trackLimitsX(b); W.time += ref; b.surf = SURF.ASPH; b.s = 1100; b.d = 0; trackLimitsX(b); seen.push(b.tl + ':' + b.llPend.length); }
@@ -88,7 +89,7 @@ const FILE = 'file://' + path.resolve(process.argv[2] || path.join(__dirname, '.
   check('Grand Prix: Long Lap at the 5th infraction', JSON.stringify(g) === '["1:0","2:0","3:0","4:0","0:1"]', g);
 
   const l = await race('sprint', () => {
-    const { W, T, SURF, PHYS, trackLimitsX, longLapX, limitRefX, completeLapX } = window.__sgp;
+    const { W, T, SURF, trackLimitsX, longLapX, limitRefX, completeLapX } = window.__sgp;
     const b = W.player, LL = T.LL; W.phase = 'run'; b.finished = false; b.autopilot = false; b.lap = 2;
     const out = { len: LL.sB - LL.sA, side: LL.sg };
     // the lane lies on tarmac run-off from end to end, starts and ends at the kerb, and is about 22 m out at the apex
@@ -96,7 +97,7 @@ const FILE = 'file://' + path.resolve(process.argv[2] || path.join(__dirname, '.
     const i0 = T.idx(LL.sA); out.onRun = onRun; out.endGap = LL.off(LL.sA) - LL.w / 2 - T.EDGE[LL.side][i0] - T.KERB[LL.side][i0];
     out.depth = LL.off(LL.sM) - LL.off(LL.sA);
     // pass through the lane in dur seconds
-    const pass = (dur, dOff) => { const t0 = 1000; let tA = -1, tB = -1, prev = LL.sA - 6; for (let k = 0; k <= 160; k++) { const s = LL.sA - 6 + k * (LL.sB - LL.sA + 12) / 160; b.prevS = prev; b.s = s; b.d = LL.sg * (s >= LL.sA && s <= LL.sB ? LL.off(s) + (dOff || 0) : 0); b.surf = T.surface(T.idx(s), s, b.d); W.time = t0 + dur * k / 160; if (tA < 0 && prev < LL.sA && s >= LL.sA) tA = W.time; if (tB < 0 && prev < LL.sB && s >= LL.sB) tB = W.time; longLapX(b); trackLimitsX(b); prev = s; } return tB - tA; };
+    const pass = (dur, dOff) => { const t0 = 1000; let tA = -1, tB = -1, prev = LL.sA - 6; for (let k = 0; k <= 160; k++) { const s = LL.sA - 6 + k * (LL.sB - LL.sA + 12) / 160; b.prevS = prev; b.s = s; b.d = LL.sg * (s >= LL.sA && s <= LL.sB ? LL.off(s) + (dOff || 0) : 0); b.surf = T.surface(T.idx(s), s, b.d); W.time = t0 + dur * k / 160; if (tA < 0 && prev < LL.sA && s >= LL.sA) { tA = W.time; } if (tB < 0 && prev < LL.sB && s >= LL.sB) { tB = W.time; } longLapX(b); trackLimitsX(b); prev = s; } return tB - tA; };
     const ref = limitRefX(LL.sA, LL.sB); out.ref = ref;
     b.llPend = [{ until: 5 }]; pass(ref + 4); out.slow = { left: b.llPend.length, pen: b.pen, off: b.offT, tl: b.tl };
     b.llPend = [{ until: 5 }]; b.pen = 0; const tf = pass(ref + 1); out.fast = { left: b.llPend.length, pen: b.pen, want: Math.ceil((2.5 - (tf - ref)) * 10 - 1e-6) / 10 };

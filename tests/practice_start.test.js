@@ -14,14 +14,14 @@ const FILE = 'file://' + path.resolve(process.argv[2] || path.join(__dirname, '.
   const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   page.on('pageerror', e => { console.error('page error:', e.message); process.exitCode = 1; });
-  await page.addInitScript(() => { try { localStorage.clear(); } catch (e) { } });
+  await page.addInitScript(() => { try { localStorage.clear(); } catch { /* storage may be blocked */ } });
   await page.goto(FILE);
   await page.waitForFunction(() => window.__sgp && document.getElementById('loading').hidden);
   const r = await page.evaluate(() => {
     const S = window.__sgp, W = S.W, T = S.T, UI = S.UI, Lib = S.Lib, out = {};
     const wrapD = d => { d = ((d % T.L) + T.L) % T.L; return d > T.L / 2 ? d - T.L : d; };
     const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
-    let lightsSeen = false;
+    let lightsSeen;
     const step = n => { for (let k = 0; k < n; k++) { S.simStep(S.SUB); if (W.lights !== 0 || W.phase === 'lights') lightsSeen = true; } };
     const press = () => { S.Input.k.KeyW = true; step(1); S.Input.k.KeyW = false; };
     const until = (el) => { while (W.time - W.startT < el - 1e-9) step(1); };
@@ -39,8 +39,8 @@ const FILE = 'file://' + path.resolve(process.argv[2] || path.join(__dirname, '.
     let nid = 0;
     const mkRec = o => {
       const dt = 0.1, n = Math.round(o.dur / dt) + 1, Sm = { dt, x: [], y: [], h: [], v: [], lean: [], s: [], p: [] };
-      const tA = o.vmax / o.acc, D = t => { const u = t - o.hold; return u <= 0 ? 0 : u < tA ? 0.5 * o.acc * u * u : 0.5 * o.acc * tA * tA + o.vmax * (u - tA); };
-      const tOf = dd => { if (dd <= 0) return o.hold; const dA = 0.5 * o.acc * tA * tA; return o.hold + (dd < dA ? Math.sqrt(2 * dd / o.acc) : tA + (dd - dA) / o.vmax); };
+      const tA = o.vmax / o.acc, D = t => { const u = t - o.hold; if (u <= 0) { return 0; } return u < tA ? 0.5 * o.acc * u * u : 0.5 * o.acc * tA * tA + o.vmax * (u - tA); };
+      const tOf = dd => { if (dd <= 0) { return o.hold; } const dA = 0.5 * o.acc * tA * tA; return o.hold + (dd < dA ? Math.sqrt(2 * dd / o.acc) : tA + (dd - dA) / o.vmax); };
       for (let k = 0; k < n; k++) {
         const t = k * dt, p = o.p0 + D(t), q = at(p, o.d), u = t - o.hold;
         Sm.x.push(q.x); Sm.y.push(q.y); Sm.h.push(q.h); Sm.v.push(u <= 0 ? 0 : Math.min(o.vmax, o.acc * u)); Sm.lean.push(0); Sm.s.push(T.wrapS(p)); Sm.p.push(p);

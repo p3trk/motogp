@@ -144,7 +144,7 @@ test('riderPose: hang-off grows from hips to shoulders to helmet, braking sits u
   const p = pose(0.8, 0, 0), sl = Math.sin(0.8);
   near(p.hip, 0.12 * sl, 1e-12); near(p.sh, 0.3 * sl, 1e-12); near(p.hel, 0.4 * sl, 1e-12); near(p.base, 0.16 * sl, 1e-12); near(p.hf, 0.05 * sl, 1e-12); assert.equal(p.sg, 1);
   assert.equal(pose(-0.8, 0, 0).sg, -1); near(pose(-0.8, 0, 0).hel, -p.hel, 1e-12);
-  assert.equal(pose(0.3, 0, 0).knee, 0, 'knee in up to 0.3 rad'); near(pose(0.55, 0, 0).knee, 0.11, 1e-12); near(pose(-0.9, 0, 0).knee, 0.22, 1e-12, 'fully out from 0.8 rad');
+  assert.equal(pose(0.3, 0, 0).knee, 0, 'knee in up to 0.3 rad'); near(pose(0.55, 0, 0).knee, 0.095, 1e-12); near(pose(-0.9, 0, 0).knee, 0.19, 1e-12, 'fully out from 0.8 rad');
   near(pose(0, 1, 0).fwd, -0.08, 1e-12); near(pose(0, 0, 1).fwd, 0.06, 1e-12); near(pose(0, 0, 0.7).fwd, 0, 1e-12); near(pose(0, 1, 1).fwd, -0.08, 1e-12, 'braking wins');
 });
 test('riderBend, riderAt: hips and shoulders move by their shifts, the shoulders forward by fwd', () => {

@@ -385,7 +385,7 @@ function drawHelmet(h, Tm, x, y, r, visor) {
 const RIDER_REST = { base: 0, q: 1, hip: 0, sh: 0, hel: 0, hf: 0, fwd: 0, sg: 0, elbow: 0, knee: 0 };
 function riderPose(b) {
   const sl = Math.sin(b.lean), brk = clamp(b.ctl.brk, 0, 1), tuck = clamp((b.ctl.thr - 0.7) / 0.3, 0, 1) * (1 - brk);
-  return { base: sl * 0.16, q: 0.72 + 0.28 * Math.cos(b.lean), hip: 0.12 * sl, sh: 0.3 * sl, hel: 0.4 * sl, hf: 0.05 * Math.abs(sl), fwd: 0.06 * tuck - 0.08 * brk, sg: Math.sign(sl), elbow: 0.08 * Math.abs(sl), knee: 0.22 * clamp((Math.abs(b.lean) - 0.3) / 0.5, 0, 1) };
+  return { base: sl * 0.16, q: 0.72 + 0.28 * Math.cos(b.lean), hip: 0.12 * sl, sh: 0.3 * sl, hel: 0.4 * sl, hf: 0.05 * Math.abs(sl), fwd: 0.06 * tuck - 0.08 * brk, sg: Math.sign(sl), elbow: 0.08 * Math.abs(sl), knee: 0.19 * clamp((Math.abs(b.lean) - 0.3) / 0.5, 0, 1) };
 }
 // bend what is drawn next: the hips (at x xh) move by the hip shift, the shoulders (at x xs) by the shoulder shift and
 // forward or back, everything between in proportion

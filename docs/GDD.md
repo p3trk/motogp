@@ -663,7 +663,29 @@ Asked by Petr (2026-10-28, planning session): "Help to plan change to improve: 1
 
 **Movement (unchanged from 1.24.0)**
 - The bike is painted on the road in world space and turns with its heading, so it always points where it goes.
-- Lean as in 1.24.0: the chassis narrows (0.72 + 0.28 × cos(lean)) and shifts by 0.16 × sin(lean); the rider shifts to the inside by 0.5 × sin(lean); the inside knee shows above 0.45 rad. Sparks from 58°, brake light from brake 0.3 and 5 km/h, as now.
+- Lean as in 1.24.0 for the bike: the chassis narrows (0.72 + 0.28 × cos(lean)) and shifts by 0.16 × sin(lean). Sparks from 58°, brake light from brake 0.3 and 5 km/h, as now. The rider moves as in "Rider on the bike" below.
+
+**Rider on the bike (since 1.25.0)**
+
+**Why** (Petr, 2026-10-31: "way is rider is moving on the bike need to be improved")
+- Until now the whole rider slides sideways as one piece, by 0.5 × sin(lean) of the sprite: boots, hips, back and helmet move together. At 40–60° the boots leave the pegs, the hips hang in the air beside the seat and the hands leave the handlebars, so the rider looks like he slides off the bike rather than hangs off it.
+- Braking and accelerating do not show on the rider at all.
+
+**Rule** (distances in sprite units, the bike is about 2 units long)
+- **Hands and feet stay on the bike:** the hands stay on the grips and the boots on the pegs at every lean, braking and throttle.
+- **Hang-off from the seat:** the hips move to the inside by 0.12 × sin(lean), the shoulders by 0.30 × sin(lean) and the helmet by 0.40 × sin(lean), so the body bends from the seat towards the inside of the bend instead of sliding. The helmet also moves forward by 0.05 × |sin(lean)| (the head looks into the bend).
+- **Knees:** the inside knee goes out from the hip, as now from 0.45 rad, and moves with the hips; the outside knee stays against the tank.
+- **Arms:** drawn each frame from the shoulders to the grips: the inside elbow drops out, the outside arm reaches across the tank.
+- **Braking** (by the brake value, 0–1): the rider sits up and back: shoulders and helmet 0.08 back, arms straight.
+- **Accelerating** (by the throttle above 0.7): the rider tucks in: shoulders and helmet 0.06 forward, the back flatter and lower behind the screen. Full throttle on a straight shows a tucked rider.
+- Smooth by itself: lean, brake and throttle already change smoothly, so the rider moves smoothly with them.
+- The rider is drawn each frame from these parts instead of one cached image; the cached image is kept for a crashed rider. The knee slider moves with the hips; the separate elbow patch is gone (the arm itself drops the elbow out).
+- In all three cameras, with each camera's drawing (top view, Behind, CLOSE).
+
+**Tests**
+- Unit tests (GDD 13b) for the new drawing functions (`riderPose`, `riderBend`, `riderAt`, `drawArm`, `drawRiderTop`, `drawRiderRear`): at lean 0.8 the helmet is further inside than the shoulders, the shoulders than the hips; hands and boots do not move with lean; braking moves the helmet back, full throttle forward.
+- `bike_views`: lean still moves the rider to the inside in every camera, and the frame cost limit holds.
+
 
 **Stretch rule**
 - In Behind and CLOSE the drawing is stretched along the screen's up direction (the camera's forward direction on the road), around the bike's position, by 1 / (cos(tilt) × the perspective scale of the bike's screen row), using the tilt of the moment (it is lowered at speed, §11h). At most × 2.5 (near the horizon).
@@ -692,6 +714,8 @@ Asked by Petr (2026-10-28, planning session): "Help to plan change to improve: 1
 1. Full or partial stretch? **Full (1 / cos(tilt))**, so the bike keeps its real top-view proportions. A real bike seen from 35° also shows its height, which would make it look even taller; full stretch is the closest a flat drawing gets. Alternative: half the correction, if × 1.74 looks too long.
 2. Separate drawings for Behind and CLOSE, or one three-quarter drawing for both? **Separate**: CLOSE is lower and shows more of the rider's back. One shared drawing is cheaper and could be tried first if the difference is small.
 3. Keep the image files in the repository? **No**: they are not used.
+4. Rider: also show braking and accelerating, or only lean? **Both** (approved 2026-10-31): they were part of the first request ("better look and feel on acceleration and braking").
+5. Hang-off amounts (hips 0.12, shoulders 0.30, helmet 0.40): **as proposed, then tuned by eye in the game** (approved 2026-10-31).
 
 ## 12. Track and graphics
 

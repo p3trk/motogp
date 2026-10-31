@@ -360,7 +360,7 @@ function makeBike(o) {
     crashed: false, crash: null, held: false, dnf: false, finished: false, finishT: 0, crashes: 0, pits: 0,
     service: false, serviceT: 0, inPitLane: false, limiter: false, box: 0, needRelease: false,
     ai: null, fuelLapStart: PHYS.tank, fuelPerLap: PHYS.lapFuel, progress: 0, msgs: [],
-    offT: -1, offS: 0, offCr: 0, lapInv: false, lapsInv: [], pen: 0, tl: 0, llPend: [], llRun: null, llGiven: 0, dropBehind: null, dropPen: 0
+    offT: -1, offS: 0, offCr: 0, offLL: false, lapInv: false, lapsInv: [], pen: 0, tl: 0, llPend: [], llRun: null, llExitLap: -1, llGiven: 0, dropBehind: null, dropPen: 0
   }, o);
 }
 const Pj = { i: 0, s: 0, d: 0 };

@@ -639,52 +639,57 @@ The eye judges speed from small things passing by. These are part of the world, 
 3. Should old saved camera values move to the new defaults? **Only values equal to the old defaults** (zK 1.0 / 0.4, Behind depth 2.6). Without this, anyone who ever saved camera settings, Petr included, would not see change 1. Alternative: keep every saved value and let the player press Reset to defaults.
 4. Grass stripes: 6 m bands, or longer like real mowing (about 10–15 m)? **6 m**: shorter bands pass by more often, which gives more sense of speed. Real circuits often use wider bands.
 
-## 11i. Upright bikes (since 1.25.0)
+## 11i. Bike drawing per camera (since 1.25.0)
 
-Asked by Petr (2026-10-28, planning session): "Help to plan change to improve: 1. Graphics ... is 3D an option? leaning of the bike with rider on it. Overall look and feel of the bikes, make better look and feel on acceleration and braking. I can deliver required assets." Then: "Can you think about other ways how to improve graphics without going into 3D?"
+Asked by Petr (2026-10-28, planning session): "Help to plan change to improve: 1. Graphics ... is 3D an option? leaning of the bike with rider on it. Overall look and feel of the bikes, make better look and feel on acceleration and braking. I can deliver required assets." Then: "Can you think about other ways how to improve graphics without going into 3D?" Then (2026-10-31), after the upright sprites were tried: "Recommend how to do it in old style and improve the looks, let's forget about sprites ... Can you perhaps prepare better graphics by making unique graphics for each camera?"
 
 **Why**
-- Bikes are top-down drawings painted on the road. In Behind and CLOSE the road is tilted into perspective, so a bike lies on the asphalt at an angle. Lean is faked by squashing the drawing and sliding the rider sideways, so it does not look like a bike leaning in a corner.
-- Braking and acceleration show almost nothing on the bike.
+- In Behind and CLOSE the bike is a top-down drawing seen through the tilted camera, so the road's perspective squashes it front to back: by 23 % in Behind (tilt 40°, cos 40° = 0.77) and by 43 % in CLOSE (tilt 55°, cos 55° = 0.57). In CLOSE it looks like a sticker on the road.
+- The way the bike moves is right and stays as it is (see Movement below).
+
+**Tried and dropped: upright rear-view sprites (2026-10-30 to 31)**
+- The bike was drawn standing up on screen from rear-view images (first five rider poses per team, then one image for team 1), with lean as a rotation about the tyre contact point.
+- It did not read as a turn: a rear view rolled by the lean looked like a hard turn at 300 km/h, where the bike turns about 400 m. A lean factor by speed (0.6 at 300 km/h) and a smaller roll with a heading skew did not fix it. The images are not used; the code is removed.
 
 **What the player sees**
-- In Behind and CLOSE each bike stands up on screen at its tyre contact point, drawn upright at the same size as its distance on the road (as in the classic 16-bit racers). Top-down is unchanged.
-- **Lean is real rotation** around the contact point, seen from behind. A leaning bike turns on its tyre patch, so lean looks right in both tilted cameras.
-- **Rider poses** follow the riding state, blended over about 0.15 s:
-  - **Upright:** rider sits up, straight.
-  - **Braking** (brake above 0.3 and speed above 5 km/h, question 5 below): front dips, the rider sits up, the brake light glows (as now).
-  - **Accelerating** (throttle above 0.7 and the rear loaded): rear squats, front lifts with the physics `wheelie` value, rider tucks in.
-  - **Corner** (lean above 0.3 rad): rider hangs off, knee and elbow out to the inside.
-  - **Limit** (lean above about 60°): sparks from the knee and elbow sliders, and a rear wiggle under hard braking.
-- Top-down keeps the flat sprite.
-- Ghosts (§11c) and other riders use the same sprites, drawn at the ghost alpha they have now.
 
-**Sprites the owner delivers** (Petr, 2026-10-30: the assets are his to deliver)
-- One **rear view** and one **side view** of the bike, upright, with no rider, per team livery (11 teams). Upright front-on is not needed.
-- Rider poses on the same bike, as separate images: upright, braking, accelerating, corner (hanging off, inside knee and elbow out), limit (knee and elbow sliders; the same as corner, with sparks drawn by the game).
-- Shadow and tyre contact: drawn by the game, not as images.
-- **Format:** PNG, transparent background. Shoot or render on a single flat background, **pure green `#00FF00`**, or magenta `#FF00FF` where the livery contains green. No gradients, shadows on the background, or colours close to the bike (white, black, blue).
-- **Size:** each sprite about 512 px on its longest side, one angle per file, bike upright and pointing the same way in every view.
+| Camera | Drawing |
+|---|---|
+| Top-down | The top view as in 1.24.0, refined: shading on the fairing and the rider, visible front and rear tyres, the inside knee and elbow when leaning. |
+| Behind | A rear three-quarter view seen from above: more of the rider's back and the rear of the helmet, the tail section and the rear tyre. Stretched front to back to cancel the 23 % squash. |
+| CLOSE | A stronger rear three-quarter view: the rider's back and shoulders, the rear of the helmet, the tail light, a wide rear tyre. Stretched front to back to cancel the 43 % squash. |
 
-**Fallback**
-- If a sprite file is missing, the game draws the current top-down bike for that team. The game still runs with no new assets, so the change can ship in parts.
+- All drawings are made by the game from the team colours and the race number, as in 1.24.0, so all 11 teams get them at once and no image files are needed.
 
-**Settings**
-- None. The change is always on in Behind and CLOSE. Top-down is unchanged.
+**Movement (unchanged from 1.24.0)**
+- The bike is painted on the road in world space and turns with its heading, so it always points where it goes.
+- Lean as in 1.24.0: the chassis narrows (0.72 + 0.28 × cos(lean)) and shifts by 0.16 × sin(lean); the rider shifts to the inside by 0.5 × sin(lean); the inside knee shows above 0.45 rad. Sparks from 58°, brake light from brake 0.3 and 5 km/h, as now.
+
+**Stretch rule**
+- In Behind and CLOSE the drawing is stretched along the screen's up direction (the camera's forward direction on the road), around the bike's position, by 1 / cos(tilt), using the tilt of the moment (it is lowered at speed, §11h). Behind: × 1.31. CLOSE: × 1.74.
+- The stretch follows the camera, not the bike, so a bike that turns still rotates on the road as before; only its proportions on screen are corrected.
+- The shadow is stretched the same way, so it stays under the bike.
+- Crashed bikes and riders, ghosts (§11c, at their ghost alpha) and other riders use the same drawing and stretch.
+
+**Extras**
+- A tighter shadow under the tyres, darker where the tyres touch.
+- The brake light drawn on the tail of the drawing, glowing when braking (as now), instead of a dot behind the bike.
 
 **Performance limit**
-- The upright bikes add at most **5 % to the frame time** at top speed on the 1470 × 830 reference screen, compared with 1.24.0 (the bikes are still a small part of the picture).
+- Each drawing is made once per team, number and camera and cached, as in 1.24.0. The change adds at most **5 % to the frame time** at top speed on the 1470 × 830 reference screen, compared with 1.24.0.
 
 **Tests**
-- New `bike_upright` test: in Behind and CLOSE the bike at lean 0 is upright, at lean 0.5 rad it is rotated about its contact point, the rider pose changes with brake and throttle, and the fallback draws the current top-down bike when the sprite is missing. Frame cost limit as above.
+- New `bike_views` test: the three cameras use three different cached drawings; in CLOSE and Behind the bike's on-screen length-to-width ratio is within 10 % of the Top-down one; a bike that turns 20° rotates about 20° on the road in all cameras; lean moves the rider to the inside; frame cost limit as above.
+
+**Clean-up from the upright sprite trial**
+- Removed: the upright sprite drawing, the lean and speed rules for it, `tests/bike_upright.test.js`, and the `--allow-file-access-from-files` Chromium flag added to the 14 tests (the game loads no image files again).
+- The image files in `assets/bikes/` and `assets/bikes-processed/` stay on disk, not committed. Delete them when no longer needed.
 
 ### Open questions for 1.25.0 (recommended answer in bold; the design above uses it)
 
-1. Keep the top-down sprite in Top-down camera too? **Yes**, as it is now: the camera looks straight down, so a standing bike would look wrong there.
-2. One sprite set for all 11 teams, recoloured in the game? **No, one set per team.** Recolouring cannot give the real stripes and sponsor colours. Alternative: one neutral set and a tint per team (cheaper, but less realistic).
-3. Shoot real bikes or draw them? **Owner's choice.** Both work with the format above; the game only needs the images.
-4. Ship in parts? **Yes**: with the fallback, the new sprites can be added team by team.
-5. Brake pose threshold: the brake value only, or also speed? **Brake above 0.3 and speed above 5 km/h**, so a stopped bike keeps its upright pose.
+1. Full or partial stretch? **Full (1 / cos(tilt))**, so the bike keeps its real top-view proportions. A real bike seen from 35° also shows its height, which would make it look even taller; full stretch is the closest a flat drawing gets. Alternative: half the correction, if × 1.74 looks too long.
+2. Separate drawings for Behind and CLOSE, or one three-quarter drawing for both? **Separate**: CLOSE is lower and shows more of the rider's back. One shared drawing is cheaper and could be tried first if the difference is small.
+3. Keep the image files in the repository? **No**: they are not used.
 
 ## 12. Track and graphics
 
@@ -694,7 +699,7 @@ Asked by Petr (2026-10-28, planning session): "Help to plan change to improve: 1
 - Kerb ends (since 1.11.3): kerbs run along corners on both sides of the track. Each kerb narrows to nothing over its first and last 8 m, instead of ending square. Before, both kerbs ended on the same line across the track and the run-off and gravel edges next to them jumped sideways by the kerb width, which looked like a horizontal cut through the screen. The kerb surface (grip, braking) follows the same narrowing.
 - No square ends beside the track (since 1.11.4): run-off areas narrow at their ends, and where gravel meets tarmac run-off, by at most 1.5 m per track point (~2 m). Walls change their distance from the track by at most 1.2 m per track point (before, the walls stepped by up to 4 m at the pit zone). The pit lane entry and exit merge into the track edge over 20 m instead of ending square, and the pit lane never covers the track's white edge line. These square ends caused the same horizontal cut through the screen at the pit exit before Abbey, in live riding and in replay.
 - Scenery: grandstands, Wing pit building, garages, trees.
-- Bikes (since 1.25.0, §11i): upright side and rear sprites with a rider in a pose for each riding state, in team livery, with number, lean and shadow. Before 1.25.0: top-down drawings, lean faked by squashing (§11i).
+- Bikes: drawn by the game in team livery with rider, number, lean and shadow; since 1.25.0 one drawing per camera (top view in Top-down, rear three-quarter views in Behind and CLOSE, stretched to cancel the camera's squash, §11i).
 - Effects: tyre marks, smoke, sparks, debris, dust on grass and gravel; speed blur of the surroundings at top speed in the tilted cameras (§11f, since 1.17.0); wider view, speed lines and camera vibration at speed (§11h, since 1.23.0).
 - Trackside details for the sense of speed (since 1.24.0, §11h): mowing stripes on the grass, distance posts along the straights, asphalt joints.
 - Sound: synthesised engine (rpm and gear), shifts, impacts, pit.

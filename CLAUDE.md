@@ -1,3 +1,19 @@
+# Git workspaces
+
+- The main checkout (`/Users/petr/Documents/AI/MOTOGP`) is for merging and tagging only.
+  Never run `git checkout` / `git switch` to change branches there while another agent may be working.
+- Feature work happens in a git worktree under `.claude/worktrees/<name>`, one task per worktree,
+  one branch per worktree. This folder is excluded via `.git/info/exclude`; don't add it to `.gitignore`.
+- If you start in the main checkout and need a new branch, create a worktree instead:
+  `git worktree add .claude/worktrees/<name> -b <branch>`
+- After a branch is merged into `dev`, remove its worktree with `git worktree remove .claude/worktrees/<name>`.
+
+# Branches and releases
+
+- `dev` is the integration branch. Every feature branch merges into `dev` (`--no-ff`), through the `.claude/worktrees/dev` worktree. Never merge a feature branch into `main` directly.
+- Feature commits do not touch versions: no GDD version bump, no CHANGELOG version entry, no tag.
+- **Release** (when Petr says "Release"): compare `main` and `dev` (`git log main..dev`, `git diff main dev`), choose the new version (MINOR for features, PATCH for fixes, MAJOR for redesigns), add the CHANGELOG entry and bump the GDD version on `dev`, commit, merge `dev` into `main` with `--no-ff` in the main checkout, tag `vX.Y.Z` on `main`.
+- **Push** (when Petr says "Push"): push `main` to `origin` (GitHub). Nothing else is pushed unless Petr asks.
 
 # Code scanning
 

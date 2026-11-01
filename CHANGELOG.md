@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.25.0 (2026-11-02)
+- Release note beside the menu title (GDD 11): the newest release's summary shows next to the title. Click it to open the full changelog for the last 10 releases.
+- Fix: a trip through the Long Lap loop is no longer a track limits infraction (GDD 6a). The loop and the 40 m after its exit are not judged, and a trip that reaches the loop is not counted when it ends.
+- Code quality (GDD 13a, 13b): code scan cleanup (355 issues down to 43, complexity only), unit tests for every function, full test suite before main.
+
 ## v1.24.0 (2026-10-30)
 - Sense of speed (GDD 11h). Closer zoom at speed: zoom speed factor Behind 1.0 -> 0.5, CLOSE 0.4 -> 0.3, so the ground moves up to 60 % faster on screen at top speed. Behind ground depth 2.6 -> 2.9 (road visible ahead at 300 km/h about 148 m, was about 208 m; a deeper ground costs too much frame time, GDD 11h). Saved camera values equal to the old defaults move to the new ones.
 - Wider view above 200 km/h in Behind and CLOSE (camera distance up to 15 % shorter, tilt lowered with it so the horizon stays put). New Camera tuning sliders: Widen at speed, Vibration.

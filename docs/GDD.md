@@ -1,6 +1,6 @@
 # Silverstone GP — Game Design Document
 
-**Version:** 1.24.0 · **Last updated:** 2026-10-30 · **Owner:** Petr
+**Version:** 1.25.0 · **Last updated:** 2026-11-02 · **Owner:** Petr
 
 This document is the source of truth for how the game should work. Every
 change starts here: update the GDD on a feature branch first, then change the

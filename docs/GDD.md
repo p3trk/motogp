@@ -127,6 +127,12 @@ Model: point-mass bike on a 2D plane, integrated per frame with fixed sub-steps.
 - **Grip:** friction circle, μ 1.68 × surface × tyre temperature × wear × chassis damage. Braking up to 1.55 g; wheelie limit 1.02 g.
 - **Cornering:** lean angle sets the path curvature via `tan(lean) = v²·κ / g`, max lean 64°. Lean rate drops with speed.
 - **Rider aids:** lean limiter keeps lean inside the grip budget; traction control cuts power on wheelspin.
+- **Steering ramp (1.26.0, approved 2026-11-01; Petr 2026-11-01: a bike at 250 km/h cannot lean 50° the way it does in tight corners).** Today the steering target is the full 64° the moment the key goes down (`src/world.js`), so the bike reaches 50° in about 0.5 s whatever the speed. Checked against the article on lean angle: lean = atan(lateral g), set by speed and corner radius, and racing riders reach 50–65° in fast corners. So the physics is right; the input is not. Proposed:
+  - **Steer input ramps:** the steering target rises from 0 to the held steer over **0.35 s** (linear), and falls back the same way when the key is let go. Keyboard only: phone tilt is unchanged. A tap gives a small lean; a held steer reaches the full lean after the ramp.
+  - **Lean is still set by speed and radius**, through the grip limit and `tan(lean) = v²κ/g`. No speed cap is added, because real racing lean is not capped by speed.
+  - **Effect (measured 2026-11-01, 250 km/h, full left):** 50° is reached in 0.46 s, against 0.49 s before. The ramp is not the limit: the lean rate (about 122°/s at 250 km/h, from `clamp(3.4 - v/55, 1.55, 3.2)` rad/s) reaches 50° in 0.41 s on its own. The lean rate is unchanged.
+  - **HUD:** the lean gauge shows the real lean, as now.
+  - **Lap times and AI:** the AI sets its own lean (`aiControl`) and is not changed, so AI lap times do not move. Player lap times change through turn-in timing only.
 - **Tyres:** cold for the first ~2.5 km (HUD *COLD TYRES*, up to 7 % less grip); slow wear over distance (up to 4.5 %).
 - **Surfaces:**
 
@@ -716,6 +722,30 @@ Asked by Petr (2026-10-28, planning session): "Help to plan change to improve: 1
 3. Keep the image files in the repository? **No**: they are not used.
 4. Rider: also show braking and accelerating, or only lean? **Both** (approved 2026-10-31): they were part of the first request ("better look and feel on acceleration and braking").
 5. Hang-off amounts (hips 0.12, shoulders 0.30, helmet 0.40): **as proposed, then tuned by eye in the game** (approved 2026-10-31).
+
+**Rider rig (proposed for 1.26.0, not yet approved; Petr 2026-11-02)**
+- The rider is drawn from one upright picture (`assets/bike-parts/rider-rear-braking-upright.png`), split into parts. The joints are in `assets/bike-parts/upright-joints.txt`: neck, shoulders, elbows, wrists, hips, knees and ankles, left and right, in picture pixels (1920 × 1920, the rider's own left and right).
+- The game draws each part and turns it about its joint. Lean, corner and braking come from joint angles, not from a blend between drawn poses. The arms, legs and head stay attached at every lean.
+- Overlaps are in the same file: the helmet and arms are over the torso, the torso is over the thighs, and the shoulder pads and gloves are over the upper arms and sleeves. Knee pads and boots still to confirm.
+- Per-lean poses are no longer drawn; the rig replaces the corner and limit pictures and the morph between them.
+- Decided (Petr 2026-11-02): (1) the rider is split into pieces: torso, helmet, each upper arm, forearm, glove, thigh, shin and boot. (2) Knee pads sit on the outside of the knee, drawn over the thigh and shin; boots are drawn on top of the shin at the ankle. (3) Joint angles come from one formula, with lean in degrees: hips shift towards the inside by 0.3 × lean; shoulders by 0.5 × lean; neck and helmet by 0.4 × lean, so the head stays closer to level; the inside knee goes out by a fixed amount past about 20° of lean; elbows stay straight at speed and bend a little when braking.
+- Draw order (2026-11-02, Petr: thighs first from above, shins under them): torso, helmet, shins, boots, thighs, upper arms, forearms, gloves. The render test is `shots/mannequin-layers-sweep.png` (placeholder rider, Blender).
+- Placeholder (2026-11-02): the parts are procedural shapes in Blender (`scratchpad/rig/mannequin.py`) until a detailed rigged model is supplied.
+
+**Bike and rider from pictures (2026-11-01, Petr; in progress)**
+- The bike is one top-view picture (`assets/bike-parts/bike-top-only.png`), upright, no rider. It is used in all three cameras (Top-down, Behind and CLOSE). The rear view is dropped: Behind and CLOSE look forward at the corners ahead, so they need the top view too.
+- The rider is four pictures, all from above: corner (`rider-top-corner.png`), limit (`rider-top-limit.png`), accelerating (`rider-rear-accelerating.png`, from above despite the name) and upright/braking (`rider-rear-braking-upright.png`, the same picture for both).
+- Rider frame (2026-11-01): the frame moves towards its target at 110 frames a second, so changes read as movement, not a cut. Accelerating uses the upright picture (Petr: the forward accelerating pose did not look right); the rider changes pose only with lean (upright → corner at 40° → limit at 60°).
+- Build (2026-11-01): `src/bike_art.js` holds the traced bike and the four rider poses (97 frames, 32 blended steps per pose change, Petr 2026-11-01: "even more smoothly", then "can you double the frames?") (upright, accelerating, corner, limit). The bike is drawn first, then the rider in the pose for the riding state: corner at 40° of lean (Petr 2026-11-01: "Corner pose should be there when lean exceed 40 degrees"), limit above 60°, accelerating at throttle above 0.7 and no braking, upright otherwise. Shown only in the "Traced" preview style. Colours are found by clustering the picture (k-means on its colours, then a majority filter on the label map), and each cluster is traced. This removed the broken-up shapes of the first trace. Still a preview style, not yet approved as the default.
+- Matching: the rider pictures are at the bike's scale (1:1 in pixels; a helmet is about 240 px and the bike is about 950 px per metre). Each rider is moved by one shared offset, +5 px down (the first fit was +120 px; moved 40 px forward, then 15 px five times on 2026-11-01, Petr: "Move rider further on the bike. Little step" / "Almost, make tiny step further" / "Another step" / "another 15px please" / "Little further" / "One more"), so the hips sit about 115 px forward of the seat. The same offset is used for every pose, so the rider stays in the same place on the bike.
+- Open: the head sits over the tank in the upright pose; check the new position after a ride.
+
+**Traced bike and rider frames (superseded in part by the 2026-11-01 notes above)**
+- Two sheets of posed riders, one from the top and one from behind (15 poses each), are traced into `src/bike_art.js`: 15 frames per camera, from upright (frame 0) to the full lean (frame 14).
+- Each frame is the bike and the rider together, so the frame is the whole drawing. The frame is picked from the lean, up to 64°, and a left-hand bend is mirrored across the bike's centreline.
+- The race number is drawn on the tail on top of the frame. Braking and throttle do not change the frame yet (the sheets have no braking or throttle poses).
+- Assumption, to confirm: each sheet runs from upright to the full lean in order, left to right and top to bottom.
+- Known issues: in the top view the leaned frames sit off-centre, and in Behind and CLOSE the rear frames look blocky at game size.
 
 ## 12. Track and graphics
 

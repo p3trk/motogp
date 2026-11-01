@@ -320,12 +320,20 @@ function spriteRect(g, x, y, w, h, r) { g.beginPath(); if (g.roundRect) g.roundR
 function acrossGrad(g, w, dark, light) {
   const gr = g.createLinearGradient(0, -w, 0, w); gr.addColorStop(0, dark); gr.addColorStop(0.5, light); gr.addColorStop(1, dark); return gr;
 }
+let BIKE_STYLE = 0; // 0: the current drawing; 1..5: the alternatives in BIKE_STYLES (preview, GDD 11i)
 function bikeSprite(team, num, view = 'top') {
-  const key = team + '_' + num + '_' + view; if (SPRITES[key]) return SPRITES[key];
+  const key = team + '_' + num + '_' + view + '_' + BIKE_STYLE; if (SPRITES[key]) return SPRITES[key];
   const Tm = TEAMS[team], k = BIKE_REAR[view] || 0;
   const mkc = () => { const c = mkCanvas(SPW, SPH), g = c.getContext('2d'); g.translate(SPW / 2, SPH / 2); g.scale(SPR, SPR); return [c, g]; };
   const [cc, g] = mkc(), [rc, h] = mkc();
-  if (k) { drawChassisRear(g, Tm, num, k); drawRiderRear(h, Tm, k); } else { drawChassisTop(g, Tm, num); drawRiderTop(h, Tm); }
+  const st = BIKE_STYLES[BIKE_STYLE];
+  if (k) {
+    if (st && st.ref) { drawRefBike(g, Tm); tailNumber(g, num, -0.3); } else if (st && !st.art) drawRearStyled(g, Tm, num, k, st); else drawChassisRear(g, Tm, num, k);
+    drawRiderRear(h, Tm, k);
+  } else {
+    if (st && !st.ref && !st.art) drawTopStyled(g, Tm, num, st); else drawChassisTop(g, Tm, num);
+    drawRiderTop(h, Tm);
+  }
   SPRITES[key] = { c: cc, r: rc };
   return SPRITES[key];
 }
@@ -355,11 +363,252 @@ function drawChassisTop(g, Tm, num) {
   tailNumber(g, num, -0.74);
   g.fillStyle = '#b8bcc0'; g.beginPath(); g.arc(-0.95, 0.06, 0.035, 0, TAU); g.arc(-0.95, -0.06, 0.035, 0, TAU); g.fill();
 }
+// --- reference bike (GDD 11i, Petr 2026-10-31: "prepare new version of a bike with reference picture"): the rear
+// three-quarter reference, sampled on a 64 x 64 grid (rows = picture rows, top = the bars). Each row is runs of a colour
+// class and a run length in base 36: r = red (team c1), w = white (team c2), k = black, g = grey, . = background.
+const BIKE_REF = [
+  '.rga.r',
+  '.ogg.o',
+  '.mk2ghk1.m',
+  '.jkqr1.i',
+  '.fr1g2kag8kag1r2.f',
+  '.dr1g1kdg8kdr2.d',
+  '.cr2k7g1k1g1k1g1kcg1k1g1k1g1k7r2.c',
+  '.bkag5k1g3k5g2k1g5k7g1k2.b',
+  '.8k4g4kbwakcg1k1g1k4.8',
+  '.1klr1w3r3k6r3w3r1kl.1',
+  '.3k7.1k1r1k6r4w1rgw1r4k6r1k1.2k6.3',
+  'k1g1k3.6r3k2r6w1riw1r6k2r3.6k3g1k1',
+  '.ar6k2r4w1riw1r4k2r6.a',
+  '.9r5k7w2riw2k7r5.9',
+  '.8r5k2r1k6w1riw1k6r1k2r5.8',
+  '.7k1w1r4k1w1r2k5w2rgw2k5r2w1k1r4w1k1.7',
+  '.7k2w2r1k2w2r3k4w1rgw1k4r3w2k2r1w2k2.7',
+  '.7k2w2r1k3w1r4k4w1rew1k4r4w1k3r1w2k2.7',
+  '.7k2w3k3w2r4k3w2rcw2k3r4w2k3w3k2.7',
+  '.7k2w3k4w1r5k3w1rcw1k3r4w2k4w3k2.7',
+  '.7k2w3k4w2r5k3w1raw1k3r5w2k4w3k2.7',
+  '.8k2w3k4w2r5k2w1raw1k2r5w2k4w3k2.8',
+  '.8k2w4k3w3r4kgr4w3k3w4k2.8',
+  '.8k2w4k4w2r3kir3w2k3w5k2.8',
+  '.9g1k1w4k3w3r2kir2w2g1k3w4k1g1.9',
+  '.9k2w4k3w4kkw3g1k2w5k2.9',
+  '.ak2w4k2w2kog2k2w4k2.a',
+  '.ak4w2kww2k4.a',
+  '.akfrekf.a',
+  '.ak2g1k8r2w1rfw2r1kb.b',
+  '.bk3w3r4k1r2w1rew1r2k1r4w3k3.b',
+  '.cr3w2r4k2r1w1rdw2r1k2r4w2r3.c',
+  '.ck1r4w1r3k3r1w1rcw1r1k3r3w1r4k1.c',
+  '.ck3r6k4w1rbw2k3r6k4.c',
+  '.ck6g1r3k4w1raw1k4r3g1k5.d',
+  '.cg1k7g1r2k4r9w1k4r2k8g1.c',
+  '.ek1g1k3g1k3r2ker2k3g1k1g1k3.e',
+  '.fg4k6r1kcr1k5g5.f',
+  '.fg3k9rak8g4.f',
+  '.7g8k1g2krg3k1g7k1.7',
+  '.fkvg2k1.f',
+  '.gkug1k3g2.c',
+  '.gkxg4k2.9',
+  '.gksg1k4g1w4g2.8',
+  '.fktg1k3g2k4g2.8',
+  '.fk3g1ktg2k5g1.8',
+  '.fk2g2ktg7.9',
+  '.fk3g1ks.1k2g2k1.b',
+  '.fk2w1g1ks.h',
+  '.eg1k1g3krg1.h',
+  '.gk1g2kr.i',
+  '.hk1g1kq.j',
+  '.ig1km.n',
+  '.ikn.n',
+  '.jk2.1kj.n',
+  '.mkj.n',
+  '.mkj.n',
+  '.mkj.n',
+  '.mkj.n',
+  '.mkj.n',
+  '.mkj.n',
+  '.nki.n',
+  '.okf.p',
+  '.rka.r'
+];
+const BIKE_REF_SIZE = [913, 2297]; // width and height of the reference in its own pixels, the bike's bounding box
+function drawRefBike(g, Tm, rows = BIKE_REF, size = BIKE_REF_SIZE) {
+  const N = rows.length, s = 2.04 / size[1], cw = size[0] / N, rh = size[1] / N;
+  const col = { r: Tm.c1, w: Tm.c2, k: '#17191b', g: '#6e757c' };
+  for (let j = 0; j < N; j++) {
+    const x0 = 1.02 - j * rh * s, x1 = 1.02 - (j + 1) * rh * s; let i = 0;
+    for (let p = 0; p < rows[j].length; p += 2) {
+      const c = rows[j][p], n = parseInt(rows[j][p + 1], 36);
+      if (c !== '.') { g.fillStyle = col[c]; g.fillRect(Math.min(x0, x1) - 0.004, (i * cw - size[0] / 2) * s, Math.abs(x1 - x0) + 0.008, n * cw * s + 0.004); }
+      i += n;
+    }
+  }
+}
+// --- rider rig (GDD 11i, 2026-11-02): the parts of rig_art.js move from the approved formula. A part moves across the bike
+// by its weight times the shoulder shift for the lean (70 px at 46 deg, as the approved offset). The thighs stretch from the
+// hip (weight 0.4) to the knee (0.1), the shins from the knee (0.1) to the ankle (0), so the legs stay attached to the torso
+// and the boots stay on the pegs.
+const RIG_LEAN_SCALE = 1.5; // 1.5 x the approved offset: the lean reads better at game scale (Petr 2026-11-02)
+const RIG_SHIFT_PER_DEG = RIG_LEAN_SCALE * (70 / (0.5 * 46)) * (2.04 / 1828) * 100; // sprite units x100 per degree of lean
+const RIG_WEIGHT = { helmet: 0.4, torso: 0.4, boot: 0 };
+function rigWeight(name, u, v) {
+  if (name.startsWith('thigh_')) return rigSegWeight(u, v, RIG_JOINTS['hip_' + name.slice(-1)], RIG_JOINTS['knee_' + name.slice(-1)], 0.4, 0.1);
+  if (name.startsWith('shin_')) return rigSegWeight(u, v, RIG_JOINTS['knee_' + name.slice(-1)], RIG_JOINTS['ankle_' + name.slice(-1)], 0.1, 0);
+  // the arms: the upper arm from the shoulder (0.5) to the elbow (0.25), the forearm from the elbow to the wrist (0), so the
+  // hands stay on the handlebars; the gloves sit at the wrist and do not move
+  if (name.startsWith('upper_arm_')) return rigSegWeight(u, v, RIG_JOINTS['shoulder_' + name.slice(-1)], RIG_JOINTS['elbow_' + name.slice(-1)], 0.5, 0.25);
+  if (name.startsWith('forearm_')) return rigSegWeight(u, v, RIG_JOINTS['elbow_' + name.slice(-1)], RIG_JOINTS['wrist_' + name.slice(-1)], 0.25, 0);
+  for (const k in RIG_WEIGHT) if (name.startsWith(k)) return RIG_WEIGHT[k];
+  return 0;
+}
+// the weight at a point, along the segment a-b from wa at a to wb at b (the point is projected onto the segment)
+function rigSegWeight(u, v, a, b, wa, wb) {
+  const du = b[0] - a[0], dv = b[1] - a[1], l2 = du * du + dv * dv || 1;
+  const t = clamp(((u - a[0]) * du + (v - a[1]) * dv) / l2, 0, 1);
+  return wa + (wb - wa) * t;
+}
+function drawRigRider(g, Tm, lean) {
+  // the size of the lean only: the bike's flip for left bends sets the direction (GDD 11i)
+  const L = Math.abs(lean);
+  const col = { r: Tm.c1, w: Tm.c2, k: '#17191b' };
+  for (const name in RIG_ART) {
+    const part = RIG_ART[name], p = part.p;
+    g.fillStyle = col[part.c]; g.beginPath();
+    for (let i = 0; i < p.length; i += 2) {
+      const u = p[i], v = p[i + 1], dv = rigWeight(name, u, v) * RIG_SHIFT_PER_DEG * L / DEG;
+      if (i === 0) g.moveTo(u / 100, (v + dv) / 100); else g.lineTo(u / 100, (v + dv) / 100);
+    }
+    g.closePath(); g.fill();
+  }
+}
+// --- traced bike and rider (GDD 11i): the bike and a rider morph from bike_art.js. The rider's place on the morph path
+// (97 frames: 0 accelerating, 32 upright, 64 corner, 96 limit, the frames between are blended shapes) follows the riding
+// state: lean from 0 to 40 deg moves upright to corner, from 40 deg to 60 deg moves corner to limit, and with no
+// lean, throttle moves upright to accelerating. Braking keeps the upright rider.
+const ART_UPRIGHT = 32, ART_CORNER = 64, ART_LIMIT = 96, ART_CORNER_LEAN = 40 * DEG;
+function riderFrameIndex(b) {
+  const L = Math.abs(b.lean);
+  if (L > 0.02) {
+    if (L <= ART_CORNER_LEAN) return ART_UPRIGHT + (L / ART_CORNER_LEAN) * (ART_CORNER - ART_UPRIGHT);
+    return ART_CORNER + clamp((L - ART_CORNER_LEAN) / (60 * DEG - ART_CORNER_LEAN), 0, 1) * (ART_LIMIT - ART_CORNER);
+  }
+  return ART_UPRIGHT; // braking and accelerating both use the upright picture (Petr 2026-11-01: the accelerating pose did not look right)
+}
+function drawArtParts(g, Tm, parts) {
+  // one path per colour, filled even-odd, so the shapes of a colour cut each other's holes
+  const col = { b: '#202428', k: '#17191b', g: '#6e757c', r: Tm.c1, w: Tm.c2 }; // b: the dark base under the rider (GDD 11i)
+  for (const c of ['b', 'k', 'g', 'r', 'w']) {
+    const mine = parts.filter(p => p[0] === c); if (!mine.length) continue;
+    g.fillStyle = col[c]; g.beginPath();
+    for (const [, v] of mine) {
+      g.moveTo(v[0] / 100, v[1] / 100);
+      for (let i = 2; i < v.length; i += 2) g.lineTo(v[i] / 100, v[i + 1] / 100);
+      g.closePath();
+    }
+    g.fill('evenodd');
+  }
+}
+function artSprite(team, key, parts) {
+  const k = 'art_' + team + '_' + key; if (SPRITES[k]) return SPRITES[k];
+  const c = mkCanvas(SPW, SPH), g = c.getContext('2d'); g.translate(SPW / 2, SPH / 2); g.scale(SPR, SPR);
+  drawArtParts(g, TEAMS[team], parts);
+  SPRITES[k] = { c, r: null };
+  return SPRITES[k];
+}
+// --- alternative bike drawings (preview, GDD 11i). Five racing styles that differ in fairing, livery, air intakes,
+// mirrors, exhaust, wheels and lights. The rider is the same in all of them.
+const BIKE_STYLES = [null,
+  { name: 'Race', stripes: 2, intakes: false, winglets: true, mirrors: false, exh: 0.035, spokes: false, headlight: false, sponsor: true, carbon: false, round: false },
+  { name: 'Ducted', stripes: 1, intakes: true, winglets: true, mirrors: false, exh: 0.04, spokes: false, headlight: true, sponsor: true, carbon: false, round: false },
+  { name: 'Bold', stripes: 3, intakes: false, winglets: false, mirrors: true, exh: 0.035, spokes: true, headlight: true, sponsor: false, carbon: false, round: false },
+  { name: 'Carbon', stripes: 0, intakes: true, winglets: true, mirrors: false, exh: 0.05, spokes: false, headlight: false, sponsor: false, carbon: true, round: false },
+  { name: 'Classic', stripes: 2, intakes: false, winglets: false, mirrors: true, exh: 0.045, spokes: true, headlight: true, sponsor: true, carbon: false, round: true },
+  { name: 'Rig', art: true, rig: true, stripes: 0, intakes: false, winglets: false, mirrors: false, exh: 0, spokes: false, headlight: false, sponsor: false, carbon: false, round: false },
+  { name: 'Traced', art: true, stripes: 0, intakes: false, winglets: false, mirrors: false, exh: 0, spokes: false, headlight: false, sponsor: false, carbon: false, round: false },
+  { name: 'Reference', ref: true, stripes: 0, intakes: false, winglets: false, mirrors: false, exh: 0, spokes: false, headlight: false, sponsor: false, carbon: false, round: false }];
+// shared pieces of the alternatives
+function styleTyre(g, x0, x1, hw, st) {
+  g.fillStyle = acrossGrad(g, hw, '#0a0a0a', '#383c40'); spriteRect(g, x0, -hw, x1 - x0, 2 * hw, hw * 0.8); g.fill();
+  if (st.spokes) { g.strokeStyle = 'rgba(200,205,210,.6)'; g.lineWidth = 0.014; g.beginPath(); g.ellipse((x0 + x1) / 2, 0, (x1 - x0) * 0.3, hw * 0.55, 0, 0, TAU); g.stroke(); } // rim
+}
+function styleExhaust(g, st, x, y) {
+  const r = st.exh, grad = g.createLinearGradient(0, y - r, 0, y + r); grad.addColorStop(0, '#f2f4f5'); grad.addColorStop(0.5, '#8d949a'); grad.addColorStop(1, '#3d4246');
+  g.fillStyle = grad; spriteRect(g, x, y - r, 0.3, 2 * r, r); g.fill();
+  g.fillStyle = '#16181a'; g.beginPath(); g.ellipse(x + 0.3, y, r * 0.5, r, 0, 0, TAU); g.fill();
+}
+function styleLivery(g, Tm, st, cut) {
+  // stripes run along the fairing, in the second colour, with pinstripes on the sides
+  if (st.stripes >= 1) { g.fillStyle = Tm.c2; g.fillRect(cut[0], -0.05, cut[1], 0.1); }
+  if (st.stripes === 2) { g.fillStyle = 'rgba(255,255,255,.7)'; g.fillRect(cut[0], -0.085, cut[1], 0.015); g.fillRect(cut[0], 0.07, cut[1], 0.015); }
+  if (st.stripes === 3) { g.fillStyle = Tm.c2; g.fillRect(cut[0], -0.2, cut[1], 0.04); g.fillRect(cut[0], 0.16, cut[1], 0.04); }
+}
+function styleMirrors(g, x, y) {
+  g.strokeStyle = '#2a2d31'; g.lineWidth = 0.02; g.beginPath(); g.moveTo(x, 0.1 * Math.sign(y)); g.lineTo(x - 0.12, y); g.stroke();
+  g.fillStyle = '#16181a'; g.beginPath(); g.ellipse(x - 0.14, y, 0.05, 0.03, 0.4 * Math.sign(y), 0, TAU); g.fill();
+}
+// top view, bike pointing +x
+function drawTopStyled(g, Tm, num, st) {
+  const carb = st.carbon;
+  styleTyre(g, -1.02, -0.4, 0.105, st); styleTyre(g, 0.44, 1.02, 0.068, st);
+  g.fillStyle = carb ? '#0c0d0e' : '#2a2e33'; spriteRect(g, -0.9, -0.05, 0.9, 0.1, 0.04); g.fill(); // swingarm
+  styleExhaust(g, st, -0.95, 0.13);
+  if (st.mirrors) { styleMirrors(g, 0.3, 0.36); styleMirrors(g, 0.3, -0.36); }
+  const b = new Path2D(); // fairing outline
+  if (st.round) { b.moveTo(1.0, 0); b.bezierCurveTo(0.96, 0.2, 0.7, 0.3, 0.4, 0.33); b.lineTo(-0.25, 0.27); b.bezierCurveTo(-0.7, 0.22, -0.9, 0.12, -0.96, 0); b.bezierCurveTo(-0.9, -0.12, -0.7, -0.22, -0.25, -0.27); b.lineTo(0.4, -0.33); b.bezierCurveTo(0.7, -0.3, 0.96, -0.2, 1.0, 0); }
+  else { b.moveTo(1.02, 0); b.bezierCurveTo(0.98, 0.1, 0.8, 0.2, 0.5, 0.29); b.lineTo(0.2, 0.31); b.bezierCurveTo(0.0, 0.3, -0.1, 0.28, -0.3, 0.2); b.lineTo(-0.7, 0.14); b.bezierCurveTo(-0.9, 0.1, -0.98, 0.05, -0.98, 0); b.bezierCurveTo(-0.98, -0.05, -0.9, -0.1, -0.7, -0.14); b.lineTo(-0.3, -0.2); b.bezierCurveTo(-0.1, -0.28, 0.0, -0.3, 0.2, -0.31); b.lineTo(0.5, -0.29); b.bezierCurveTo(0.8, -0.2, 0.98, -0.1, 1.02, 0); }
+  b.closePath();
+  if (carb) { g.fillStyle = '#17191b'; } else { g.fillStyle = acrossGrad(g, 0.32, shade(Tm.c1, -0.5), shade(Tm.c1, 0.25)); }
+  g.fill(b);
+  g.save(); g.clip(b);
+  styleLivery(g, Tm, st, [-1, 2]);
+  if (carb) { g.fillStyle = Tm.c1; g.fillRect(0.0, -0.31, 0.7, 0.03); g.fillRect(0.0, 0.28, 0.7, 0.03); } // team accent edges on carbon
+  if (st.intakes) { g.fillStyle = '#050505'; for (const sg of [-1, 1]) { spriteRect(g, 0.2, sg * 0.18 - 0.05, 0.3, 0.1, 0.04); g.fill(); } }
+  if (st.sponsor) { g.fillStyle = Tm.c2; g.fillRect(-0.2, 0.22, 0.35, 0.05); g.fillRect(-0.2, -0.27, 0.35, 0.05); }
+  g.restore();
+  g.lineWidth = 0.012; g.strokeStyle = 'rgba(0,0,0,.6)'; g.stroke(b);
+  if (st.winglets) { g.fillStyle = '#16181a'; for (const sg of [-1, 1]) { g.beginPath(); g.moveTo(0.66, sg * 0.27); g.lineTo(0.5, sg * 0.4); g.lineTo(0.43, sg * 0.4); g.lineTo(0.5, sg * 0.28); g.closePath(); g.fill(); } }
+  if (st.headlight) { g.fillStyle = 'rgba(255,250,220,.95)'; g.beginPath(); g.ellipse(0.98, 0, 0.05, 0.1, 0, 0, TAU); g.fill(); }
+  g.fillStyle = 'rgba(25,35,48,.82)'; g.beginPath(); g.ellipse(0.66, 0, 0.17, 0.13, 0, 0, TAU); g.fill(); // windscreen
+  g.fillStyle = 'rgba(255,255,255,.35)'; g.beginPath(); g.ellipse(0.7, -0.04, 0.08, 0.035, 0, 0, TAU); g.fill(); // glint
+  g.fillStyle = '#1b1d20'; spriteRect(g, -0.56, -0.13, 0.32, 0.26, 0.06); g.fill(); // seat
+  tailNumber(g, num, -0.74);
+  g.fillStyle = '#b8bcc0'; g.beginPath(); g.arc(-0.95, 0.06, 0.035, 0, TAU); g.arc(-0.95, -0.06, 0.035, 0, TAU); g.fill(); // tail lights
+  g.fillStyle = '#c0191a'; g.beginPath(); g.arc(-0.96, 0, 0.03, 0, TAU); g.fill();
+}
+// rear three-quarter view (k 0.5 Behind, 1 CLOSE), same geometry as drawChassisRear
+function drawRearStyled(g, Tm, num, k, st) {
+  const tl = 0.36 + 0.22 * k, tw = 0.11 + 0.025 * k, nose = 0.98 - 0.3 * k, sh = nose - 0.45, carb = st.carbon;
+  styleTyre(g, -1.1, -1.1 + tl, tw, st);
+  g.fillStyle = '#16181a'; spriteRect(g, nose - 0.08, -0.06, 0.2, 0.12, 0.05); g.fill(); // front tyre under the nose
+  styleExhaust(g, st, -0.99, 0.2);
+  if (st.mirrors) { g.strokeStyle = '#2a2d31'; g.lineWidth = 0.02; for (const sg of [-1, 1]) { g.beginPath(); g.moveTo(sh - 0.05, sg * 0.2); g.lineTo(sh + 0.1, sg * 0.42); g.stroke(); g.fillStyle = '#16181a'; g.beginPath(); g.ellipse(sh + 0.12, sg * 0.43, 0.05, 0.03, 0, 0, TAU); g.fill(); } }
+  const body = new Path2D();
+  body.moveTo(nose, 0); body.bezierCurveTo(nose - 0.02, 0.14, sh + 0.12, 0.27, sh, 0.31); body.bezierCurveTo(sh - 0.3, 0.31, -0.2, 0.26, -0.42, 0.19);
+  body.bezierCurveTo(-0.7, 0.15, -0.86, 0.12, -0.9, 0); body.bezierCurveTo(-0.86, -0.12, -0.7, -0.15, -0.42, -0.19);
+  body.bezierCurveTo(-0.2, -0.26, sh - 0.3, -0.31, sh, -0.31); body.bezierCurveTo(sh + 0.12, -0.27, nose - 0.02, -0.14, nose, 0); body.closePath();
+  g.fillStyle = carb ? '#17191b' : acrossGrad(g, 0.32, shade(Tm.c1, -0.5), shade(Tm.c1, 0.25)); g.fill(body);
+  g.save(); g.clip(body); styleLivery(g, Tm, st, [-1, 2]);
+  if (st.intakes) { g.fillStyle = '#050505'; for (const sg of [-1, 1]) { spriteRect(g, sh - 0.2, sg * 0.2 - 0.04, 0.3, 0.08, 0.03); g.fill(); } }
+  if (carb) { g.fillStyle = Tm.c1; g.fillRect(-1, -0.2, 2, 0.03); }
+  g.restore();
+  g.lineWidth = 0.012; g.strokeStyle = 'rgba(0,0,0,.5)'; g.stroke(body);
+  if (st.winglets) { g.fillStyle = '#16181a'; for (const sg of [-1, 1]) { g.beginPath(); g.moveTo(sh + 0.1, sg * 0.28); g.lineTo(sh - 0.04, sg * 0.4); g.lineTo(sh - 0.11, sg * 0.4); g.lineTo(sh - 0.04, sg * 0.29); g.closePath(); g.fill(); } }
+  if (st.headlight) { g.fillStyle = 'rgba(255,250,220,.9)'; g.beginPath(); g.ellipse(nose - 0.02, 0, 0.04, 0.06, 0, 0, TAU); g.fill(); }
+  g.fillStyle = 'rgba(25,35,48,.82)'; g.beginPath(); g.ellipse(nose - 0.2, 0, 0.12, 0.11, 0, 0, TAU); g.fill();
+  g.fillStyle = '#1b1d20'; spriteRect(g, -0.62, -0.12, 0.26, 0.24, 0.06); g.fill();
+  tailNumber(g, num, -0.73);
+  g.fillStyle = carb ? '#2a0606' : shade(Tm.c1, -0.55); spriteRect(g, -0.97, -0.09, 0.09, 0.18, 0.04); g.fill();
+  g.fillStyle = '#c0191a'; spriteRect(g, -0.955, -0.065, 0.035, 0.13, 0.015); g.fill();
+}
 function tailNumber(g, num, x) {
   g.save(); g.translate(x, 0); g.rotate(Math.PI / 2); g.fillStyle = '#fff'; g.font = '800 0.2px "Saira Condensed", Arial Narrow, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
   g.lineWidth = 0.03; g.strokeStyle = '#000'; g.strokeText(String(num), 0, 0); g.fillText(String(num), 0, 0); g.restore();
 }
+// the top-view rider sits 1/10 of the bike length (2.0 units) forward of the seat, as Petr asked (2026-10-31)
+const RIDER_TOP_FWD = 0.2;
 function drawRiderTop(h, Tm, p = RIDER_REST) {
+  h.save(); h.translate(RIDER_TOP_FWD, 0);
   h.lineCap = 'round';
   for (const sg of [-1, 1]) drawLeg(h, Tm, p, sg, [-0.32, sg * 0.18 + p.base + p.hip], [-0.05, sg * 0.27 * p.q + p.base], [-0.3, sg * 0.29 * p.q + p.base], 0.12);
   const xh = -0.4, xs = 0.15;
@@ -371,6 +620,7 @@ function drawRiderTop(h, Tm, p = RIDER_REST) {
   h.restore();
   for (const sg of [-1, 1]) drawArm(h, Tm, riderAt(p, xh, xs, 0.02, sg * 0.19), [0.44, sg * 0.29 * p.q + p.base], sg * p.sg > 0 ? p.elbow : 0);
   drawHelmet(h, Tm, 0.26 + p.fwd + p.hf, p.base + p.hel, 0.145, 1);
+  h.restore();
 }
 // helmet seen from above (visor 1) or from behind (visor 0): shell in the third team colour, a stripe in the first
 function drawHelmet(h, Tm, x, y, r, visor) {
@@ -441,6 +691,7 @@ function drawChassisRear(g, Tm, num, k) {
 // (k 1 CLOSE), the longer the back looks and the further forward the helmet sits
 function drawRiderRear(h, Tm, k, p = RIDER_REST) {
   const xs = 0.04 + 0.16 * k, xh = -0.42, hr = 0.15 + 0.03 * k;
+  h.save(); h.translate(RIDER_TOP_FWD, 0); // the same forward move as the top view, in every camera
   h.lineCap = 'round';
   for (const sg of [-1, 1]) {
     const py = sg * 0.29 * p.q + p.base;
@@ -460,6 +711,7 @@ function drawRiderRear(h, Tm, k, p = RIDER_REST) {
   const gx = xs + 0.26 - 0.06 * k;
   for (const sg of [-1, 1]) drawArm(h, Tm, riderAt(p, xh, xs, xs - 0.04, sg * 0.19), [gx, sg * 0.3 * p.q + p.base], sg * p.sg > 0 ? p.elbow : 0);
   drawHelmet(h, Tm, xs + 0.12 + p.fwd + p.hf, p.base + p.hel, hr, 1 - k);
+  h.restore();
 }
 
 // the drawing and the stretch for the camera in use (GDD 11i): in Behind and CLOSE the drawing is stretched along the
@@ -919,6 +1171,7 @@ function drawBike(b, vis) {
   }
   if (b.dnf || !vis(b.x, b.y, 4)) return;
   const sl = Math.sin(b.lean), cl = Math.cos(b.lean);
+  if (artStyle()) { drawArtBike(b, VS, w, h); return; }
   ctx.save(); stretchAt(b.x, b.y); ctx.translate(b.x, b.y); ctx.rotate(b.h); ctx.scale(VS, VS);
   if (b.wheelie > 0.05) ctx.scale(1 + b.wheelie * 0.04, 1);
   ctx.save(); ctx.translate(0, sl * 0.16); ctx.scale(1, 0.72 + 0.28 * cl); ctx.drawImage(sp.c, -w / 2, -h / 2, w, h); ctx.restore();
@@ -927,6 +1180,58 @@ function drawBike(b, vis) {
   // the rider, posed each frame, with the inside knee out as part of the leg (GDD 11i)
   const p = riderPose(b), Tm = TEAMS[b.team], k = BIKE_REAR[bikeView()];
   if (k) drawRiderRear(ctx, Tm, k, p); else drawRiderTop(ctx, Tm, p);
+  ctx.restore();
+}
+function artStyle() { const st = BIKE_STYLES[BIKE_STYLE]; return st && st.art ? st : null; }
+// the bike, then the rider in the pose for the riding state, mirrored for left-hand bends, with the race number on the tail
+// the rider's frame moves towards its target at a limited speed, so a change of throttle or lean reads as movement in both
+// directions (GDD 11i): ART_FRAMES_PER_S frames a second, about a third of a second from accelerating to upright
+const ART_FRAMES_PER_S = 110;
+function approachFrame(cur, target, dt) {
+  const step = ART_FRAMES_PER_S * dt;
+  return cur + clamp(target - cur, -step, step);
+}
+// the rider sits off the centre line on the seat (Petr 2026-11-01): 0 upright, 50 px at 10 deg, 70 px from 45 deg on, in
+// picture pixels of the bike art (one bike length is 1828 px = 2.04 units); the offset goes to the inside of the bend
+const ART_UNITS_PER_PX = 2.04 / 1828;
+function riderOffsetPx(lean) {
+  const L = Math.abs(lean) / DEG;
+  if (L <= 10) return 50 * L / 10;
+  if (L <= 45) return 50 + 20 * (L - 10) / 35;
+  return 70;
+}
+// the rider is drawn in bands along the bike (GDD 11i, 2026-11-01): the boots and lower legs stay near the pegs, the hips
+// move part of the way, and the shoulders and helmet move most. The upper bands also tilt against the lean about the hips,
+// so the head stays nearer level. Each band is [from, to, share of the offset] in bike units along x (nose +).
+const RIDER_BANDS = [[-1.3, -0.4, 0.3], [-0.4, -0.3, 0.6], [-0.3, 1.3, 1.0]]; // the upper body (x > -0.3) is one rigid block: torso, arms and helmet
+const RIDER_HIP_X = -0.2, RIDER_HEAD_TURN = 0.33;
+function drawRiderBands(sprite, w, h, offsetPx, lean) {
+  const off = offsetPx * ART_UNITS_PER_PX, turn = -RIDER_HEAD_TURN * Math.abs(lean);
+  for (const [x0, x1, share] of RIDER_BANDS) {
+    ctx.save();
+    ctx.beginPath(); ctx.rect(x0 - 0.03, -2, x1 - x0 + 0.06, 4); ctx.clip(); // overlap the neighbours, so no seam shows
+    if (x0 >= -0.3) { ctx.translate(RIDER_HIP_X, 0); ctx.rotate(turn); ctx.translate(-RIDER_HIP_X, 0); }
+    ctx.translate(0, off * share);
+    ctx.drawImage(sprite, -w / 2, -h / 2, w, h);
+    ctx.restore();
+  }
+}
+function drawArtBike(b, VS, w, h) {
+  const now = performance.now(), dt = clamp((now - (b.artT ?? now)) / 1000, 0, 0.1);
+  b.artT = now;
+  b.artFrame = b.artFrame === undefined ? riderFrameIndex(b) : approachFrame(b.artFrame, riderFrameIndex(b), dt);
+  const flip = b.lean < 0 ? -1 : 1, f = b.artFrame, i0 = Math.floor(f), i1 = Math.min(i0 + 1, BIKE_ART.rider.length - 1), mix = f - i0;
+  ctx.save(); stretchAt(b.x, b.y); ctx.translate(b.x, b.y); ctx.rotate(b.h); ctx.scale(VS, VS * flip);
+  ctx.drawImage(artSprite(b.team, 'bike', BIKE_ART.bike).c, -w / 2, -h / 2, w, h);
+  if (BIKE_STYLES[BIKE_STYLE] && BIKE_STYLES[BIKE_STYLE].rig) { drawRigRider(ctx, TEAMS[b.team], b.lean); ctx.restore(); return; }
+  // the rider, moved sideways on the seat towards the inside of the bend (after the flip, so it follows the bend)
+  const off = riderOffsetPx(b.lean);
+  drawRiderBands(artSprite(b.team, 'rider' + i0, BIKE_ART.rider[i0]).c, w, h, off, b.lean); // the rider frame, then the next one blended in
+  if (mix > 0.001 && i1 !== i0) { ctx.globalAlpha = mix; drawRiderBands(artSprite(b.team, 'rider' + i1, BIKE_ART.rider[i1]).c, w, h, off, b.lean); ctx.globalAlpha = 1; }
+  ctx.restore();
+  ctx.save(); stretchAt(b.x, b.y); ctx.translate(b.x, b.y); ctx.rotate(b.h); ctx.scale(VS, VS);
+  tailNumber(ctx, b.num, -0.74);
+  if (b.ctl.brk > 0.3 && b.v > 5) { ctx.fillStyle = 'rgba(255,40,30,.6)'; ctx.beginPath(); ctx.arc(-0.94, 0, 0.13, 0, TAU); ctx.fill(); }
   ctx.restore();
 }
 function drawParticles(vis) {

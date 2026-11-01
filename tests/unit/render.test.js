@@ -127,6 +127,108 @@ test('acrossGrad: dark at both sides of the bike, light in the middle', () => {
   const { G } = load(); const c = makeCtx({}); const gr = G.acrossGrad(c, 0.3, '#000', '#fff');
   assert.deepEqual(ops(c, 'createLinearGradient')[0].slice(1), [0, -0.3, 0, 0.3]); assert.deepEqual(gr.stops, [[0, '#000'], [0.5, '#fff'], [1, '#000']]);
 });
+test('drawRefBike: the reference picture in the team colours, background left out', () => {
+  const { G } = load(); const c = makeCtx({}); G.drawRefBike(c, G.TEAMS[0]);
+  const fills = ops(c, 'fillRect'); assert.ok(fills.length > 300, 'many runs'); assert.ok(c.calls.some(o => o[0] === '=fillStyle' && o[1] === G.TEAMS[0].c1), 'red in team colour');
+  assert.ok(!c.calls.some(o => o[0] === '=fillStyle' && o[1] === '.'), 'no background colour');
+});
+test('drawArtParts: each polygon in its colour, red and white in the team colours', () => {
+  const { G } = load(); const c = makeCtx({}); G.drawArtParts(c, G.TEAMS[2], [['r', [0, 0, 10, 0, 10, 10]], ['w', [0, 0, 5, 5, 5, 0]], ['k', [1, 1, 2, 2, 3, 3]], ['r', [2, 2, 3, 2, 3, 3]]]);
+  assert.equal(ops(c, 'fill').length, 3, 'one fill per colour'); assert.deepEqual(ops(c, 'fill').map(o => o[1]), ['evenodd', 'evenodd', 'evenodd']); assert.equal(ops(c, 'closePath').length, 4);
+  assert.ok(c.calls.some(o => o[0] === '=fillStyle' && o[1] === G.TEAMS[2].c1), 'red'); assert.ok(c.calls.some(o => o[0] === '=fillStyle' && o[1] === G.TEAMS[2].c2), 'white');
+  assert.ok(ops(c, 'lineTo').some(o => Math.abs(o[1] - 0.1) < 1e-9 && Math.abs(o[2]) < 1e-9), 'coordinates in sprite units');
+});
+test('approachFrame: moves towards the target at 110 frames a second, both ways, and stops there', () => {
+  const { G } = load();
+  near(G.approachFrame(0, 32, 0.1), 11, 1e-9, 'up, 0.1 s'); near(G.approachFrame(32, 0, 0.1), 21, 1e-9, 'down, 0.1 s');
+  assert.equal(G.approachFrame(30, 32, 1), 32, 'no overshoot'); assert.equal(G.approachFrame(5, 5, 0.1), 5, 'at the target');
+});
+test('drawArtParts: the dark base is drawn first, under the colours', () => {
+  const { G } = load(); const c = makeCtx({}); G.drawArtParts(c, G.TEAMS[0], [['r', [0, 0, 1, 0, 1, 1]], ['b', [0, 0, 2, 0, 2, 2]]]);
+  const fills = c.calls.filter(o => o[0] === '=fillStyle').map(o => o[1]);
+  assert.equal(fills[0], '#202428', 'base first'); assert.equal(fills[1], G.TEAMS[0].c1, 'red after');
+});
+test('artSprite: one picture per team and key, cached, the parts drawn in team colours', () => {
+  const { G } = load(); const a = G.artSprite(0, 'bike', G.BIKE_ART.bike);
+  assert.equal(G.artSprite(0, 'bike', G.BIKE_ART.bike), a, 'cached'); assert.notEqual(G.artSprite(0, 'rider5', G.BIKE_ART.rider[5]), a, 'another key'); assert.notEqual(G.artSprite(1, 'bike', G.BIKE_ART.bike), a, 'another team');
+  assert.equal(a.r, null); assert.equal(a.c.width, G.SPW);
+});
+test('riderFrameIndex: upright at rest, under braking and under throttle; corner at 40 deg, limit at 60 deg', () => {
+  const { G } = load(); const d = Math.PI / 180, at = (lean, brk, thr, v = 30) => G.riderFrameIndex({ lean, v, ctl: { brk, thr } });
+  assert.equal(at(0, 0, 0), 32); assert.equal(at(0, 0, 1), 32, 'throttle keeps the upright picture'); assert.equal(at(0, 0.5, 1), 32, 'braking');
+  assert.equal(at(40 * d, 0, 0), 64); assert.equal(at(-40 * d, 0, 0), 64); assert.equal(at(60 * d, 0, 0), 96);
+  assert.ok(Math.abs(at(20 * d, 0, 0) - 48) < 1e-9, 'half way from upright to corner');
+});
+test('riderOffsetPx: upright on the centre line, 50 px at 10 deg, 70 px from 45 deg, the same to either side', () => {
+  const { G } = load(); const d = Math.PI / 180;
+  assert.equal(G.riderOffsetPx(0), 0); near(G.riderOffsetPx(5 * d), 25, 1e-9, 'half way'); near(G.riderOffsetPx(10 * d), 50, 1e-9);
+  near(G.riderOffsetPx(27.5 * d), 60, 1e-9, 'between 10 and 45'); near(G.riderOffsetPx(45 * d), 70, 1e-9); assert.equal(G.riderOffsetPx(60 * d), 70, 'held through the corner');
+  assert.equal(G.riderOffsetPx(-20 * d), G.riderOffsetPx(20 * d), 'the same to either side');
+});
+test('drawRiderBands: three bands, the boots (rear) move least, the upper body moves as one block and tilts with the lean', () => {
+  const { G } = load(); const c = makeCtx({}); G.ctx = c; const sp = G.artSprite(0, 'rider32', G.BIKE_ART.rider[32]).c;
+  G.drawRiderBands(sp, 2.5, 2.5, 60, 0.6);
+  assert.equal(ops(c, 'drawImage').length, 3, 'one draw per band'); assert.equal(ops(c, 'clip').length, 3, 'each band clipped');
+  assert.ok(ops(c, 'rotate').some(o => o[1] < 0), 'upper bands tilt against the lean');
+  const ys = ops(c, 'translate').map(o => o[2]).filter(v => v > 0); assert.ok(Math.max(...ys) > Math.min(...ys), 'the boots move less than the upper body');
+});
+test('rigSegWeight, rigWeight: thighs go from 0.4 at the hip to 0.1 at the knee, shins from 0.1 to 0, boots stay on the pegs', () => {
+  const { G } = load(); const a = [0, 0], b = [10, 0];
+  near(G.rigSegWeight(0, 0, a, b, 0.4, 0.1), 0.4, 1e-12); near(G.rigSegWeight(10, 0, a, b, 0.4, 0.1), 0.1, 1e-12); near(G.rigSegWeight(5, 3, a, b, 0.4, 0.1), 0.25, 1e-12, 'half way, off the line');
+  assert.equal(G.rigWeight('boot_L', 0, 0), 0); assert.equal(G.rigWeight('torso', 0, 0), 0.4); assert.equal(G.rigWeight('glove_R', 0, 0), 0, 'gloves stay on the bars');
+  const sh = G.RIG_JOINTS.shoulder_R, wr = G.RIG_JOINTS.wrist_R;
+  near(G.rigWeight('upper_arm_R', sh[0], sh[1]), 0.5, 1e-12, 'upper arm moves at the shoulder'); near(G.rigWeight('forearm_R', wr[0], wr[1]), 0, 1e-12, 'forearm stays at the wrist');
+});
+test('drawRigRider: each part in its class colour, moved across the bike by its weight at the lean', () => {
+  const { G } = load(); const c = makeCtx({}); G.drawRigRider(c, G.TEAMS[1], 0);
+  assert.equal(ops(c, 'closePath').length, Object.keys(G.RIG_ART).length, 'one outline per part');
+  assert.ok(c.calls.some(o => o[0] === '=fillStyle' && o[1] === G.TEAMS[1].c1), 'team colour');
+  const d = makeCtx({}); G.drawRigRider(d, G.TEAMS[1], 40);
+  assert.notDeepEqual(ops(d, 'moveTo')[0], ops(c, 'moveTo')[0], 'moves at a lean');
+  const e = makeCtx({}), f = makeCtx({}); G.drawRigRider(e, G.TEAMS[1], 40); G.drawRigRider(f, G.TEAMS[1], -40);
+  assert.deepEqual(ops(e, 'moveTo'), ops(f, 'moveTo'), 'the same shift to either side: the bike flip sets the direction');
+});
+test('drawArtBike: the bike and the pose for the lean, mirrored for a left bend, the race number on the tail', () => {
+  const { G, b } = riding(100); G.BIKE_STYLE = G.BIKE_STYLES.findIndex(st => st && st.name === 'Traced');
+  b.lean = 0.5; let c = rec(G); G.drawBike(b, all);
+  const bike = G.artSprite(b.team, 'bike', G.BIKE_ART.bike), i0 = Math.floor(G.riderFrameIndex(b)), frame = G.artSprite(b.team, 'rider' + i0, G.BIKE_ART.rider[i0]);
+  const imgs = ops(c, 'drawImage').map(o => o[1]);
+  assert.ok(imgs.includes(bike.c) && imgs.includes(frame.c), 'bike and the rider frame for the lean');
+  assert.ok(c.calls.some(o => o[0] === 'scale' && o[2] > 0), 'right bend: no mirror');
+  c = rec(G); b.lean = -0.5; G.drawBike(b, all); assert.ok(c.calls.some(o => o[0] === 'scale' && o[2] < 0), 'left bend: mirrored');
+  assert.ok(texts(c).includes(String(b.num)), 'race number'); G.BIKE_STYLE = 0;
+});
+test('artStyle: the style in use when it has art, else none', () => {
+  const { G } = load(); G.BIKE_STYLE = 0; assert.equal(G.artStyle(), null); G.BIKE_STYLE = G.BIKE_STYLES.findIndex(st => st && st.name === 'Traced'); assert.ok(G.artStyle().art); G.BIKE_STYLE = 0;
+});
+test('styleTyre: a tyre, with a rim in the spoked styles only', () => {
+  const { G } = load(); const plain = makeCtx({}); G.styleTyre(plain, -1, -0.4, 0.1, { spokes: false });
+  assert.equal(ops(plain, 'ellipse').length, 0, 'no rim'); assert.equal(ops(plain, 'roundRect').length, 1, 'tyre');
+  const rim = makeCtx({}); G.styleTyre(rim, -1, -0.4, 0.1, { spokes: true }); assert.equal(ops(rim, 'ellipse').length, 1, 'rim');
+});
+test('styleExhaust: a silver can with a dark end cap', () => {
+  const { G } = load(); const c = makeCtx({}); G.styleExhaust(c, { exh: 0.04 }, -0.95, 0.13);
+  assert.equal(ops(c, 'roundRect').length, 1); assert.equal(ops(c, 'ellipse').length, 1); assert.ok(c.calls.some(o => o[0] === '=fillStyle' && o[1] === '#16181a'), 'dark cap');
+});
+test('styleLivery: no stripe, one, two pinstriped, three bands', () => {
+  const { G } = load(); const n = st => { const c = makeCtx({}); G.styleLivery(c, G.TEAMS[0], st, [-1, 2]); return ops(c, 'fillRect').length; };
+  assert.equal(n({ stripes: 0 }), 0); assert.equal(n({ stripes: 1 }), 1); assert.equal(n({ stripes: 2 }), 3); assert.equal(n({ stripes: 3 }), 3);
+});
+test('styleMirrors: a stalk and a mirror head on each side', () => {
+  const { G } = load(); const c = makeCtx({}); G.styleMirrors(c, 0.3, -0.36);
+  assert.equal(ops(c, 'moveTo').length, 1); assert.equal(ops(c, 'ellipse').length, 1); assert.deepEqual(ops(c, 'moveTo')[0].slice(1), [0.3, -0.1]);
+});
+test('drawTopStyled: the fairing, mirrors and tail lights of a style, carbon in dark colours', () => {
+  const { G } = load(); const st = G.BIKE_STYLES[1]; const c = makeCtx({}); G.drawTopStyled(c, G.TEAMS[0], 25, st);
+  assert.ok(ops(c, 'fill').length > 8, 'fairing and parts'); assert.deepEqual(texts(c), ['25']);
+  const k = makeCtx({}); G.drawTopStyled(k, G.TEAMS[0], 25, G.BIKE_STYLES[4]); assert.ok(k.calls.some(o => o[0] === '=fillStyle' && o[1] === '#17191b'), 'carbon fairing');
+  const m = makeCtx({}); G.drawTopStyled(m, G.TEAMS[0], 25, G.BIKE_STYLES[3]); assert.ok(ops(m, 'ellipse').length > 4, 'mirrors');
+});
+test('drawRearStyled: the rear view of a style, with the number on the tail', () => {
+  const { G } = load(); const c = makeCtx({}); G.drawRearStyled(c, G.TEAMS[0], 7, 1, G.BIKE_STYLES[2]);
+  assert.ok(ops(c, 'roundRect').length >= 2, 'tyres'); assert.deepEqual(texts(c), ['7']);
+  const d = makeCtx({}); G.drawRearStyled(d, G.TEAMS[0], 7, 0.5, G.BIKE_STYLES[4]); assert.ok(d.calls.some(o => o[0] === '=fillStyle' && o[1] === '#2a0606'), 'carbon tail');
+});
 test('drawChassisTop, tailNumber: tyres, fairing in team colours, windscreen, the number on the tail', () => {
   const { G } = load(); const c = makeCtx({}); G.drawChassisTop(c, G.TEAMS[2], 25);
   assert.equal(ops(c, 'roundRect').length, 4, 'two tyres, frame, seat'); assert.ok(c.calls.some(o => o[0] === '=fillStyle' && o[1] === G.TEAMS[2].c2), 'stripe');
@@ -135,7 +237,8 @@ test('drawChassisTop, tailNumber: tyres, fairing in team colours, windscreen, th
 test('drawRiderTop, drawHelmet: legs, arms, back and helmet with visor from above, none from behind', () => {
   const { G } = load(); const c = makeCtx({}); G.drawRiderTop(c, G.TEAMS[0]);
   assert.equal(ops(c, 'stroke').length, 6, 'two thighs, two shins, two arms'); assert.equal(ops(c, 'closePath').length, 1, 'visor');
-  assert.deepEqual(ops(c, 'arc').at(-1).slice(1, 4), [0.26, 0, 0.145], 'helmet in the middle at rest');
+  assert.deepEqual(ops(c, 'translate')[0].slice(1), [0.2, 0], 'the rider moved forward');
+  assert.deepEqual(ops(c, 'arc').at(-1).slice(1, 4), [0.26, 0, 0.145], 'helmet at rest, in the rider frame');
   const r = makeCtx({}); G.drawHelmet(r, G.TEAMS[0], 0.3, 0.1, 0.17, 0); assert.equal(ops(r, 'closePath').length, 0, 'no visor from behind'); assert.deepEqual(ops(r, 'arc')[0].slice(1, 4), [0.3, 0.1, 0.17]);
 });
 test('riderPose: hang-off grows from hips to shoulders to helmet, braking sits up, full throttle tucks in', () => {
@@ -181,6 +284,7 @@ test('drawRiderRear: boots on the pegs, back bent to the inside, helmet further 
   assert.ok(hc[1] > hb[1], 'further forward'); assert.ok(hc[3] > hb[3], 'bigger'); assert.equal(ops(c, 'stroke').length, 6, 'two thighs, two shins, two arms');
   const p = G.riderPose({ lean: 0.8, ctl: { brk: 0, thr: 0 } }), l = draw(1, p);
   near(ops(l, 'arc').at(-1)[2], p.base + p.hel, 1e-12, 'helmet inside'); assert.ok(ops(l, 'transform').length === 1, 'the back bent');
+  assert.deepEqual(ops(draw(0.5), 'translate')[0].slice(1), [0.2, 0], 'the rider moved forward');
   const boots = cc => ops(cc, 'roundRect').map(o => o[2]); near(boots(l)[0] - boots(c)[0], p.base + 0.29 * (1 - p.q), 1e-12, 'boots stay on the pegs of the leaning bike');
 });
 test('bikeView: the drawing for the camera in use', () => {

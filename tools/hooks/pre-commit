@@ -1,0 +1,4 @@
+#!/bin/sh
+# Code scan of the staged JavaScript (GDD 13a). Stops the commit on new issues in the changed lines.
+# Switched on with: git config core.hooksPath tools/hooks
+exec node "$(git rev-parse --show-toplevel)/tools/lint.js" --staged

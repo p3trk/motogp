@@ -23,12 +23,14 @@ const FX = {
 // ---------------------------------------------------------------------------
 // World / session
 // ---------------------------------------------------------------------------
+// the player's crash message by what caused it
+function crashText(info) { if (info === 'highside') { return 'Highside, rider down'; } return info === 'gravel' ? 'Down in the gravel' : 'Front tucked, lowside'; }
 const W = {
   bikes: [], ghosts: [], player: null, mode: 'practice', kind: 'practice', totalLaps: 0, time: 0, phase: 'run', flag: false, rand: mulberry(7),
   infiniteFuel: false, fx: FX, passT: null, lights: 0, lightsOutAt: 0, raceStartT: 0, msgs: [], opts: null, qualiAI: null, qualiGrid: null,
   finishOrder: [], paused: false, resultsShown: false, endTimer: 0, bestTrace: null, curTrace: null,
   event(b, type, info) {
-    if (type === 'crash') { if (b.isPlayer) HUD.msg('CRASH', info === 'highside' ? 'Highside, rider down' : info === 'gravel' ? 'Down in the gravel' : 'Front tucked, lowside', '#e3312a', 3); else if (W.player && Math.hypot(b.x - W.player.x, b.y - W.player.y) < 400) HUD.ticker(`#${b.num} ${b.short} crashed at ${T.cornerAt(b.s)}`); }
+    if (type === 'crash') { if (b.isPlayer) HUD.msg('CRASH', crashText(info), '#e3312a', 3); else if (W.player && Math.hypot(b.x - W.player.x, b.y - W.player.y) < 400) HUD.ticker(`#${b.num} ${b.short} crashed at ${T.cornerAt(b.s)}`); }
     if (type === 'dnf') { if (b.isPlayer) HUD.msg('RETIRED', 'Engine damage too heavy to continue', '#e3312a', 4); else HUD.ticker(`#${b.num} ${b.short} retires`); }
     if (type === 'rejoin' && b.isPlayer) HUD.msg('REJOIN', 'Bike back on track. Watch the damage.', '#ffcf1f', 2);
   }
@@ -41,9 +43,9 @@ FX.rand = W.rand;
 // ---------------------------------------------------------------------------
 const Records = {
   d: { v: 1, laps: [], best: {}, trace: null, traceT: 0 },
-  load() { try { const r = JSON.parse(localStorage.getItem('sgp_records') || 'null'); if (r && r.v === 1) this.d = Object.assign(this.d, r); } catch (e) { } },
-  save() { try { localStorage.setItem('sgp_records', JSON.stringify(this.d)); } catch (e) { } },
-  allBest() { let b = 0; for (const k in this.d.best) if (this.d.best[k] && (!b || this.d.best[k].t < b)) b = this.d.best[k].t; return b; },
+  load() { try { const r = JSON.parse(localStorage.getItem('sgp_records') || 'null'); if (r && r.v === 1) this.d = Object.assign(this.d, r); } catch { /* saved laps unreadable or storage blocked: start with none */ } },
+  save() { try { localStorage.setItem('sgp_records', JSON.stringify(this.d)); } catch { /* storage blocked: the laps are not saved */ } },
+  allBest() { let b = 0; for (const k in this.d.best) { if (this.d.best[k] && (!b || this.d.best[k].t < b)) b = this.d.best[k].t; } return b; },
   add(mode, t, b, trace, inv) {
     const e = { t: +t.toFixed(3), mode, at: Date.now(), aids: b.assist ? 1 : 0, auto: b.auto ? 1 : 0, s: b.lastSec.map(x => +x.toFixed(3)) };
     if (inv) e.inv = 1;
@@ -61,8 +63,10 @@ Records.load();
 const AI_LEVEL = { rookie: 0.905, pro: 0.955, legend: 0.99 };
 
 function setupSession(kind, opts) {
-  W.opts = opts; W.kind = kind; W.mode = kind === 'practice' ? 'practice' : kind === 'quali' ? 'quali' : 'race';
-  W.totalLaps = kind === 'sprint' ? 10 : kind === 'gp' ? 20 : 0;
+  W.opts = opts; W.kind = kind; W.mode = kind === 'practice' || kind === 'quali' ? kind : 'race';
+  let laps = 0;
+  if (kind === 'sprint') laps = 10; else if (kind === 'gp') laps = 20;
+  W.totalLaps = laps;
   W.time = 0; W.raceStartT = 0; W.flag = false; W.finishOrder = []; W.featherHint = false; W.resultsShown = false; W.endTimer = 0; W.msgs = []; W.paused = false;
   W.rand = mulberry((Math.random() * 1e9) | 0); FX.rand = W.rand; FX.clear();
   W.infiniteFuel = false;
@@ -93,7 +97,6 @@ function setupSession(kind, opts) {
   if (W.mode === 'race') for (const b of W.bikes.filter(b => !b.isPlayer).sort((a, b) => a.ai.pace - b.ai.pace).slice(0, W.ghosts.length)) W.bikes.splice(W.bikes.indexOf(b), 1);
   // box assignment: teammates share neighbouring boxes in team order
   const order = W.bikes.slice().sort((a, b) => a.team - b.team || a.id - b.id); order.forEach((b, k) => b.box = k);
-  const N = T.N;
   if (W.mode === 'race') {
     // grid order
     let grid;
@@ -183,7 +186,7 @@ function simStep(dt) {
     b.draft = 0; if (b.crashed || b.v < 30) continue;
     for (const o of bikes) {
       if (o === b || o.crashed || o.dnf) continue;
-      let ds = o.s - b.s; if (ds < -T.L / 2) ds += T.L; if (ds > T.L / 2) ds -= T.L;
+      let ds = o.s - b.s; if (ds < -T.L / 2) { ds += T.L; } if (ds > T.L / 2) ds -= T.L;
       if (ds > 2 && ds < 32 && Math.abs(o.d - b.d) < 1.5) b.draft = Math.max(b.draft, 1 - (ds - 2) / 30);
     }
   }
@@ -191,13 +194,13 @@ function simStep(dt) {
   for (const b of bikes) { if (b.isPlayer && !b.autopilot) playerControl(b, dt); else aiControl(b, dt, W); }
   for (const b of bikes) {
     const pd = b.d;
-    if (b.trainHold) { const K = Input.k; if (K.KeyW || K.KeyS || K.KeyA || K.KeyD || K.ArrowUp || K.ArrowDown || K.ArrowLeft || K.ArrowRight || Touch.gas || Touch.brk || Touch.tilt !== 0) b.trainHold = false; else continue; }
+    if (b.trainHold) { const K = Input.k; if (K.KeyW || K.KeyS || K.KeyA || K.KeyD || K.ArrowUp || K.ArrowDown || K.ArrowLeft || K.ArrowRight || TouchCtl.gas || TouchCtl.brk || TouchCtl.tilt !== 0) b.trainHold = false; else continue; }
     if (b.isPlayer && W.startT < 0 && W.mode === 'practice') startMoment(b);
     stepBike(b, dt, W);
     if (b.crashed || b.dnf) continue;
     T.project(b.x, b.y, b.i, b);
     b.surf = T.surface(b.i, b.s, b.d);
-    if (b.surf === SURF.WALL) { wallHit(b); if (b.crashed) continue; T.project(b.x, b.y, b.i, b); b.surf = T.surface(b.i, b.s, b.d); if (b.surf === SURF.WALL) b.surf = SURF.GRASS; }
+    if (b.surf === SURF.WALL) { wallHit(b); if (b.crashed) { continue; } T.project(b.x, b.y, b.i, b); b.surf = T.surface(b.i, b.s, b.d); if (b.surf === SURF.WALL) b.surf = SURF.GRASS; }
     pitWall(b, pd);
     pitLogic(b, dt);
     if (b.isPlayer) { longLap(b); trackLimits(b); }
@@ -219,13 +222,13 @@ function startMoment(b) {
 
 function playerControl(b, dt) {
   const K = Input.k, c = b.ctl;
-  const brk = K.KeyS || K.ArrowDown || Touch.brk;
-  const gas = K.KeyW || K.ArrowUp || (Touch.gas && !Touch.brk); // on touch the brake wins (GDD 3a)
+  const brk = K.KeyS || K.ArrowDown || TouchCtl.brk;
+  const gas = K.KeyW || K.ArrowUp || (TouchCtl.gas && !TouchCtl.brk); // on touch the brake wins (GDD 3a)
   const left = K.KeyA || K.ArrowLeft, right = K.KeyD || K.ArrowRight;
   c.thr = clamp(c.thr + (gas ? 7 : -9) * dt, 0, 1);
   c.brk = clamp(c.brk + (brk ? 8 : -12) * dt, 0, 1);
   let st = (right ? 1 : 0) - (left ? 1 : 0);
-  if (Touch.on && !left && !right) st = Touch.tilt; // phone tilt (GDD 3a)
+  if (TouchCtl.on && !left && !right) st = TouchCtl.tilt; // phone tilt (GDD 3a)
   c.steer = st; c.leanT = st * PHYS.maxLean;
   if (W.phase !== 'run' && W.mode === 'race') { c.brk = 1; }
   if (b.limiter && b.v > PHYS.pitLimit - 0.3) { c.thr = Math.min(c.thr, 0.0); if (b.v > PHYS.pitLimit + 0.5) c.brk = Math.max(c.brk, clamp((b.v - PHYS.pitLimit) * 0.25, 0, 1)); }
@@ -264,7 +267,7 @@ function pitWall(b, pd) {
     const shiftD = target - b.d; b.x += T.NX[b.i] * shiftD; b.y += T.NY[b.i] * shiftD; b.d = target;
     const [vx, vy] = bikeVel(b); const vn = vx * nx + vy * ny;
     if (vn > 8) { crashBike(b, W, 'wall'); return; }
-    if (vn > 0) { const nvx = vx - nx * vn * 1.3, nvy = vy - ny * vn * 1.3; const sp = Math.hypot(nvx, nvy) * 0.92; if (sp > 1) b.h = Math.atan2(nvy, nvx); b.v = sp; b.vs = 0; b.dmg.a = Math.min(1, b.dmg.a + vn * 0.02); FX.spark(b.x, b.y, vx, vy); }
+    if (vn > 0) { const nvx = vx - nx * vn * 1.3, nvy = vy - ny * vn * 1.3; const sp = Math.hypot(nvx, nvy) * 0.92; if (sp > 1) { b.h = Math.atan2(nvy, nvx); } b.v = sp; b.vs = 0; b.dmg.a = Math.min(1, b.dmg.a + vn * 0.02); FX.spark(b.x, b.y, vx, vy); }
   }
 }
 function pitLogic(b, dt) {
@@ -308,14 +311,25 @@ function timing(b) {
   }
   if (b.isPlayer && !b.outLap && !b.gridCross && W.curTrace) { const bin = Math.floor(s / 10); if (W.curTrace[bin] < 0) W.curTrace[bin] = W.time - b.lapStartT; }
 }
+// the Long Lap loop (GDD 6a): the lane while a Long Lap is pending, and the run-off after the exit until the rider is back on track
+function inLongLap(b) {
+  const LL = T.LL;
+  if (b.llPend?.length && T.inLL(b.s, b.d)) return true; // serving a Long Lap
+  return b.llExitLap === b.lap && b.s >= LL.sB && b.s <= LL.sB + 40;
+}
 // track limits (GDD 6a): run-off, gravel and grass beyond the kerb; the strip beside the pit lane is not judged
 function overLimit(b) {
   const sf = b.surf; if (sf !== SURF.RUN && sf !== SURF.GRAVEL && sf !== SURF.GRASS) return false;
-  if (W.mode === 'race' && b.llPend?.length && T.inLL(b.s, b.d)) return false; // serving a Long Lap
+  if (W.mode === 'race' && inLongLap(b)) return false;
   return !(b.d >= 0 && T.PIT.inZone(T.rel(b.s)));
 }
 function trackLimits(b) {
   const race = W.mode === 'race', judged = !b.autopilot && !b.trainHold && (race ? W.phase === 'run' && !b.finished : !b.outLap);
+  const off = b.surf === SURF.RUN || b.surf === SURF.GRAVEL || b.surf === SURF.GRASS;
+  if (race && off && inLongLap(b)) { // in the loop, not a trip; a trip that reaches the loop is not counted
+    if (b.offT >= 0) b.offLL = true;
+    return;
+  }
   if (overLimit(b)) {
     if (b.offT >= 0) return;
     b.offT = W.time; b.offS = b.s; b.offCr = b.crashes;
@@ -323,8 +337,8 @@ function trackLimits(b) {
     return;
   }
   if (b.offT < 0) return;
-  const t = W.time - b.offT, s0 = b.offS, crashed = b.crashes !== b.offCr; b.offT = -1;
-  if (!race || !judged || crashed) return; // a crash and respawn is not a rejoin
+  const t = W.time - b.offT, s0 = b.offS, crashed = b.crashes !== b.offCr, loop = b.offLL; b.offT = -1; b.offLL = false;
+  if (!race || !judged || crashed || loop) return; // a crash and respawn is not a rejoin; a trip through the Long Lap loop is not counted
   const ref = limitRef(s0, b.s); if (ref === null) return;
   const lost = t - ref; if (lost >= 0.5) return; // ran wide and paid for it already
   const gain = Math.max(0, -lost), back = Math.ceil(gain * 10 - 1e-6) / 10; // a cut never pays: the gain comes back at once
@@ -355,7 +369,7 @@ function longLap(b) {
   LL.cps.forEach((c, k) => { if (crossed(c) && T.inLL(s, b.d)) R.ok |= 1 << k; });
   if (!crossed(LL.sB)) return;
   b.llRun = null; if (R.ok !== 7) return;
-  b.llPend.shift();
+  b.llPend.shift(); b.llExitLap = b.lap;
   const top = Math.ceil((2.5 - (W.time - R.t0 - limitRef(LL.sA, LL.sB))) * 10 - 1e-6) / 10;
   if (top > 0) b.pen += top;
   HUD.msg('LONG LAP SERVED', top > 0 ? '+' + top.toFixed(1) + ' s to make it 2.5 s' : '', '#3ad17a', 2);
@@ -372,7 +386,7 @@ function applyDrop(b) {
 const penT = b => (b.pen || 0) + (b.dropPen || 0);
 // reference time from s0 to s1: the best lap trace if it covers both points, else the speed guide pace (GDD 6a, 9)
 function limitRef(s0, s1) {
-  let ds = s1 - s0; if (ds < -T.L / 2) ds += T.L; if (ds > T.L / 2) ds -= T.L;
+  let ds = s1 - s0; if (ds < -T.L / 2) { ds += T.L; } if (ds > T.L / 2) ds -= T.L;
   if (ds <= 0) return null;
   const B = W.bestTrace;
   const at = (s) => { const f = s / 10, k = Math.floor(f), a = B[k], c = B[k + 1]; return a > 0 && c > 0 ? a + (c - a) * (f - k) : -1; };
@@ -417,7 +431,7 @@ function effects(b, dt) {
   const r = W.rand;
   if (b.skid && b.v > 8) { FX.mark(b.x - Math.cos(b.h) * 0.6, b.y - Math.sin(b.h) * 0.6, Math.cos(b.h) * b.v, Math.sin(b.h) * b.v, b.slip > 0.05 ? 0.55 : 0.28); if (b.slip > 0.05 && r() < 0.35) FX.smoke(b.x - Math.cos(b.h), b.y - Math.sin(b.h), 0, 0, 0.25); }
   if ((b.surf === SURF.GRAVEL || b.surf === SURF.GRASS) && b.v > 5 && r() < 0.6) FX.dust(b.x, b.y, b.surf);
-  if (b.dig) { if (r() < 0.8) FX.dust(b.x - Math.cos(b.h) * 0.8, b.y - Math.sin(b.h) * 0.8, SURF.GRAVEL); if (b.isPlayer && b.digT > 1 && !W.featherHint) { W.featherHint = true; HUD.msg('FEATHER THE THROTTLE', 'The rear wheel digs into the gravel. Tap W.', '#ffcf1f', 3); } }
+  if (b.dig) { if (r() < 0.8) { FX.dust(b.x - Math.cos(b.h) * 0.8, b.y - Math.sin(b.h) * 0.8, SURF.GRAVEL); } if (b.isPlayer && b.digT > 1 && !W.featherHint) { W.featherHint = true; HUD.msg('FEATHER THE THROTTLE', 'The rear wheel digs into the gravel. Tap W.', '#ffcf1f', 3); } }
   if (Math.abs(b.lean) > 58 * DEG && b.v > 15 && r() < 0.15) { const sg = Math.sign(b.lean); FX.spark(b.x - Math.sin(b.h) * sg * 0.7 * PHYS.VS, b.y + Math.cos(b.h) * sg * 0.7 * PHYS.VS, Math.cos(b.h) * b.v * 0.8, Math.sin(b.h) * b.v * 0.8); }
   if (b.dmg.e > 0.5 && r() < dt * 30 * b.dmg.e) FX.smoke(b.x - Math.cos(b.h) * 1.2, b.y - Math.sin(b.h) * 1.2, Math.cos(b.h) * b.v, Math.sin(b.h) * b.v, 0.3);
 }
@@ -448,7 +462,7 @@ function collide(bikes) {
       if (!A.held) setVel(A, avx - nx * j * wa, avy - ny * j * wa);
       if (!B.held) setVel(B, bvx + nx * j * wb, bvy + ny * j * wb);
       const dv = j * Math.max(wa, wb);
-      for (const [X, sg] of [[A, -1], [B, 1]]) {
+      for (const [X] of [[A, -1], [B, 1]]) {
         if (X.held) continue;
         X.dmg.a = Math.min(1, X.dmg.a + dv * 0.022); X.dmg.c = Math.min(1, X.dmg.c + dv * 0.012);
         X.lean += (W.rand() - 0.5) * dv * 0.05;
@@ -484,5 +498,5 @@ function gapOf(b) { // time behind the leader at the same point of the race
   if (bin < 0 || bin >= W.passT.length || W.passT[bin] < 0) return 0;
   return W.time - W.passT[bin];
 }
-function fmtTime(t) { if (!t || !isFinite(t)) return '–:––.–––'; const m = Math.floor(t / 60), s = t - m * 60; return m + ':' + (s < 10 ? '0' : '') + s.toFixed(3); }
+function fmtTime(t) { if (!t || !isFinite(t)) { return '–:––.–––'; } const m = Math.floor(t / 60), s = t - m * 60; return m + ':' + (s < 10 ? '0' : '') + s.toFixed(3); }
 function fmtGap(g) { return (g >= 0 ? '+' : '−') + Math.abs(g).toFixed(3); }

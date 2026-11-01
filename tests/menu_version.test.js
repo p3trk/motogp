@@ -17,13 +17,23 @@ const FILE = 'file://' + path.resolve(process.argv[2] || path.join(ROOT, 'index.
 
   const page = await browser.newPage();
   page.on('pageerror', e => { console.error('page error:', e.message); process.exitCode = 1; });
-  await page.addInitScript(() => { try { localStorage.clear(); } catch (e) { } });
+  await page.addInitScript(() => { try { localStorage.clear(); } catch { /* storage may be blocked */ } });
   await page.goto(FILE);
   await page.waitForFunction(() => window.__sgp && document.getElementById('loading').hidden);
 
   const label = await page.evaluate(() => { const v = document.querySelector('h1 .ver'); return { text: v && v.textContent, title: document.querySelector('h1').textContent }; });
   check('menu shows the newest CHANGELOG version next to the title', label.text === 'v' + newest, { shown: label.text, changelog: 'v' + newest });
   check('title still reads Silverstone GP', /Silverstone\s+GP/.test(label.title), label.title);
+
+  // release note (GDD 11): the newest summary next to the title; a click opens the last 10 releases
+  // the summary is built from the first note of the newest release (GDD 11), so it is the start of that note without "(GDD ...)"
+  const first = fs.readFileSync(path.join(ROOT, 'CHANGELOG.md'), 'utf-8').split('\n').find(l => l.startsWith('- ')).slice(2);
+  const note = await page.evaluate(() => ({ sum: document.getElementById('relSum').textContent, open: document.getElementById('changelog').hidden, heads: document.querySelectorAll('#changelog h3').length }));
+  check('menu shows the newest release summary inline with the title', note.sum.length > 0 && first.replace(/ \(GDD[^)]*\)/g, '').startsWith(note.sum), { shown: note.sum, note: first });
+  check('the changelog is closed at first, with the last 10 releases', note.open === true && note.heads === 10, note);
+  await page.click('#relNote');
+  const opened = await page.evaluate(() => ({ open: !document.getElementById('changelog').hidden, text: document.getElementById('changelog').textContent }));
+  check('a click on the summary shows the complete changelog', opened.open && opened.text.includes('Sense of speed'), { open: opened.open });
 
   await browser.close();
   if (fails.length) { console.log('\n' + fails.length + ' failed'); process.exit(1); }

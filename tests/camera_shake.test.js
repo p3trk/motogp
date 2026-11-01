@@ -18,14 +18,14 @@ const LIMITS = { pos: 0.02, rot: 0.08, dir: 0.08, scr: 2.0 }, WIN0 = 12;
   await page.addInitScript(() => { // fake requestAnimationFrame: the test decides when frames happen
     window.__rafQ = []; window.requestAnimationFrame = cb => { window.__rafQ.push(cb); return 1; };
     window.__tick = t => { const q = window.__rafQ; window.__rafQ = []; for (const cb of q) cb(t); };
-    try { localStorage.clear(); } catch (e) { }
+    try { localStorage.clear(); } catch { /* storage may be blocked */ }
   });
   await page.goto(FILE);
   await page.waitForFunction(() => window.__sgp && document.getElementById('loading').hidden);
   await page.evaluate(() => { window.__sgp.UI.opts.blur = 'off'; }); // Speed blur Off (since 1.17.0), so the measurements stay as before
   // frame helper inside the page: run n frames of ~60 fps with a little timing jitter, record the camera
   await page.evaluate(() => {
-    let t = 1000, seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    let t = 1000, seed = 7; const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
     window.__tick(t);
     window.__run = n => {
       const S = window.__sgp, C = S.CAM, out = [];
@@ -40,7 +40,7 @@ const LIMITS = { pos: 0.02, rot: 0.08, dir: 0.08, scr: 2.0 }, WIN0 = 12;
   const metrics = (rec, speed) => {
     const WIN = Math.max(2, Math.round(WIN0 / speed));
     const sp = [], om = [], dir = [], sx = [], sy = [];
-    const wrap = d => { while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return d; };
+    const wrap = d => { while (d > Math.PI) { d -= 2 * Math.PI; } while (d < -Math.PI) { d += 2 * Math.PI; } return d; };
     let pa = null;
     for (let k = 1; k < rec.length; k++) {
       const a = rec[k - 1], b = rec[k], dx = b.x - a.x, dy = b.y - a.y;
@@ -49,7 +49,7 @@ const LIMITS = { pos: 0.02, rot: 0.08, dir: 0.08, scr: 2.0 }, WIN0 = 12;
       sx.push(b.sx); sy.push(b.sy);
     }
     dir.shift();
-    const dev = arr => { const r = []; for (let k = WIN; k < arr.length - WIN; k++) { let m = 0; for (let j = -WIN; j <= WIN; j++) m += arr[k + j]; m /= 2 * WIN + 1; r.push(arr[k] - m); } return r; };
+    const dev = arr => { const r = []; for (let k = WIN; k < arr.length - WIN; k++) { let m = 0; for (let j = -WIN; j <= WIN; j++) { m += arr[k + j]; } m /= 2 * WIN + 1; r.push(arr[k] - m); } return r; };
     const rms = a => Math.sqrt(a.reduce((s, x) => s + x * x, 0) / Math.max(1, a.length));
     const mean = sp.reduce((s, x) => s + x, 0) / sp.length;
     const ex = dev(sx), ey = dev(sy);

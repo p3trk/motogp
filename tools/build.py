@@ -8,7 +8,7 @@ in any browser regardless of encoding detection.
 Usage: python3 tools/build.py            -> writes index.html
        python3 tools/build.py --utf8 X   -> also writes a UTF-8 artifact body to X
 """
-import os, re, sys
+import json, os, re, sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(ROOT, 'src')
@@ -19,10 +19,14 @@ def read(name):
         return f.read()
 
 
+def changelog():
+    with open(os.path.join(ROOT, 'CHANGELOG.md'), encoding='utf-8') as f:
+        return f.read()
+
+
 def version():
     # the newest "## vX.Y.Z" heading in CHANGELOG.md is the game version (shown on the menu, GDD 11)
-    with open(os.path.join(ROOT, 'CHANGELOG.md'), encoding='utf-8') as f:
-        return re.search(r'^## v(\d+\.\d+\.\d+)', f.read(), re.M).group(1)
+    return re.search(r'^## v(\d+\.\d+\.\d+)', changelog(), re.M).group(1)
 
 
 def ent(s):
@@ -43,7 +47,7 @@ def jsesc(s):
 
 
 def main():
-    js = (read('core.js').replace('__TRACK__', read('track.txt'))
+    js = (read('core.js').replace('__TRACK__', read('track.txt')).replace('__CHANGELOG__', json.dumps(changelog()))
           + read('world.js') + read('replay.js') + read('render.js') + read('ui.js'))
     head = read('head.html').replace('__VERSION__', version())
     if '--utf8' in sys.argv:

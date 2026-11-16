@@ -799,6 +799,35 @@ Asked by Petr (2026-11-16): "improve graphics of motorbike, bike should be more 
 - Behind and CLOSE: steering and suspension are not shown (the front wheel is hidden behind the rider); only the Top-down view moves.
 - Tests run: `npm run test:unit` 304 pass; `bike_views` browser test passes all 10 checks, frame cost 0.2 % in CLOSE (headless Chromium, 22 bikes), well under the 5 % limit.
 
+## 11k. Bike graphics, next pass (proposed, version set at Release)
+
+Asked by Petr (2026-11-16): "Improve graphics of the bike", after §11j, and "bike seems a bit too long".
+
+**Why**
+- In Behind and CLOSE the stretch from §11i (×1.50 and ×1.86 at the player's bike) cancels the camera squash on purpose. It makes the bike look longer than a viewer expects.
+- The default drawing is still flat: one colour gradient and a few details. §11j left the vector outlines, shading bands and detail lines undone.
+
+**Rule** (visual only: physics, lean, steering and suspension from §11j stay as they are; rider rig from §11i unchanged)
+
+*Length*
+1. **Half the stretch correction in Behind and CLOSE** (the alternative in §11i question 1). The stretch goes from the full factor to the midpoint with 1: ×1.25 in Behind and ×1.43 in CLOSE for the player's bike, and the same share for other bikes further ahead. The bike keeps some of its real height, and its length on screen drops by about a quarter of the stretch.
+
+*Look*
+2. **Hand-set vector outlines** for the default body in all three drawings (Bézier curves, as the top view's fairing already is), so edges stay crisp at device pixel ratio.
+3. **Shading and highlights:** the tank and fairing get three tone bands and a thin specular line, lit from a fixed screen direction; the tyre sidewalls get a light edge.
+4. **Detail lines at one device pixel:** seam between tank and fairing, number board edge, fork legs (drawn with the front tyre, so they turn with it), brake disc, exhaust outlet.
+
+*Not changed*
+- Team livery and race number, and the bike's size in the world. No new image files.
+
+**Tests**
+- Unit tests (GDD 13b) for each new function (the half-stretch factor, the detail-line drawing).
+- `bike_views` browser test: the "on-screen proportions" check now expects the half stretch instead of the full one; the other checks stay. Frame cost stays within 5 %.
+
+### Open questions for 11k (recommended answer in bold; the design above uses it)
+1. **Length:** **half the stretch correction** (×1.25 Behind, ×1.43 CLOSE). Alternatives: shorten the drawing to about 1.9 units (also changes the wheelbase for steering), or leave the full stretch because it is the real proportion.
+2. **Detail level:** **moderate** (items 2 to 4 as above). A full redraw of the bike is a separate, larger job.
+
 ## 12. Track and graphics
 
 - Centreline from the TUMFTM racetrack-database (LGPL-3.0), resampled every ~2 m (5 888 m, 2 944 points); start line at the real finish line.

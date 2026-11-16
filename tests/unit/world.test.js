@@ -182,12 +182,23 @@ test('playerControl: keys, touch halves, tilt, grid and pit limiter', () => {
   const { G, b } = session('practice'); const K = G.Input.k, c = b.ctl, dt = 0.05;
   K.KeyW = true; G.playerControl(b, dt); near(c.thr, 0.35, 1e-9);
   K.KeyW = false; K.KeyS = true; G.playerControl(b, dt); near(c.brk, 0.4, 1e-9); assert.equal(c.thr, 0);
-  K.KeyS = false; K.KeyA = true; G.playerControl(b, dt); assert.equal(c.steer, -1); near(c.leanT, -G.PHYS.maxLean, 1e-9);
+  K.KeyS = false; K.KeyA = true; G.playerControl(b, dt); assert.equal(c.steer, -1); assert.ok(c.leanT < 0 && c.leanT > -G.PHYS.maxLean, 'ramping, not yet full');
   K.KeyA = false; G.TouchCtl.on = true; G.TouchCtl.tilt = 0.5; G.playerControl(b, dt); assert.equal(c.steer, 0.5);
   c.thr = 0; G.TouchCtl.gas = true; G.TouchCtl.brk = true; G.playerControl(b, dt); assert.equal(c.thr, 0, 'on touch the brake wins');
   G.TouchCtl.gas = G.TouchCtl.brk = false; G.TouchCtl.on = false;
   K.KeyW = true; b.limiter = true; b.v = G.PHYS.pitLimit + 2; G.playerControl(b, dt); assert.equal(c.thr, 0); assert.ok(c.brk > 0);
   const r = session('sprint'); r.G.Input.k.KeyW = true; r.G.playerControl(r.b, dt); assert.equal(r.b.ctl.brk, 1, 'held on the grid');
+});
+test('playerControl: keyboard steer ramps the lean target over 0.35 s and back, phone tilt is at once', () => {
+  const { G, b } = session('practice'); const K = G.Input.k, c = b.ctl, dt = 0.05, full = G.PHYS.maxLean;
+  K.KeyA = true; G.playerControl(b, dt); near(c.leanT, -full * dt / G.STEER_RAMP_S, 1e-9, 'first step');
+  for (let k = 0; k < 6; k++) { G.playerControl(b, dt); }
+  near(c.leanT, -full, 1e-9, 'seven steps of 0.05 s = 0.35 s: full lean');
+  for (let k = 0; k < 30; k++) { G.playerControl(b, dt); }
+  near(c.leanT, -full, 1e-9, 'held: stays at full lean');
+  K.KeyA = false; G.playerControl(b, dt); assert.ok(c.leanT > -full, 'released: lean eases back');
+  G.TouchCtl.on = true; G.TouchCtl.tilt = 0.5; K.KeyA = false; G.playerControl(b, dt); near(c.leanT, 0.5 * full, 1e-9, 'phone tilt at once');
+  G.TouchCtl.on = false; G.TouchCtl.tilt = 0;
 });
 test('playerControl: a pit stop ends on W after it was released', () => {
   const { G, b } = session('practice'); const K = G.Input.k;

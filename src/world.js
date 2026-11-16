@@ -220,6 +220,7 @@ function startMoment(b) {
   if (Rec.cur) Rec.cur.start.t = r2(W.time, 1000);
 }
 
+const STEER_RAMP_S = 0.35; // seconds for the keyboard steer to reach the full lean target (GDD 1.26.0)
 function playerControl(b, dt) {
   const K = Input.k, c = b.ctl;
   const brk = K.KeyS || K.ArrowDown || TouchCtl.brk;
@@ -228,8 +229,12 @@ function playerControl(b, dt) {
   c.thr = clamp(c.thr + (gas ? 7 : -9) * dt, 0, 1);
   c.brk = clamp(c.brk + (brk ? 8 : -12) * dt, 0, 1);
   let st = (right ? 1 : 0) - (left ? 1 : 0);
-  if (TouchCtl.on && !left && !right) st = TouchCtl.tilt; // phone tilt (GDD 3a)
-  c.steer = st; c.leanT = st * PHYS.maxLean;
+  const tilt = TouchCtl.on && !left && !right;
+  if (tilt) st = TouchCtl.tilt; // phone tilt (GDD 3a)
+  c.steer = st;
+  // keyboard steer ramps the lean target over STEER_RAMP_S (GDD 3, 1.26.0); phone tilt follows the roll angle at once
+  const target = st * PHYS.maxLean, step = PHYS.maxLean * dt / STEER_RAMP_S;
+  c.leanT = tilt ? target : c.leanT + clamp(target - c.leanT, -step, step);
   if (W.phase !== 'run' && W.mode === 'race') { c.brk = 1; }
   if (b.limiter && b.v > PHYS.pitLimit - 0.3) { c.thr = Math.min(c.thr, 0.0); if (b.v > PHYS.pitLimit + 0.5) c.brk = Math.max(c.brk, clamp((b.v - PHYS.pitLimit) * 0.25, 0, 1)); }
   if (b.service) {

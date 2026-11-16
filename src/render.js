@@ -310,7 +310,7 @@ function buildScenery() {
 
 // --- bike sprites (bike pointing +x, SPR px per sprite unit): one drawing per camera (GDD 11i), the top view in
 // Top-down and rear three-quarter views in Behind and CLOSE, from the team colours and the race number
-const SPR = 96, SPW = Math.ceil(2.5 * SPR), SPH = Math.ceil(1.3 * SPR);
+const SPR = 128, SPW = Math.ceil(2.5 * SPR), SPH = Math.ceil(1.3 * SPR); // 128 px a unit (was 96): sharper at the zoomed-in cameras (GDD 11j)
 const SPRITES = {};
 const BIKE_VIEW = { chase: 'top', behind: 'behind', close: 'close' }; // camera -> drawing
 const BIKE_REAR = { top: 0, behind: 0.5, close: 1 }; // how far the drawing turns from the top view to the rear view
@@ -337,10 +337,46 @@ function bikeSprite(team, num, view = 'top') {
   SPRITES[key] = { c: cc, r: rc };
   return SPRITES[key];
 }
+// --- bike motion (GDD 11j, 2026-11-16): the front wheel steers and both wheels move on the suspension. The top view's tyres
+// are drawn each frame over the cached bike (not in the cache), so they can turn and move. Values are visual only: they
+// come from the heading change, the brake and the throttle the game already has. Units: sprite units (1 unit = 1 m).
+const BIKE_WHEELBASE = 1.45, STEER_MAX = 25 * Math.PI / 180; // real steering is small at speed, so it reads at low speed
+const FORK_TRAVEL = 0.08, SQUAT_TRAVEL = 0.06; // 4 % and 3 % of the 2.04-unit bike length
+function steerAngle(hRate, v) { return clamp(Math.atan2(BIKE_WHEELBASE * hRate, Math.max(v, 3)), -STEER_MAX, STEER_MAX); }
+function suspensionTargets(brk, thr) {
+  const bk = clamp(brk, 0, 1), tuck = clamp((thr - 0.7) / 0.3, 0, 1) * (1 - bk);
+  return { fork: FORK_TRAVEL * bk, squat: SQUAT_TRAVEL * tuck };
+}
+function smoothToward(cur, target, dt, tau) { return cur + (target - cur) * (1 - Math.exp(-dt / tau)); }
+// the steering and suspension state of one bike, moved on each drawing by the real time since the last one (at most 0.1 s)
+function updateBikeMotion(b, now) {
+  if (b.motT === undefined) { b.motT = now; b.motH = b.h; b.steer = 0; b.fork = 0; b.squat = 0; return; }
+  const dt = clamp((now - b.motT) / 1000, 0, 0.1);
+  b.motT = now;
+  if (dt <= 0) return;
+  const dh = Math.atan2(Math.sin(b.h - b.motH), Math.cos(b.h - b.motH)); // the heading change, wrapped to (-pi, pi]
+  b.motH = b.h;
+  const rate = Math.abs(dh) > 0.5 ? 0 : dh / dt; // a jump (respawn, restart) is not a turn
+  const sus = suspensionTargets(b.ctl.brk, b.ctl.thr);
+  b.steer = smoothToward(b.steer, steerAngle(rate, b.v), dt, 0.08);
+  b.fork = smoothToward(b.fork, sus.fork, dt, 0.15);
+  b.squat = smoothToward(b.squat, sus.squat, dt, 0.2);
+}
+// the top view's tyres in sprite units: the rear one moves forward with the squat; the front one moves back with the fork
+// compression and turns by the steering about its centre
+function tyreTop(g, w, hw) {
+  g.fillStyle = acrossGrad(g, hw, '#0c0c0c', '#2e3236'); spriteRect(g, -w / 2, -hw, w, 2 * hw, hw * 0.75); g.fill();
+  g.fillStyle = 'rgba(255,255,255,.14)'; g.fillRect(-w / 2 + 0.04, -hw * 0.25, w - 0.08, hw * 0.5); // light tread down the middle
+}
+function drawTyresTop(g, steer, fork, squat) {
+  g.save(); g.translate(-0.71 + squat, 0); tyreTop(g, 0.62, 0.105); g.restore();
+  g.save(); g.translate(0.73 - fork, 0); g.rotate(steer); tyreTop(g, 0.58, 0.068); g.restore();
+}
+// the tyres are drawn each frame in the top view for the default drawing and the reference and art styles; the styled
+// presets keep their own tyres in the cache
+function topTyresLive(view) { const st = BIKE_STYLES[BIKE_STYLE]; return view === 'top' && !(st && !st.ref && !st.art); }
 function drawChassisTop(g, Tm, num) {
-  // tyres with a light tread down the middle, frame
-  for (const [x, w, hw] of [[-1.02, 0.62, 0.105], [0.44, 0.58, 0.068]]) { g.fillStyle = acrossGrad(g, hw, '#0c0c0c', '#2e3236'); spriteRect(g, x, -hw, w, 2 * hw, hw * 0.75); g.fill(); }
-  g.fillStyle = 'rgba(255,255,255,.14)'; g.fillRect(-0.98, -0.02, 0.54, 0.04); g.fillRect(0.48, -0.015, 0.5, 0.03);
+  // frame, the tyres come from drawTyresTop each frame (GDD 11j)
   g.fillStyle = '#30353a'; spriteRect(g, -0.78, -0.13, 0.5, 0.26, 0.05); g.fill();
   // brake discs
   g.fillStyle = '#7d7f82'; g.fillRect(0.6, -0.1, 0.26, 0.03); g.fillRect(0.6, 0.07, 0.26, 0.03);
@@ -1158,23 +1194,30 @@ function drawBikeShadow(b, vis) {
   ctx.save(); ctx.translate(b.x + 0.25, b.y + 0.35); ctx.rotate(b.h); ctx.translate(0, sl * 0.55 * VS); ctx.globalAlpha = 0.7; ctx.drawImage(TEX.shadow, -1.2 * VS, -0.45 * VS, 2.4 * VS, 0.9 * VS); ctx.restore();
   // darker where the tyres touch the road (GDD 11i)
   ctx.translate(b.x, b.y); ctx.rotate(b.h); ctx.globalAlpha = 0.35; ctx.fillStyle = '#000';
-  for (const x of [-0.72, 0.73]) { ctx.beginPath(); ctx.ellipse(x * VS, sl * 0.1 * VS, 0.28 * VS, 0.1 * VS, 0, 0, TAU); ctx.fill(); }
+  // the patches follow the suspension: the front one moves back and widens under braking, the rear one moves forward and
+  // widens under squat (GDD 11j)
+  const fk = (b.fork || 0), sq = (b.squat || 0);
+  for (const [x, grow] of [[0.73 - fk, 1 + 0.3 * fk / FORK_TRAVEL], [-0.72 + sq, 1 + 0.3 * sq / SQUAT_TRAVEL]]) { ctx.beginPath(); ctx.ellipse(x * VS, sl * 0.1 * VS, 0.28 * grow * VS, 0.1 * VS, 0, 0, TAU); ctx.fill(); }
   ctx.restore(); ctx.globalAlpha = 1;
 }
 function drawBike(b, vis) {
   const VS = PHYS.VS * CAM.boost; const sp = bikeSprite(b.team, b.num, bikeView()); const w = SPW / SPR, h = SPH / SPR;
   if (b.crashed && b.crash) {
     const C = b.crash;
-    if (vis(C.bk.x, C.bk.y, 4)) { ctx.save(); stretchAt(C.bk.x, C.bk.y); ctx.translate(C.bk.x, C.bk.y); ctx.rotate(C.bk.rot); ctx.scale(VS, VS * 0.8); ctx.translate(0, C.bk.side * 0.2); ctx.drawImage(sp.c, -w / 2, -h / 2, w, h); ctx.restore(); }
+    if (vis(C.bk.x, C.bk.y, 4)) { ctx.save(); stretchAt(C.bk.x, C.bk.y); ctx.translate(C.bk.x, C.bk.y); ctx.rotate(C.bk.rot); ctx.scale(VS, VS * 0.8); ctx.translate(0, C.bk.side * 0.2); if (topTyresLive(bikeView())) { drawTyresTop(ctx, 0, 0, 0); } ctx.drawImage(sp.c, -w / 2, -h / 2, w, h); ctx.restore(); }
     if (vis(C.rd.x, C.rd.y, 4)) { ctx.save(); stretchAt(C.rd.x, C.rd.y); ctx.translate(C.rd.x, C.rd.y); ctx.rotate(C.rd.rot); ctx.scale(VS, VS); ctx.drawImage(sp.r, -w / 2, -h / 2, w, h); ctx.restore(); }
     return;
   }
   if (b.dnf || !vis(b.x, b.y, 4)) return;
+  updateBikeMotion(b, performance.now());
   const sl = Math.sin(b.lean), cl = Math.cos(b.lean);
   if (artStyle()) { drawArtBike(b, VS, w, h); return; }
+  const live = topTyresLive(bikeView());
   ctx.save(); stretchAt(b.x, b.y); ctx.translate(b.x, b.y); ctx.rotate(b.h); ctx.scale(VS, VS);
   if (b.wheelie > 0.05) ctx.scale(1 + b.wheelie * 0.04, 1);
-  ctx.save(); ctx.translate(0, sl * 0.16); ctx.scale(1, 0.72 + 0.28 * cl); ctx.drawImage(sp.c, -w / 2, -h / 2, w, h); ctx.restore();
+  ctx.save(); ctx.translate(0, sl * 0.16); ctx.scale(1, 0.72 + 0.28 * cl);
+  if (live) drawTyresTop(ctx, b.steer, b.fork, b.squat); // the tyres under the frame, turned and moved (GDD 11j)
+  ctx.drawImage(sp.c, -w / 2, -h / 2, w, h); ctx.restore();
   // brake light on the tail of the drawing (GDD 11i)
   if (b.ctl.brk > 0.3 && b.v > 5) { ctx.fillStyle = 'rgba(255,40,30,.6)'; ctx.beginPath(); ctx.arc(-0.94, sl * 0.16, 0.13, 0, TAU); ctx.fill(); }
   // the rider, posed each frame, with the inside knee out as part of the leg (GDD 11i)

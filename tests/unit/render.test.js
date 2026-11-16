@@ -229,10 +229,50 @@ test('drawRearStyled: the rear view of a style, with the number on the tail', ()
   assert.ok(ops(c, 'roundRect').length >= 2, 'tyres'); assert.deepEqual(texts(c), ['7']);
   const d = makeCtx({}); G.drawRearStyled(d, G.TEAMS[0], 7, 0.5, G.BIKE_STYLES[4]); assert.ok(d.calls.some(o => o[0] === '=fillStyle' && o[1] === '#2a0606'), 'carbon tail');
 });
-test('drawChassisTop, tailNumber: tyres, fairing in team colours, windscreen, the number on the tail', () => {
+test('drawChassisTop, tailNumber: frame without tyres (drawn each frame), fairing in team colours, the number on the tail', () => {
   const { G } = load(); const c = makeCtx({}); G.drawChassisTop(c, G.TEAMS[2], 25);
-  assert.equal(ops(c, 'roundRect').length, 4, 'two tyres, frame, seat'); assert.ok(c.calls.some(o => o[0] === '=fillStyle' && o[1] === G.TEAMS[2].c2), 'stripe');
+  assert.equal(ops(c, 'roundRect').length, 2, 'frame and seat only: the tyres are drawn by drawTyresTop (GDD 11j)'); assert.ok(c.calls.some(o => o[0] === '=fillStyle' && o[1] === G.TEAMS[2].c2), 'stripe');
   assert.deepEqual(texts(c), ['25']); const t = makeCtx({}); G.tailNumber(t, 9, -0.7); assert.deepEqual(ops(t, 'translate')[0].slice(1), [-0.7, 0]); assert.deepEqual(texts(t), ['9']);
+});
+test('steerAngle: zero on a straight, sign follows the heading rate, a degree or two at 300 km/h, capped at 25 degrees', () => {
+  const { G } = load();
+  assert.equal(G.steerAngle(0, 50), 0); assert.ok(G.steerAngle(0.5, 50) > 0 && G.steerAngle(-0.5, 50) < 0, 'steers into the turn');
+  near(G.steerAngle(0.2, 83), Math.atan(1.45 * 0.2 / 83), 1e-12, 'the wheelbase times the rate over the speed');
+  assert.ok(Math.abs(G.steerAngle(0.2, 83)) < 2 * DEG, 'small at speed'); near(G.steerAngle(10, 1), 25 * DEG, 1e-12, 'capped at 25 degrees');
+});
+test('suspensionTargets: fork on braking, squat on throttle above 0.7 and not while braking, none at rest', () => {
+  const { G } = load();
+  assert.deepEqual(G.suspensionTargets(0, 0), { fork: 0, squat: 0 });
+  near(G.suspensionTargets(1, 0).fork, 0.08, 1e-12, 'fork at full brake'); near(G.suspensionTargets(2, 0).fork, 0.08, 1e-12, 'brake clamped to 1');
+  near(G.suspensionTargets(0, 1).squat, 0.06, 1e-12, 'squat at full throttle'); near(G.suspensionTargets(1, 1).squat, 0, 1e-12, 'no squat while braking');
+  near(G.suspensionTargets(0, 0.7).squat, 0, 1e-12, 'no squat below 0.7'); assert.ok(G.suspensionTargets(0, 0.85).squat > 0 && G.suspensionTargets(0, 0.85).squat < 0.06, 'squat grows past 0.7');
+});
+test('smoothToward: moves towards the target without overshoot, reaches it after long times', () => {
+  const { G } = load();
+  near(G.smoothToward(0, 1, 0.1, 0.1), 1 - Math.exp(-1), 1e-12, 'one time constant, 63 %'); assert.ok(G.smoothToward(0, 1, 5, 0.1) <= 1, 'no overshoot');
+  near(G.smoothToward(0, 1, 100, 0.1), 1, 1e-9, 'settles'); near(G.smoothToward(2, 2, 0.5, 0.1), 2, 1e-12, 'holds at the target');
+});
+test('updateBikeMotion: first call sets the state, later calls follow the heading rate and the controls, a jump is no turn', () => {
+  const { G, b } = riding(100); delete b.motT;
+  b.h = 0; G.updateBikeMotion(b, 1000); assert.deepEqual([b.steer, b.fork, b.squat], [0, 0, 0], 'first call: at rest');
+  b.h = 0.02; b.v = 50; b.ctl.brk = 1; b.ctl.thr = 0; G.updateBikeMotion(b, 1100);
+  assert.ok(b.steer > 0 && b.steer < G.steerAngle(0.2, 50), 'steers towards the rate, not past it'); assert.ok(b.fork > 0 && b.fork < 0.08, 'fork moves on the brake'); assert.equal(b.squat, 0);
+  const before = [b.steer, b.fork]; G.updateBikeMotion(b, 1100); assert.deepEqual([b.steer, b.fork], before, 'no time passed, no change');
+  b.h += 3; b.ctl.brk = 0; G.updateBikeMotion(b, 1200); assert.ok(Math.abs(b.steer) < Math.abs(before[0]), 'a jump of the heading is not a turn: steering eases off');
+});
+test('tyreTop: a rounded tyre with a tread line down the middle', () => {
+  const { G } = load(); const c = makeCtx({}); G.tyreTop(c, 0.6, 0.1);
+  assert.equal(ops(c, 'roundRect').length, 1); assert.equal(ops(c, 'fillRect').length, 1, 'the tread');
+});
+test('drawTyresTop: two tyres each frame, the front turned by the steer and moved by the fork, the rear moved by the squat', () => {
+  const { G } = load(); const c = makeCtx({}); G.drawTyresTop(c, 0.1, 0.05, 0.03);
+  assert.equal(ops(c, 'roundRect').length, 2, 'two tyres'); assert.deepEqual(ops(c, 'translate').map(o => o.slice(1)), [[-0.71 + 0.03, 0], [0.73 - 0.05, 0]]);
+  assert.deepEqual(ops(c, 'rotate').map(o => o[1]), [0.1], 'only the front wheel turns');
+});
+test('topTyresLive: the top view of the default, reference and art drawings, not the styled presets', () => {
+  const { G } = load(); G.BIKE_STYLE = 0; assert.equal(G.topTyresLive('top'), true); assert.equal(G.topTyresLive('behind'), false);
+  G.BIKE_STYLE = G.BIKE_STYLES.findIndex(st => st && st.name === 'Race'); assert.equal(G.topTyresLive('top'), false, 'the preset keeps its tyres');
+  G.BIKE_STYLE = G.BIKE_STYLES.findIndex(st => st && st.name === 'Reference'); assert.equal(G.topTyresLive('top'), true); G.BIKE_STYLE = 0;
 });
 test('drawRiderTop, drawHelmet: legs, arms, back and helmet with visor from above, none from behind', () => {
   const { G } = load(); const c = makeCtx({}); G.drawRiderTop(c, G.TEAMS[0]);

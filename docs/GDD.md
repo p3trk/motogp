@@ -786,6 +786,19 @@ Asked by Petr (2026-11-16): "improve graphics of motorbike, bike should be more 
 5. **Counter-steer at turn-in** (the bars briefly turn the other way): **not in this version**. It would need a new rule for steering, which is more than a drawing change.
 6. **Exhaust heat shimmer and smoke at full throttle:** **not in this version**; the existing spark and smoke effects stay.
 
+**Built (2026-11-16, Petr approved the recommended answers):**
+- Sprite cache 96 → 128 px a unit (`SPR`). Top-view tyres are no longer in the cache: `drawTyresTop` draws them each frame (the default, reference and art drawings; the styled presets keep their own tyres, `topTyresLive`).
+- Steering (`steerAngle`, capped 25°): the front tyre turns about its centre by atan(wheelbase × heading rate ÷ speed), smoothed (0.08 s). Correction to the design text: at 300 km/h on a 400 m corner the true angle is about 0.2°, so the steer only reads at low speed.
+- Suspension (`suspensionTargets`, `updateBikeMotion`): front tyre moves back by up to 0.08 units on braking, rear tyre forward by up to 0.06 units on squat (throttle above 0.7, not braking), smoothed 0.15 s and 0.2 s. Contact patches follow and widen by up to 30 %.
+- State is kept per bike and moved by the real time since the last drawing (at most 0.1 s); a heading jump over 0.5 rad is not a turn.
+
+**Not built (deviations from the approved answers, to decide):**
+- Vector outlines (answer 1): not done. The default bike was already vector shapes; the gain so far is the higher cache resolution only. The traced preview styles are unchanged.
+- Shading bands and detail lines (design item 2–3): not added.
+- Rider hands following the bars (design item 6): not done; the bars are not drawn.
+- Behind and CLOSE: steering and suspension are not shown (the front wheel is hidden behind the rider); only the Top-down view moves.
+- Tests run: `npm run test:unit` 304 pass; `bike_views` browser test passes all 10 checks, frame cost 0.2 % in CLOSE (headless Chromium, 22 bikes), well under the 5 % limit.
+
 ## 12. Track and graphics
 
 - Centreline from the TUMFTM racetrack-database (LGPL-3.0), resampled every ~2 m (5 888 m, 2 944 points); start line at the real finish line.

@@ -828,7 +828,7 @@ Asked by Petr (2026-11-16): "Improve graphics of the bike", after §11j, and "bi
 1. **Length:** **shorter overhangs, full stretch** (built, see item 1 above). Half the stretch was dropped after the test showed turn angles distorted; the approved recommended answer was changed by Petr on 2026-11-16 after that finding.
 2. **Detail level:** **moderate** (items 2 to 4 as above). A full redraw of the bike is a separate, larger job.
 
-**Built (2026-11-16):** the seam between tank and seat and the tyre sidewall edge (item 4); the shade band down the far flank and a thin specular line on the lit flank (item 3). The light is fixed to the bike, not to the screen, because the drawing is cached once per team, number and camera. The vector outlines (item 2) are not built: the body keeps its existing Bézier outline, so the gain is limited. Tests: `npm run test:unit` 304 pass; `bike_views` 10 of 10.
+**Built (2026-11-16):** the seam between tank and seat and the tyre sidewall edge (item 4); the shade band down the far flank and a thin specular line on the lit flank (item 3). The light is fixed to the bike, not to the screen, because the drawing is cached once per team, number and camera. Outline (item 2): the top-view body follows a silhouette traced from the reference picture (`assets/bike-parts/bike-top-only.png`, the bars, wheels and pipe left out) as 52 smooth Bézier segments (`BIKE_BODY_TOP`), in the existing body box. The tail is a little fuller than before. The rear (Behind and CLOSE) body still has its hand-set outline. Tests: `npm run test:unit` 304 pass; `bike_views` 10 of 10.
 
 ## 12. Track and graphics
 

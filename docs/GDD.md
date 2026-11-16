@@ -810,7 +810,7 @@ Asked by Petr (2026-11-16): "Improve graphics of the bike", after §11j, and "bi
 **Rule** (visual only: physics, lean, steering and suspension from §11j stay as they are; rider rig from §11i unchanged)
 
 *Length*
-1. **Half the stretch correction in Behind and CLOSE** (the alternative in §11i question 1). The stretch goes from the full factor to the midpoint with 1: ×1.25 in Behind and ×1.43 in CLOSE for the player's bike, and the same share for other bikes further ahead. The bike keeps some of its real height, and its length on screen drops by about a quarter of the stretch.
+1. **Shorter overhangs, full stretch kept.** The stretch stays the full §11i correction, so turn angles stay right. Half the stretch was tried first and failed: a 20° turn showed as 28° in Behind and 38° in CLOSE. Instead the whole drawing is scaled 0.92 along the bike (`BIKE_SHORT`): nose, tail, seat, number and rider move in with it, while the wheel centres stay where they are, so the wheelbase (1.45 m) and steering are unchanged. The tyres are 0.42 long instead of 0.62. Measured length: 1.81 units, down from 2.04 (about 11 % shorter).
 
 *Look*
 2. **Hand-set vector outlines** for the default body in all three drawings (Bézier curves, as the top view's fairing already is), so edges stay crisp at device pixel ratio.
@@ -825,8 +825,10 @@ Asked by Petr (2026-11-16): "Improve graphics of the bike", after §11j, and "bi
 - `bike_views` browser test: the "on-screen proportions" check now expects the half stretch instead of the full one; the other checks stay. Frame cost stays within 5 %.
 
 ### Open questions for 11k (recommended answer in bold; the design above uses it)
-1. **Length:** **half the stretch correction** (×1.25 Behind, ×1.43 CLOSE). Alternatives: shorten the drawing to about 1.9 units (also changes the wheelbase for steering), or leave the full stretch because it is the real proportion.
+1. **Length:** **shorter overhangs, full stretch** (built, see item 1 above). Half the stretch was dropped after the test showed turn angles distorted; the approved recommended answer was changed by Petr on 2026-11-16 after that finding.
 2. **Detail level:** **moderate** (items 2 to 4 as above). A full redraw of the bike is a separate, larger job.
+
+**Built (2026-11-16):** the seam between tank and seat and the tyre sidewall edge (item 4). The vector outlines (item 2) and the three shading bands (item 3) are not built yet: the body keeps its existing Bézier outline and gradient, so the gain is limited. Tests: `npm run test:unit` 304 pass; `bike_views` 10 of 10, frame cost 0.0 %.
 
 ## 12. Track and graphics
 

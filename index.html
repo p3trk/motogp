@@ -2118,7 +2118,10 @@ function drawChassisTop(g, Tm, num) {
   const gr = g.createLinearGradient(0, -0.32, 0, 0.32); gr.addColorStop(0, shade(Tm.c1, -0.45)); gr.addColorStop(0.35, shade(Tm.c1, 0.12)); gr.addColorStop(0.5, shade(Tm.c1, 0.28)); gr.addColorStop(0.65, shade(Tm.c1, 0.05)); gr.addColorStop(1, shade(Tm.c1, -0.5));
   g.fillStyle = gr; g.fill(body);
   g.save(); g.clip(body); g.fillStyle = Tm.c2; g.fillRect(-1, -0.055, 2, 0.11); g.fillStyle = shade(Tm.c2, -0.2); g.fillRect(0.05, -0.31, 0.2, 0.62);
-  g.fillStyle = 'rgba(255,255,255,.12)'; g.fillRect(-1, -0.2, 2, 0.06); g.restore(); // shine along the fairing
+  g.fillStyle = 'rgba(255,255,255,.12)'; g.fillRect(-1, -0.2, 2, 0.06); // shine along the fairing
+  // the shade band down the far flank, and a thin specular line on the lit flank (GDD 11k: light from the bike's left side)
+  g.fillStyle = 'rgba(0,0,0,.22)'; g.fillRect(-1, 0.19, 2, 0.12); g.fillStyle = 'rgba(255,255,255,.22)'; g.fillRect(-1, -0.25, 2, 0.02);
+  g.restore();
   g.lineWidth = 0.012; g.strokeStyle = 'rgba(0,0,0,.5)'; g.stroke(body);
   // winglets
   g.fillStyle = '#16181a'; for (const sg of [-1, 1]) { g.beginPath(); g.moveTo(0.66, sg * 0.27); g.lineTo(0.5, sg * 0.4); g.lineTo(0.43, sg * 0.4); g.lineTo(0.5, sg * 0.28); g.closePath(); g.fill(); }

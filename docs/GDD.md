@@ -747,6 +747,45 @@ Asked by Petr (2026-10-28, planning session): "Help to plan change to improve: 1
 - Assumption, to confirm: each sheet runs from upright to the full lean in order, left to right and top to bottom.
 - Known issues: in the top view the leaned frames sit off-centre, and in Behind and CLOSE the rear frames look blocky at game size.
 
+## 11j. Bike and rider realism (proposed, version set at Release)
+
+Asked by Petr (2026-11-16): "improve graphics of motorbike, bike should be more sharp, animation should be real-a-like, etc... do your best job you can."
+
+**Why**
+- The traced bike (§11i, `src/bike_art.js`) is built from colour clusters, so its edges are stepped and soft at game size, next to the sharp road, kerbs and tyre marks.
+- Only the rider moves. The bike itself has no suspension, no steering and no weight transfer, so braking and acceleration look like the bike slides on rails.
+
+**Rule** (visual only: lean, path, speed, grip and every physics value stay as in §5 and §11i)
+
+*Sharpness*
+1. **Vector outlines, not cluster traces.** Each bike part (tank, fairing, seat, tail, tyres, fork, swingarm, exhaust, mirrors) is an outline of Bézier curves in sprite units, filled at device resolution. Edges stay crisp at any zoom, in all three cameras.
+2. **Three tone bands and a highlight.** Each colour is drawn in light, base and shade, with a thin specular line on fairing and tank. The light comes from a fixed screen direction (upper left), so it does not change with heading.
+3. **Detail lines at one device pixel:** seams between tank and fairing, number board edge, tyre sidewall, brake disc, exhaust outlet.
+4. **Caches at device pixel ratio** (capped at 2×), made once per team, number and camera, as in §11i, so the 5 % frame limit still holds.
+
+*Motion* (each input is a value the game already has)
+5. **Suspension.** Under braking (brake 0–1) the front forks compress: the front end drops and the fork lowers by up to 4 % of bike length. Under throttle above 0.7 the rear squats by up to 3 %. Both follow the same smoothing as the rider pose (§11i), so rider and bike move together.
+6. **Steering.** The front wheel turns into the bend by the steering angle the heading change implies (wheelbase × heading rate ÷ speed), capped at 25°. At 300 km/h it is only a degree or two, as in real life; at low speed (curve training, pit lane, gravel) it reads clearly. The handlebars and the rider's hands turn with it, so the grips move with the wheel.
+7. **Front and rear wheel as separate cached pieces,** so the front wheel can turn and the fork can compress without redrawing the whole bike.
+8. **Weight transfer shows on the chassis.** Under braking the front tyre shows a larger contact patch, and under acceleration the rear tyre does; the tyre shading changes with load (visual only).
+9. **Kerbs and bumps.** The existing camera vibration (§11h) also bounces the bike's drawn chassis slightly, so the bike shares the shake the camera has.
+
+*Not changed*
+- No change to the physics, the lean value or the path. Visual lean does **not** lag the physics lean, because a drawn lag would make the bike look as if it does not follow its path (see the 1.24.0 lean rule).
+- The rider rig (§11i) keeps its joint formula. Only the bars and the wheel are added to it.
+
+**Tests**
+- Unit tests (GDD 13b) for each new function: steering angle (zero on straights, sign follows the bend, capped at 25°), fork compression and rear squat (zero at rest, maximum at full brake or throttle, never past the stated limit), and the device-pixel cache key.
+- `bike_views` browser test: front wheel turns more at 60 km/h than at 300 km/h, the bike outline stays inside the stated line width at 1× and 2× pixel ratios, and frame cost stays within 5 % of 1.24.0.
+
+### Open questions for 11j (recommended answer in bold; the design above uses it)
+1. **Where does the bike art come from?** Hand-set vector outlines drawn over the existing picture (no new files needed). Alternative: Petr supplies a sharper top and rear picture, and the outlines are traced from that. Petr offered assets on 2026-10-28, so either works.
+2. **Steering amount:** the true angle, capped at 25°. Alternative: exaggerate it about 3× so the turn reads in the top view at speed. Real angle is the recommendation.
+3. **Suspension amounts** (4 % fork, 3 % rear): **as proposed, then tuned by eye in game**, as the rider hang-off was in §11i.
+4. **Wheel rotation** (tread and spokes turning with speed): **not in this version**. From above at speed it is hard to see, and it costs a redraw each frame. Reconsider if the bike still looks static in Behind.
+5. **Counter-steer at turn-in** (the bars briefly turn the other way): **not in this version**. It would need a new rule for steering, which is more than a drawing change.
+6. **Exhaust heat shimmer and smoke at full throttle:** **not in this version**; the existing spark and smoke effects stay.
+
 ## 12. Track and graphics
 
 - Centreline from the TUMFTM racetrack-database (LGPL-3.0), resampled every ~2 m (5 888 m, 2 944 points); start line at the real finish line.

@@ -175,6 +175,22 @@ test('autoBox: shifts up near the redline and down when slow', () => {
   const c = G.makeBike({ gear: 5, v: 20 }); G.autoBox(c); assert.equal(c.gear, 4);
   const d = G.makeBike({ gear: 3, v: PHYS.gears[3] * 0.8 }); G.autoBox(d); assert.equal(d.gear, 3);
 });
+test('autoBox: the autopilot runs a minute of practice laps without crashing or leaving the racing line by much', () => {
+  const { G } = load();
+  G.UI.launch('practice', {});
+  G.W.phase = 'run'; G.W.paused = false; G.W.lights = -1;
+  const b = G.W.player;
+  b.auto = true; b.autopilot = true; b.assist = true; b.fuel = 22; b.trainHold = false; b.held = false;
+  placeAt(G, b, 0, 0); b.v = 40;
+  let rms = 0, n = 0;
+  for (let k = 0; k < 60 * 120 && !b.crashed; k++) {
+    G.simStep(G.SUB);
+    const off = b.d - G.T.lat[G.T.idx(b.s)];
+    rms += off * off; n++;
+  }
+  assert.ok(!b.crashed, 'no crash');
+  assert.ok(Math.sqrt(rms / n) < 2.5, `offset ${Math.sqrt(rms / n).toFixed(2)} m`);
+});
 test('stepBike: throttle accelerates, uses fuel and counts distance', () => {
   const { G, b } = soloBike({ auto: true });
   const f0 = b.fuel; b.ctl.thr = 1;

@@ -300,3 +300,36 @@ test('gravelStone: four stone colours by a random number', () => {
   const { G } = load();
   assert.equal(G.gravelStone(0.1), '#8f8a80'); assert.equal(G.gravelStone(0.3), '#e3d6b8'); assert.equal(G.gravelStone(0.6), '#a8916a'); assert.equal(G.gravelStone(0.8), '#d8cdb6');
 });
+
+// --- 3D bike sprites (GDD 11i) -----------------------------------------------
+test('bike3DImg: the team sprite images, cached per team and part, none for an unknown team', () => {
+  const { G } = load();
+  assert.equal(G.BIKE3D.teams.length, G.TEAMS.length, 'one chassis and one rider sprite per team');
+  const im = G.bike3DImg(2, 'chassis');
+  assert.ok(im.src.startsWith('data:image/png;base64,'), 'PNG data');
+  assert.equal(G.bike3DImg(2, 'chassis'), im); assert.notEqual(G.bike3DImg(2, 'rider'), im);
+  assert.equal(G.bike3DImg(99, 'chassis'), null);
+});
+test('useBike3D: on by default, off for Classic and when no sprites are built in', () => {
+  const { G } = load();
+  assert.equal(G.UI.opts.gfx, '3d'); assert.equal(G.useBike3D(), true);
+  G.UI.opts.gfx = 'classic'; assert.equal(G.useBike3D(), false);
+  G.UI.opts.gfx = '3d'; G.BIKE3D.teams = []; assert.equal(G.useBike3D(), false);
+});
+test('bikeLayer: the 3D image once it has loaded, the classic sprite before that and when Classic is chosen', () => {
+  const { G, b } = riding(30);
+  const sp = G.bikeSprite(0, 25); const other = { team: 0, isPlayer: false };
+  assert.equal(G.bikeLayer(b, 'chassis', sp.c), sp.c, 'not loaded yet');
+  const im = G.bike3DImg(b.team, 'chassis'); im.complete = true; im.naturalWidth = 240;
+  assert.equal(G.bikeLayer(b, 'chassis', sp.c), im, 'loaded');
+  G.UI.opts.gfx = 'classic'; assert.equal(G.bikeLayer(b, 'chassis', sp.c), sp.c, 'Classic');
+  G.UI.opts.gfx = '3d';
+  assert.equal(G.bikeLayer(other, 'rider', sp.r), null, 'other bikes have no rider layer in 3D');
+  assert.notEqual(G.bikeLayer(b, 'rider', sp.r), null, 'the player keeps the rider');
+});
+test('drawBikeNumber: the race number in white on the tail, outlined in black', () => {
+  const { G } = load(); const c = rec(G);
+  G.drawBikeNumber(25);
+  assert.ok(ops(c, 'fillText').some(o => o[1] === '25'), 'fill');
+  assert.ok(ops(c, 'strokeText').some(o => o[1] === '25'), 'outline');
+});

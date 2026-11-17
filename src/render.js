@@ -468,7 +468,7 @@ function drawWorld() {
   let sx = 0, sy = 0; if (HUD.shake > 0.01) { sx = (Math.random() - 0.5) * 8 * HUD.shake; sy = (Math.random() - 0.5) * 8 * HUD.shake; }
   const A = speedVib(); if (A > 0) { sx += (Math.random() - 0.5) * 2 * A; sy += (Math.random() - 0.5) * 2 * A; }
   try { for (const Ly of LAYERS) { ctx = Ly.g; drawWorldLayer(Ly, sx, sy); } } finally { ctx = mainCtx; }
-  if (camTilted()) { projectTilted(); speedBlur(); }
+  if (camTilted()) { projectTilted(); speedBlur(); gl3DDraw(W.bikes.filter(gl3DOn)); }
 }
 // --- speed blur (GDD 11f): at top speed the surroundings smear into zoom streaks from the horizon point straight
 // ahead, on a 1/4 resolution copy of the screen; the road with its kerbs (+0.3 m) and the bikes are cut out of it
@@ -657,7 +657,7 @@ function drawWorldLayer(Ly, sx, sy) {
   const list = W.bikes.slice().sort((a, b) => (a.isPlayer ? 1 : 0) - (b.isPlayer ? 1 : 0));
   ctx.globalAlpha = 0.42; for (const g of W.ghosts) { if (g.show) drawBike(g, vis); } ctx.globalAlpha = 1;
   for (const b of list) if (!b.dnf || b.crash) drawBikeShadow(b, vis);
-  for (const b of list) drawBike(b, vis);
+  for (const b of list) if (!gl3DOn(b)) drawBike(b, vis);
   drawParticles(vis);
   ctx.setTransform(Ly.dpr, 0, 0, Ly.dpr, 0, 0);
   if (camTilted() && Ly.y0 === 0) { // haze towards the horizon
@@ -786,22 +786,43 @@ function drawBikeShadow(b, vis) {
   const sl = Math.sin(b.lean);
   ctx.save(); ctx.translate(b.x + 0.45, b.y + 0.6); ctx.rotate(b.h); ctx.translate(0, sl * 0.55 * VS); ctx.globalAlpha = 0.7; ctx.drawImage(TEX.shadow, -1.25 * VS, -0.55 * VS, 2.5 * VS, 1.1 * VS); ctx.restore(); ctx.globalAlpha = 1;
 }
+// --- 3D bike sprites (GDD 11i): pre-rendered from models/ by tools/render_bike_sprites.py. Used when Bike graphics is 3D;
+// the classic drawn sprites stay as the fallback until the images have loaded.
+const BIKE3D_IMG = {};
+function bike3DImg(team, part) {
+  const t = BIKE3D.teams[team]; if (!t) return null;
+  const key = team + '_' + part; if (!BIKE3D_IMG[key]) { const im = document.createElement('img'); im.src = t[part]; BIKE3D_IMG[key] = im; }
+  return BIKE3D_IMG[key];
+}
+function useBike3D() { return UI.opts.gfx !== 'classic' && BIKE3D.teams.length > 0; }
+// the rider image is the player's rider: other bikes take their rider from the classic sprite (none in 3D)
+function bikeLayer(b, part, classic) {
+  if (!useBike3D()) { return classic; }
+  if (part === 'rider' && !b.isPlayer) { return null; }
+  const im = bike3DImg(b.team, part);
+  return im && im.complete && im.naturalWidth > 0 ? im : classic;
+}
+function drawBikeNumber(num) { // race number on the tail of a 3D chassis (the classic sprite draws it itself)
+  ctx.save(); ctx.translate(-0.74, 0); ctx.rotate(Math.PI / 2); ctx.fillStyle = '#fff'; ctx.font = '800 0.2px "Saira Condensed", Arial Narrow, sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineWidth = 0.03; ctx.strokeStyle = '#000'; ctx.strokeText(String(num), 0, 0); ctx.fillText(String(num), 0, 0); ctx.restore();
+}
 function drawBike(b, vis) {
   const VS = PHYS.VS * CAM.boost; const sp = bikeSprite(b.team, b.num); const w = SPW / SPR, h = SPH / SPR;
   if (b.crashed && b.crash) {
     const C = b.crash;
-    if (vis(C.bk.x, C.bk.y, 4)) { ctx.save(); ctx.translate(C.bk.x, C.bk.y); ctx.rotate(C.bk.rot); ctx.scale(VS, VS * 0.8); ctx.translate(0, C.bk.side * 0.2); ctx.drawImage(sp.c, -w / 2, -h / 2, w, h); ctx.restore(); }
-    if (vis(C.rd.x, C.rd.y, 4)) { ctx.save(); ctx.translate(C.rd.x, C.rd.y); ctx.rotate(C.rd.rot); ctx.scale(VS, VS); ctx.drawImage(sp.r, -w / 2, -h / 2, w, h); ctx.restore(); }
+    if (vis(C.bk.x, C.bk.y, 4)) { ctx.save(); ctx.translate(C.bk.x, C.bk.y); ctx.rotate(C.bk.rot); ctx.scale(VS, VS * 0.8); ctx.translate(0, C.bk.side * 0.2); ctx.drawImage(bikeLayer(b, 'chassis', sp.c), -w / 2, -h / 2, w, h); ctx.restore(); }
+    if (vis(C.rd.x, C.rd.y, 4)) { ctx.save(); ctx.translate(C.rd.x, C.rd.y); ctx.rotate(C.rd.rot); ctx.scale(VS, VS); const rr = bikeLayer(b, 'rider', sp.r); if (rr) { ctx.drawImage(rr, -w / 2, -h / 2, w, h); } ctx.restore(); }
     return;
   }
   if (b.dnf || !vis(b.x, b.y, 4)) return;
   const sl = Math.sin(b.lean), cl = Math.cos(b.lean);
   ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.h); ctx.scale(VS, VS);
   if (b.wheelie > 0.05) ctx.scale(1 + b.wheelie * 0.04, 1);
-  ctx.save(); ctx.translate(0, sl * 0.16); ctx.scale(1, 0.72 + 0.28 * cl); ctx.drawImage(sp.c, -w / 2, -h / 2, w, h); ctx.restore();
+  const chassis = bikeLayer(b, 'chassis', sp.c), rider = bikeLayer(b, 'rider', sp.r);
+  ctx.save(); ctx.translate(0, sl * 0.16); ctx.scale(1, 0.72 + 0.28 * cl); ctx.drawImage(chassis, -w / 2, -h / 2, w, h); if (chassis !== sp.c) { drawBikeNumber(b.num); } ctx.restore();
   // inside knee out when leaning
   if (Math.abs(b.lean) > 0.45) { const sg = Math.sign(b.lean); const TmC = TEAMS[b.team]; ctx.fillStyle = shade(TmC.c1, -0.35); ctx.beginPath(); ctx.ellipse(-0.08, sg * (0.36 + Math.abs(sl) * 0.12), 0.17, 0.075, sg * 0.5, 0, TAU); ctx.fill(); ctx.fillStyle = '#e8e8e8'; ctx.beginPath(); ctx.arc(-0.02, sg * (0.42 + Math.abs(sl) * 0.13), 0.04, 0, TAU); ctx.fill(); }
-  ctx.translate(0, sl * 0.5); ctx.drawImage(sp.r, -w / 2, -h / 2, w, h);
+  ctx.translate(0, sl * 0.5); if (rider) { ctx.drawImage(rider, -w / 2, -h / 2, w, h); }
   ctx.restore();
   // brake light glow for nearby riders
   if (b.ctl.brk > 0.3 && b.v > 5) { ctx.save(); ctx.translate(b.x - Math.cos(b.h) * 1.3 * VS, b.y - Math.sin(b.h) * 1.3 * VS); ctx.fillStyle = 'rgba(255,40,30,.55)'; ctx.beginPath(); ctx.arc(0, 0, 0.18, 0, TAU); ctx.fill(); ctx.restore(); }

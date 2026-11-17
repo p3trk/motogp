@@ -5,7 +5,9 @@ const globals = require('globals');
 const sonarjs = require('eslint-plugin-sonarjs');
 
 module.exports = [
-  { ignores: ['index.html', 'node_modules/**', 'saved_tracks/**', 'shots/**', '.claude/**'] },
+  // src/vendor: three.min.js, a minified library; src/bike3d.js and src/bike3dmodel.js: generated data (base64), not
+  // written by hand (GDD 11i)
+  { ignores: ['index.html', 'node_modules/**', 'saved_tracks/**', 'shots/**', '.claude/**', 'src/vendor/**', 'src/bike3d.js', 'src/bike3dmodel.js'] },
   js.configs.recommended,
   sonarjs.configs.recommended,
   {

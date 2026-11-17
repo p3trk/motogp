@@ -1,4 +1,4 @@
-// --- real-time 3D bikes (GDD 11i-b): three.js draws the bikes on a transparent canvas, in the tilted view.
+// --- real-time 3D bikes (GDD 11l-b): three.js draws the bikes on a transparent canvas, in the tilted view.
 // The 3D camera uses the same projection as worldToScreen (CSS perspective(P) rotateX(a)), so a bike lands where the
 // road under it is. The bikes are composited after the road warp and the speed blur, as the 2D bikes are seen.
 // If WebGL or three.js is missing, or the view is not tilted, the 2D sprites are drawn as before.
@@ -59,10 +59,10 @@ function gl3DMatrix(f) {
 }
 // the exported model (src/bike3dmodel.js) in bike metres: decoded once, one indexed mesh per role
 const GL3D_DARK = '#1b1b1b'; // the same dark as tools/render_bike_sprites.py
-// pitch from load transfer (GDD 11i-b): acceleration moves weight to the rear (nose up), braking to the front (nose down).
+// pitch from load transfer (GDD 11l-b): acceleration moves weight to the rear (nose up), braking to the front (nose down).
 // The chassis pitches until the suspension balances the moment: theta = m a h / K, with the pitch stiffness
 // K = sum of k d^2 over the springs (k in N/m at the wheel, d the distance of that axle from the centre of mass).
-// Values (GDD 11i-b, checked online 2026-11-17): fork 0.85-1.0 kg/mm per leg = 9 N/mm, so kf = 9000 N/m per leg
+// Values (GDD 11l-b, checked online 2026-11-17): fork 0.85-1.0 kg/mm per leg = 9 N/mm, so kf = 9000 N/m per leg
 // (Cane Creek and VTR1000 spring-rate guides); centre of mass about 20 in = 0.5 m high and 52/48 front/rear (Tony
 // Foale via Cycle World / msgroup); the rear wheel rate kr = 40000 N/m is an assumption (shock 80-160 N/mm times the
 // linkage motion ratio squared), not a sourced figure.
@@ -91,7 +91,7 @@ function gl3DGeometry(role) {
   }
   return GL3D.geo[role];
 }
-// the rider's roles: skin, suit, the suit's stripes, and the helmet's shell, visor and trim. Only the player's bike has them (GDD 11i-b)
+// the rider's roles: skin, suit, the suit's stripes, and the helmet's shell, visor and trim. Only the player's bike has them (GDD 11l-b)
 const GL3D_RIDER_ROLES = ['rider', 'suit', 'stripe', 'helmet', 'visor', 'trim'];
 function gl3DColour(team, role) {
   const T = TEAMS[team];
@@ -119,7 +119,7 @@ function gl3DWheelFrame(f, steer) {
   const O = f.O.map((o, i) => o + (p[0] - rp[0]) * ax[0][i] + (p[1] - rp[1]) * ax[1][i] + (p[2] - rp[2]) * ax[2][i]);
   return { O, X, Y, Z: f.Z };
 }
-// the finish of each role (GDD 11i-b): gloss on the bodywork and helmet, glass on the screen and visor, satin suit; the
+// the finish of each role (GDD 11l-b): gloss on the bodywork and helmet, glass on the screen and visor, satin suit; the
 // roles not listed (skin, tyres and dark parts) are matte
 const GL3D_FINISH = {
   body: { specular: 0x9a9a9a, shininess: 70 }, screen: { specular: 0xffffff, shininess: 120, transparent: true, opacity: 0.85 },

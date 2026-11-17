@@ -1,4 +1,4 @@
-"""Render the race helmet (tools/helmet.py) on its own in a few team colours, to check its shape by eye (GDD 11i-b).
+"""Render the race helmet (tools/helmet.py) on its own in a few team colours, to check its shape by eye (GDD 11l-b).
 
   /Applications/Blender.app/Contents/MacOS/Blender -b --factory-startup -P tools/render_helmet.py -- --out shots/helmet
 """

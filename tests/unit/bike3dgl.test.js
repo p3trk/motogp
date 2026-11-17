@@ -1,4 +1,4 @@
-// Unit tests for src/bike3dgl.js (GDD 11i-b): the three.js bikes. The projection must reproduce worldToScreen, the
+// Unit tests for src/bike3dgl.js (GDD 11l-b): the three.js bikes. The projection must reproduce worldToScreen, the
 // bike frame must sit on the road, and without WebGL the 2D bikes are used.
 const test = require('node:test');
 const assert = require('node:assert/strict');

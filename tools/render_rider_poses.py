@@ -1,4 +1,4 @@
-"""Render the rider's hang-off poses on the leaned bike, to check them by eye before they are baked (GDD 11i-b).
+"""Render the rider's hang-off poses on the leaned bike, to check them by eye before they are baked (GDD 11l-b).
 
 Run from the project root, on the rigged bike scene:
   /Applications/Blender.app/Contents/MacOS/Blender -b "<scene>.blend" -P tools/render_rider_poses.py -- \

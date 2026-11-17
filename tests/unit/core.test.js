@@ -290,7 +290,7 @@ test('leanRiderRate: a heavier rider rolls the bike faster, from the momentum th
   assert.equal(G.leanRiderRate(), base, 'restored');
 });
 
-// lean behaviour in the physics (GDD 11i-c): the lean moves no faster than leanRate, a swing takes the time that rate
+// lean behaviour in the physics (GDD 11m): the lean moves no faster than leanRate, a swing takes the time that rate
 // gives, and the lean stays under the speed cap. The speed is held fixed so only the lean is measured.
 const holdSpeed = v => (b => { b.v = v; });
 test('stepBike: at low speed the lean never moves faster than the roll rate, and a full swing takes about 1.2 s', () => {

@@ -1,4 +1,5 @@
-"""Render the 3D bike and rider sprites for the game (GDD 11i).
+"""Render the 3D bike and rider sprites (GDD 11l). The game no longer uses the sprites (it draws the bikes in real-time
+3D); this file stays for its scene helpers (place_scene, set_colours), used by the other tools.
 
 Run from the project root, pointing at the rigged bike scene (models/ is not in git):
   /Applications/Blender.app/Contents/MacOS/Blender -b "<scene>.blend" -P tools/render_bike_sprites.py -- \

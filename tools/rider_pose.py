@@ -1,4 +1,4 @@
-"""The rider's hang-off pose for a lean (GDD 11i-b). Used by tools/render_rider_poses.py (to check the poses by eye) and
+"""The rider's hang-off pose for a lean (GDD 11l-b). Used by tools/render_rider_poses.py (to check the poses by eye) and
 tools/export_bike_models.py (to bake them for the game), so both use the same pose.
 
 Works in the exported frame set up by render_bike_sprites.place_scene: bike forward +X, up +Z. Positive lean is a right
@@ -33,7 +33,7 @@ P = {
     'KNEE_OUT': 0.6, 'KNEE_DOWN': 0.25, 'KNEE_CLEAR': 0.15, 'KNEE_PAD': 0.07,
 }
 _BIKE = {}
-# the handlebar grips, measured from the bike's mesh (slices across the bars, GDD 11i-b): the centre of each grip in the
+# the handlebar grips, measured from the bike's mesh (slices across the bars, GDD 11l-b): the centre of each grip in the
 # exported frame, x forward, +-y to the side, z above the road. Each pose moves the wrist's IK target until the centre of
 # the hand (measured on the mesh at rest, in the forearm's own frame) sits on the grip (fit_hands).
 GRIP = Vector((0.41, 0.29, 0.79))

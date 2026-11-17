@@ -16,7 +16,7 @@ function mulberry(seed) { return function () { seed |= 0; seed = seed + 0x6D2B79
 //  22 L tank, max lean ~64 deg, braking ~1.45 g (front stoppie limit), anti-wheelie ~1.0 g
 // ---------------------------------------------------------------------------
 const PHYS = {
-  // rider with leathers and boots: the middle of the 63–70 kg range of the MotoGP grid (GDD 11i-c)
+  // rider with leathers and boots: the middle of the 63–70 kg range of the MotoGP grid (GDD 11m)
   massBike: 157, massRider: 67, fuelDensity: 0.745, tank: 22,
   pMax: 205000, redline: 18000, idle: 4200,
   gears: [0, 135, 178, 220, 260, 302, 345].map(k => k / 3.6), // top speed per gear at redline
@@ -375,7 +375,7 @@ function shift(b, dir) {
   if (dir < 0 && rpmFor(b.v, ng) > PHYS.redline + 400) { b.overrev = 0.8; return false; } // ECU over-rev protection
   b.gear = ng; if (dir > 0) { b.shiftCut = 0.025; } b.shiftFlash = 0.25; return true;
 }
-// how fast the lean moves toward its target (rad/s) at speed v (m/s): the slower of two limits (GDD 11i-c)
+// how fast the lean moves toward its target (rad/s) at speed v (m/s): the slower of two limits (GDD 11m)
 //  - the rider's input: the rider shifts their mass sideways at most at LEAN_RIDER_SHIFT m/s. The bike rolls by the
 //    angular momentum they transfer: w = m_r u h_r / (m_b h_b^2 + m_r h_r^2), the rider's share of the roll inertia
 //    included (so a heavier rider transfers more, and adds inertia too). Same at any speed;
@@ -392,7 +392,7 @@ function leanRiderRate() {
   return LEAN_RIDER_SHIFT * mr * LEAN_H_RIDER / (mb * LEAN_H_BIKE ** 2 + mr * LEAN_H_RIDER ** 2);
 }
 function leanRate(v) { return Math.min(leanRiderRate(), LEAN_DAMP / Math.max(v, 1)); }
-// the most a bike leans at speed v (m/s), to either side (GDD 11i-c). Zero when stopped: a bike cannot hold a lean at
+// the most a bike leans at speed v (m/s), to either side (GDD 11m). Zero when stopped: a bike cannot hold a lean at
 // standstill. It rises to the grip maximum PHYS.maxLean by about 50 km/h, stays there to 150 km/h, and falls to
 // 40 degrees at 300 km/h, since the corner radius for a given lean grows with v^2.
 function maxLeanAt(v) {

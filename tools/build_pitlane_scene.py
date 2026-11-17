@@ -1,4 +1,4 @@
-"""Build a pit-lane scene with all 22 bikes and riders, in their team colours, and render it (GDD 11i-b).
+"""Build a pit-lane scene with all 22 bikes and riders, in their team colours, and render it (GDD 11l-b).
 
 Run from the project root:
   /Applications/Blender.app/Contents/MacOS/Blender -b "<debranded scene>.blend" -P tools/build_pitlane_scene.py -- \

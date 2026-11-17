@@ -1,4 +1,4 @@
-"""The rider's race helmet (GDD 11i-b), built from a UV sphere shaped around the head. Used by tools/export_bike_models.py
+"""The rider's race helmet (GDD 11l-b), built from a UV sphere shaped around the head. Used by tools/export_bike_models.py
 (baked into the game) and tools/render_helmet.py (to check it by eye).
 
 build(hh) returns {role: (verts, tris)} in head-local metres (x forward, y left, z up, origin at the head's centre):

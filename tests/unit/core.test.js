@@ -259,3 +259,74 @@ test('aiControl: keeps to the pit speed limit in the lane', () => {
   b.held = false; b.inPitLane = true; b.v = PHYS.pitLimit + 5;
   G.aiControl(b, G.SUB, G.W); assert.equal(b.ctl.thr, 0); assert.ok(b.ctl.brk > 0);
 });
+
+test('maxLeanAt: zero when stopped, the grip maximum from about 50 km/h to 150 km/h, 40 degrees at 300 km/h', () => {
+  const { G } = load(); const DEG = Math.PI / 180, KMH = k => k / 3.6;
+  near(G.maxLeanAt(0), 0, 1e-12, 'stopped: no lean');
+  near(G.maxLeanAt(KMH(25)), G.PHYS.maxLean / 2, 0.01, '25 km/h: half');
+  near(G.maxLeanAt(KMH(50)), G.PHYS.maxLean, 1e-9, '50 km/h: full');
+  near(G.maxLeanAt(KMH(150)), G.PHYS.maxLean, 1e-9, '150 km/h: still full');
+  near(G.maxLeanAt(KMH(300)), 40 * DEG, 1e-9, '300 km/h');
+  near(G.maxLeanAt(KMH(400)), 40 * DEG, 1e-9, 'faster stays at 40');
+  assert.ok(G.maxLeanAt(KMH(10)) < G.maxLeanAt(KMH(30)), 'rises with speed from standstill');
+});
+
+test('leanRate: the slower of the rider limit and the damping (300 km/h in m/s, over v)', () => {
+  const { G } = load(); const KMH = k => k / 3.6;
+  near(G.leanRiderRate(), 1.6, 0.01, 'a 67 kg rider gives the fitted 1.6 rad/s');
+  assert.ok(G.leanRate(KMH(300)) < G.leanRate(KMH(100)), 'slower at speed');
+  near(G.leanRate(0), 1.6, 0.01, 'stopped: the rider limits');
+  near(G.leanRate(KMH(150)), 1.6, 0.01, '150 km/h: still the rider limit');
+  near(G.leanRate(KMH(300)), 1.0, 1e-9, '300 km/h: the damping limits, 300 km/h / v');
+  near(G.leanRate(KMH(400)), (300 / 3.6) / KMH(400), 1e-9, 'faster falls further');
+});
+test('leanRiderRate: a heavier rider rolls the bike faster, from the momentum they transfer', () => {
+  const { G } = load(); const m0 = G.PHYS.massRider;
+  const base = G.leanRiderRate();
+  G.PHYS.massRider = 80; const heavy = G.leanRiderRate();
+  G.PHYS.massRider = 55; const light = G.leanRiderRate();
+  G.PHYS.massRider = m0;
+  assert.ok(light < base && base < heavy, `${light.toFixed(3)} < ${base.toFixed(3)} < ${heavy.toFixed(3)}`);
+  assert.equal(G.leanRiderRate(), base, 'restored');
+});
+
+// lean behaviour in the physics (GDD 11m): the lean moves no faster than leanRate, a swing takes the time that rate
+// gives, and the lean stays under the speed cap. The speed is held fixed so only the lean is measured.
+const holdSpeed = v => (b => { b.v = v; });
+test('stepBike: at low speed the lean never moves faster than the roll rate, and a full swing takes about 1.2 s', () => {
+  const v = 60 / 3.6, { G, b } = soloBike({ v, gear: 2 }); b.lean = 0.95; b.ctl.leanT = -0.95; // 60 km/h: the full lean cap
+  let worst = 0, t = 0, t1 = null;
+  for (let k = 0; k < 400 && t1 === null; k++) {
+    const before = b.lean; holdSpeed(v)(b); G.stepBike(b, G.SUB, G.W);
+    worst = Math.max(worst, Math.abs(b.lean - before) / G.SUB); t += G.SUB;
+    if (b.lean <= -0.94) t1 = t;
+  }
+  assert.ok(t1 !== null, 'the lean reached the target');
+  assert.ok(worst <= G.leanRate(v) * 1.02, `roll rate ${worst.toFixed(3)} rad/s above ${G.leanRate(v).toFixed(3)}`);
+  assert.ok(t1 > 1.05 && t1 < 1.3, `swing took ${t1.toFixed(2)} s, expected about 1.2 s`);
+});
+test('stepBike: at 300 km/h the lean moves at 1.0 rad/s, so 0.8 rad takes about 0.8 s', () => {
+  const v = 300 / 3.6, { G, b } = soloBike({ v, gear: 6 }); b.lean = 0.4; b.ctl.leanT = -0.4;
+  let worst = 0, t = 0, t1 = null;
+  for (let k = 0; k < 400 && t1 === null; k++) {
+    const before = b.lean; holdSpeed(v)(b); G.stepBike(b, G.SUB, G.W);
+    worst = Math.max(worst, Math.abs(b.lean - before) / G.SUB); t += G.SUB;
+    if (b.lean <= -0.39) t1 = t;
+  }
+  assert.ok(t1 !== null, 'the lean reached the target');
+  assert.ok(worst <= 1.0 * 1.02, `roll rate ${worst.toFixed(3)} rad/s above 1.0`);
+  assert.ok(t1 > 0.7 && t1 < 0.9, `swing took ${t1.toFixed(2)} s, expected about 0.8 s`);
+});
+test('stepBike: at 300 km/h a steering demand of 69 degrees is held to the speed cap of 40 degrees', () => {
+  const v = 300 / 3.6, { G, b } = soloBike({ v, gear: 6 }); b.ctl.leanT = 1.2;
+  let peak = 0;
+  for (let t = 0; t < 4; t += G.SUB) { holdSpeed(v)(b); G.stepBike(b, G.SUB, G.W); peak = Math.max(peak, b.lean); }
+  assert.ok(peak < 1.2, 'held below the demand');
+  near(peak, 40 * Math.PI / 180, 0.01, 'peak lean');
+});
+test('stepBike: at low speed the lean is free to go past the 300 km/h cap, up to the grip limit', () => {
+  const v = 40 / 3.6, { G, b } = soloBike({ v, gear: 2 }); b.ctl.leanT = 1.2;
+  let peak = 0;
+  for (let t = 0; t < 4; t += G.SUB) { holdSpeed(v)(b); G.stepBike(b, G.SUB, G.W); peak = Math.max(peak, b.lean); }
+  assert.ok(peak > 50 * Math.PI / 180, `peak ${(peak * 180 / Math.PI).toFixed(1)} deg, expected past 50`);
+});

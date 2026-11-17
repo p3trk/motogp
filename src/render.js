@@ -883,7 +883,7 @@ function drawWorld() {
   let sx = 0, sy = 0; if (HUD.shake > 0.01) { sx = (Math.random() - 0.5) * 8 * HUD.shake; sy = (Math.random() - 0.5) * 8 * HUD.shake; }
   const A = speedVib(); if (A > 0) { sx += (Math.random() - 0.5) * 2 * A; sy += (Math.random() - 0.5) * 2 * A; }
   try { for (const Ly of LAYERS) { ctx = Ly.g; drawWorldLayer(Ly, sx, sy); } } finally { ctx = mainCtx; }
-  if (camTilted()) { projectTilted(); speedBlur(); }
+  if (camTilted()) { projectTilted(); speedBlur(); gl3DDraw(W.bikes.filter(gl3DOn)); }
 }
 // --- speed blur (GDD 11f): at top speed the surroundings smear into zoom streaks from the horizon point straight
 // ahead, on a 1/4 resolution copy of the screen; the road with its kerbs (+0.3 m) and the bikes are cut out of it
@@ -1072,7 +1072,7 @@ function drawWorldLayer(Ly, sx, sy) {
   const list = W.bikes.slice().sort((a, b) => (a.isPlayer ? 1 : 0) - (b.isPlayer ? 1 : 0));
   ctx.globalAlpha = 0.42; for (const g of W.ghosts) { if (g.show) drawBike(g, vis); } ctx.globalAlpha = 1;
   for (const b of list) if (!b.dnf || b.crash) drawBikeShadow(b, vis);
-  for (const b of list) drawBike(b, vis);
+  for (const b of list) if (!gl3DOn(b)) drawBike(b, vis);
   drawParticles(vis);
   ctx.setTransform(Ly.dpr, 0, 0, Ly.dpr, 0, 0);
   if (camTilted() && Ly.y0 === 0) { // haze towards the horizon
@@ -1209,6 +1209,8 @@ function drawBikeShadow(b, vis) {
   for (const [x, grow] of [[0.73 - fk, 1 + 0.3 * fk / FORK_TRAVEL], [-0.72 + sq, 1 + 0.3 * sq / SQUAT_TRAVEL]]) { ctx.beginPath(); ctx.ellipse(x * VS, sl * 0.1 * VS, 0.28 * grow * VS, 0.1 * VS, 0, 0, TAU); ctx.fill(); }
   ctx.restore(); ctx.globalAlpha = 1;
 }
+// Bike graphics 3D (GDD 11l): the bikes are drawn by three.js (src/bike3dgl.js); Classic keeps this 2D drawing
+function useBike3D() { return UI.opts.gfx !== 'classic'; }
 function drawBike(b, vis) {
   const VS = PHYS.VS * CAM.boost; const sp = bikeSprite(b.team, b.num, bikeView()); const w = SPW / SPR, h = SPH / SPR;
   if (b.crashed && b.crash) {

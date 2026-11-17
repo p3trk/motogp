@@ -833,6 +833,143 @@ Asked by Petr (2026-11-16): "Improve graphics of the bike", after §11j, and "bi
 
 **Built (2026-11-16):** the seam between tank and seat and the tyre sidewall edge (item 4); the shade band down the far flank and a thin specular line on the lit flank (item 3). The light is fixed to the bike, not to the screen, because the drawing is cached once per team, number and camera. Outline (item 2): the top-view body follows a silhouette traced from the reference picture (`assets/bike-parts/bike-top-only.png`, the bars, wheels and pipe left out) as 52 smooth Bézier segments (`BIKE_BODY_TOP`), in the existing body box. The tail is a little fuller than before. The rear (Behind and CLOSE) body still has its hand-set outline. Tests: `npm run test:unit` 304 pass; `bike_views` 10 of 10.
 
+## 11l. 3D bike and rider (new, not released)
+
+**Merge note (2026-11-17):** the pre-rendered sprites described first in this section were replaced by the real-time 3D below (11l-b) and removed when `dev`'s new 2D drawing (11i–11k) came in: that drawing is now the Classic fallback.
+
+**Status:** approved (2026-11-16) and built on branch `feature/bike-3d-sprites`. Not released yet: the version is set at release (GDD 14).
+
+**Goal:** draw the bikes and riders from the Blender models in `models/` instead of the procedural 2D drawing, so they look more like real machines. Physics, handling, AI, sound and the track don't change.
+
+**Approach (pre-rendered sprites, not live 3D):** the game stays a canvas 2D game. `tools/render_bike_sprites.py` renders the bike offline, and the result is stored in `src/bike3d.js` (generated, not edited by hand). No 3D engine is added.
+
+- **What is rendered:** two top-down transparent sprites per team, at the game's size (2.5 m × 1.3 m, 48 px per metre, rendered at 4×): the **chassis** (the bike with no rider) and the **rider** (the rider on the same position). These replace the two layers the game already draws, so the lean code is unchanged: the rider layer still moves by `sin(lean)` and the chassis is still squashed by `cos(lean)`.
+- **Change from the first proposal:** the first design proposed a rear-view strip of rider poses for lean. The game draws the bike top-down, so the strip was not used. Only the upright rider pose is built now. The accelerating and max-lean poses stay in the model files for a later step.
+- **Team colours:** each team's fictional colours (the same `TEAMS` list), not the source livery. Bodywork (Parts 1, 3, 4, 9) takes colour 1, the screen (Part 2) takes colour 2, the rest is dark. The source's real sponsor marks are not drawn.
+- **Rider suit:** near white (`RIDER_SUIT`), so the rider stands out from the team bodywork and the tarmac.
+- **Race number:** drawn by the game on the tail (`drawBikeNumber`), since the rendered chassis has no number.
+- **Setting:** Menu → **Bike graphics: 3D / Classic** (default 3D, saved with the other options). Classic keeps the procedural drawing. While the images have not loaded, the classic drawing is used.
+- **Regenerating:** `/Applications/Blender.app/Contents/MacOS/Blender -b "<rigged scene>.blend" -P tools/render_bike_sprites.py -- --out <dir> --js src/bike3d.js`, then `python3 tools/build.py`.
+
+**Known limits:**
+- The rider model is the MakeHuman body as it stands; pose and suit fine-tuning is a later re-render, not a code change.
+- The file is about 1.4 MB, because each sprite is embedded as base64 PNG so the page still opens from disk.
+
+**Decisions (recommended answer in bold; the build uses these):**
+1. Live 3D in the browser or pre-rendered sprites? **Pre-rendered sprites**.
+2. Keep the procedural sprites as a fallback? **Yes**: the "Bike graphics" setting, and the classic drawing until the images load.
+3. Livery? **Fictional team colours**, not the Ducati Lenovo livery (GDD 15).
+4. Rider model? **MakeHuman body as it is**; fine tuning later.
+5. Rendering size? **Game size at 4×** (changed from 2× after the CLOSE camera was soft; 11l-b option A).
+
+**Test plan:** unit tests for `bike3DImg`, `useBike3D`, `bikeLayer` and `drawBikeNumber` (GDD 13b). The team count in the generated file must match `TEAMS`.
+
+**Out of scope for this step:** physics, handling, AI, sound, the track, and the rider's fine tuning.
+
+### 11l-b. Real-time 3D bikes (three.js)
+
+**Why:** the pre-rendered sprites are soft at close range (the CLOSE camera enlarges a 240 px sprite), and they are flat top-down images with no shading or depth.
+
+**Option A, quick (sharper sprites):** render at 4× game size instead of 2×. Keeps the current design; file size grows about 3× (to about 1.4 MB). Low effort.
+
+**Option B, real-time 3D (recommended if sharpness matters):**
+- Add a WebGL layer (three.js, inlined into `index.html` so the page still opens from disk) that draws the bikes and riders in 3D on top of the current canvas.
+- Use the game's own camera (tilt, height, zoom, lean) for the 3D camera, so the bikes stay locked to the track.
+- Export the bike and rider from Blender as a low-poly glTF (about 20–30k triangles in total) with one 1024 px atlas per team, stored in the page as base64.
+- Lean is a real rotation of the 3D rider and bike. The 2D layers stay as the Classic fallback.
+
+**Costs and risks:**
+- The file grows by roughly 1–2 MB, and the first load takes longer on phones.
+- Phones and low-end machines need a fallback (the Classic setting already covers this).
+- The camera code is 2D-projected today, so the 3D camera must match it closely, or bikes will drift off the track.
+- Several days of work and new browser tests.
+
+**Decision (2026-11-16):** B, real-time 3D, on this branch. A was built first and is not enough.
+
+**Feasibility checked:** the tilted view is a plain perspective: `worldToScreen` is the CSS `perspective(P) rotateX(a)` projection about the canvas bottom centre (`src/render.js`). A three.js camera with the same focal length `P`, tilt `a` and origin can therefore draw the bikes exactly where the 2D code would put them. Lean and height follow from the same rotation.
+
+**Plan, in milestones (each checked in the browser before the next):**
+1. Vendor three.js (MIT licence) as `src/vendor/three.min.js`, inlined by `tools/build.py`. Check the page still opens from disk.
+2. Overlay WebGL canvas above the game canvas, below the HUD. Match the camera to `worldToScreen`, and draw one bike at a fixed track point. Check that it lines up with the 2D track.
+3. Export decimated glTF meshes from Blender (about 20–30k triangles in total): bike and rider, flat team colours set at runtime, so no texture atlas is needed.
+4. Drive the 3D bike from the existing state: position, heading, lean, wheelie, crash. Keep the 2D sprites as the Classic fallback.
+5. Tests and a browser check on all cameras; the unit tests keep the same function coverage.
+
+**Status (2026-11-16):** steps 1 and 2 are done on this branch.
+- Step 1: three.js r187 vendored as `src/vendor/three.min.js` (533 KB minified, MIT, only the classes used; see `src/vendor/README.md`).
+- Step 2: the bikes are drawn in 3D into a transparent WebGL canvas, and that canvas is composited after the road warp and the speed blur, so the bikes sit in the same scene as the road and are not blurred by speed. Scenery is drawn before the bikes, as today, so a tree or kerb never covers a bike; that matches the 2D behaviour.
+- Alignment: the 3D projection reproduces `worldToScreen` to within 0.01 px (unit test). In the CLOSE camera the 3D box lines up with the Classic sprite in both x and y.
+- Still placeholder: a box per bike. Crashed and retired bikes stay 2D. Top-down camera stays 2D.
+
+**Step 3 done (2026-11-16):** the real bike and rider replace the placeholder box. `tools/export_bike_models.py` exports the debranded scene (rider in its posed state) as four indexed meshes by role (body, screen, dark, rider), about 16k triangles in total, into `src/bike3dmodel.js`. The game builds the geometry once and colours each role per team at runtime (`gl3DColour`), with Lambert lighting. The format is base64 arrays, not glTF, so no loader is needed.
+
+**Step 3 fix (2026-11-17):** the rider is drawn on the player's bike only. Other bikes show the chassis, as riders are not separated visually from the bike at race distance.
+
+**Model and colour changes (2026-11-17):**
+- The rear stand is cut from the exported model (the triangles at the rear, low and near the ground, from `Part10`). A thin strut near the axle remains.
+- The rider is drawn in the team's second colour, so the rider reads apart from the bodywork. For some teams that colour is dark.
+- A tail light is added to every bike: a small box at the rear, lit red while braking (`b.ctl.brk` > 0.3 and speed above 5 m/s, the same rule as the 2D brake glow).
+- Materials: gloss on the bodywork, glass on the screen, satin on the rider, matte tyres. A fill light is added.
+
+**Performance levels (2026-11-17, final):** `--bike-scale 0.1 --rider-scale 0.5`. The bike is at 10% for every bike (about 8,200 triangles each, about 170,000 for 21 AI bikes); the player's rider is at 50% (about 26,800). The player's bike is about 35,000 in total. Full detail was tried for AI bikes (about 52,000 each) and reverted for frame-rate reasons. Not yet measured on a device.
+
+**Team designs and rider kit (2026-11-17, suits revised the same day):** each team has a suit, a helmet and an accent colour (`src/core.js`, `TEAMS`: `suit`, `helmet`, `accent`). The suit contrasts with the bike, so the rider reads apart from it; the accent is the suit's bands. The first version had the columns swapped, so most suits had the bike's colour. The 2D sprites and the bodywork colours are unchanged.
+
+| Team | Name idea | Bike | Suit | Bands (accent) | Helmet |
+|---|---|---|---|---|---|
+| Rosso Veloce Factory | fast red | red | white | red | red |
+| Blu Tridente Racing | blue, trident | blue | silver | blue | navy |
+| Arancia Tech | orange, tech | orange | charcoal | orange | orange |
+| Lime Works | lime, works | lime | black | lime | lime |
+| Nero Opaco | matt black | black | gold | black | black |
+| Celeste Squadra | sky blue | sky | white | sky | sky |
+| Viola Corse | violet, racing | violet | lime | violet | violet |
+| Argento Factory | silver | silver | red | silver | silver |
+| Giallo Moto | yellow | yellow | blue | yellow | yellow |
+| Bianco Sport | white, Italian | white | green | red | white |
+| Cobalt Satellite | cobalt, space | cobalt | pink | cobalt | cobalt |
+
+- **Rider (player only):** skin (head, neck, hands) in tan; a suit that sits 15 mm off the body (`SUIT_OFFSET`), so the body does not show through; a helmet at the head joint, with a dark visor on the front. Built by `tools/export_bike_models.py`.
+- **Suit pattern (2026-11-17):** two bands in the team's accent colour, one at the waist and one across the thighs, plus the arm bands where they cross the band heights. Built as a separate `stripe` role, so the shared suit geometry is unchanged. A chest band is not in yet, since the band rule sits at the waist.
+- **Not yet:** the helmet is a single colour (no top stripe), and the pit-lane render (tools/build_pitlane_scene.py) still shows plain suits.
+- **Check:** the mesh view of team 2 only. Other teams are checked by the colour tests, not by eye.
+
+**Rider poses (2026-11-17, approved on renders before baking):** the pose is one module, `tools/rider_pose.py`, used by the pose renders (`tools/render_rider_poses.py`, sheet in `shots/poses/v6/`) and the exporter, so the game gets exactly the approved poses.
+- **Tuck at every lean:** the upper body pitches forward 0.8 rad so the helmet sits behind the windscreen (the jaw is level with the screen top, about 1.0 m), and the head tilts back 70% of that to look ahead.
+- **Hang-off,** complete by 35° of lean and held from there (`HANG_FULL`; it was scaled to 64°, which left the rider barely off the seat at the usual 20–30° and looked like no movement): the bottom slides 0.22 m off the seat to the inside and drops 5 cm; the hips and the upper body roll about 11° further into the turn; the chest turns toward the inside; the head rolls back toward level.
+- **Inside knee:** points out toward the road, but stays at least 15 cm above the road once the bike leans (found by search on its IK pole), so it never drops below the bike.
+- **Outside knee:** rests against the side of the tank, 7 cm off its surface (found by search against the bike's mesh), so it never passes into or across the tank.
+- **Hands (fixed 2026-11-17):** the hands hold the grips at every lean, within 3 mm. The old grip targets floated in the air 26–30 cm out and 7 cm above the bars, and the IK fell short. Now: the grips are measured from the bike's mesh (0.41 m forward, ±0.29 m, 0.79 m up); the hand is measured from MakeHuman's hidden joint markers (the ForeArm bone ends about 10 cm short of the real wrist, and the hand points about 47° off the forearm, so the bone can't be used); each pose moves the wrist's IK target, in damped steps, until the knuckles sit 25 mm over the grip (`fit_hands`); the arm bones may stretch a little (`ARM_STRETCH` 0.25) so the outside arm reaches at full lean; and the exporter curls the fingers 110° round the knuckle line, toward the grip (`curl_fingers`). Taking the clavicle into the IK chain was tried and dropped: the solver swung the arm out sideways.
+- **Feet:** the IK keeps them on the pegs.
+- **In the game:** baked at 0 (the base mesh), ±20, ±40 and ±64 degrees as morph targets on the rider, suit, stripe, helmet and visor; the game blends the two poses either side of the lean (`gl3DPoseWeights`). The helmet follows the head bone's transform. Source: `Ducati rider debranded without stand.blend` (the paddock stand, `Part10`, removed by Petr; the exporter's stand cut is gone with it). The page is about 4.2 MB.
+
+**Race helmet (2026-11-17, remodelled from five reference views):** `tools/helmet.py`, checked with `tools/render_helmet.py` against `models/reference/helmet-ref-{side-right,side-left,front,rear,top}.png` and `helmet-reference.png` (`shots/helmet3/compare2.png`). The references are a real branded helmet: only the shape and features are taken, no logos or text, and the paint is in team colours (GDD 15).
+- **Shell** (team helmet colour): a superellipsoid (exponent 2.4, boxier than an egg), longer at the back with a low flat crown, a chin bar, a curved neck line, the intake scoop on the brow, a low rear spoiler that lifts off the top of the back, a diagonal ridge on each side from the spoiler's end down to the cheek, and a raised pad low on each side at the back.
+- **Dark parts** (`visor`): a tall visor wrapping about 80° round each side, its gasket and the black plate behind each end, the black rubber trim right round the neck line, the intake's slot, the chin's V vent, three slanted slots on each side of the chin and two exhaust slots under the spoiler.
+- **Trim** (team suit colour): a raised panel down the centre of the top, from the scoop to the spoiler.
+- About 16,800 triangles; it follows the head bone in every pose. Still softer than the reference: the shell has no sharp creases.
+
+**Known limits after step 3:** the surface looks grainy in the CLOSE camera (to check: normals of the decimated mesh, and the directional light). The white rider covers most of the bike from above. The page is about 3 MB.
+
+**Step 4, partly done (2026-11-17):** lean drives the 3D bike: it rolls about its forward axis through the contact point. Positive lean is a right turn (core.js), and the bike rolls to its right. Checked in the browser at +0.5 and -0.5 rad (the first version had the sign inverted, fixed 2026-11-17). Pitch done (2026-11-17, from load transfer): the bike pitches from the longitudinal acceleration `b.aLong`. Acceleration lifts the nose and braking dips it, by θ = m·a·h / K, where K = Σ k·d² is the pitch stiffness over the springs: fork 9 kN/m per leg at 0.71 m, rear wheel rate 40 kN/m at 0.76 m (K ≈ 32 kN·m/rad), and h = 0.5 m. At 1 g that is about 2°. Checked online (fork rate, centre of mass height and weight split); the rear rate is an assumption. The rear axle (0.65 m behind the centre, estimated) stays on the road. The earlier wheelie lift is replaced: it was a fixed angle on the wheelie value, not physics.
+
+## 11m. Lean at speed (new, not released)
+
+**Problem (2026-11-17):** the assist leaned the bike 53° at 314 km/h on a straight, because the path to the next corner (Stowe, 180 m ahead) needed that lean. Only grip limited the lean, so the bike could lean the same at any speed.
+
+**Done:** the most a bike leans now depends on speed (`maxLeanAt`, `src/core.js`), to either side (max and min lean are equal). It is 0 when stopped (a bike cannot hold a lean at standstill, the bug fixed 2026-11-17), rises to the grip maximum by about 50 km/h, stays there to 150 km/h, and falls linearly to 40° at 300 km/h. The assist's grip limit is kept as well.
+
+**Not done:** the lookahead. The lean target is pure pursuit toward a point about `6 + 0.42·v` metres ahead on the racing line. A shorter lookahead gives a *larger* angle for the same lateral offset, so it would lean harder, not less. The right fix takes the lean from the path curvature, not the steering angle. That changes the racing line and lap times, so it needs a separate decision and a lap-time check.
+
+**Rider mass (2026-11-17):** 67 kg (was 70 kg), the middle of the 63–70 kg range of the MotoGP grid, from the 2025 rider quotes and grid data (Motor Sport, motorsport.com). The bike minimum is 157 kg, so the total moves from 227 to 224 kg. The roll rate limits do not depend on mass in this model (see the note below).
+
+**Roll rate (2026-11-17, rebuilt from physics with rider mass):** the lean moves toward its target at the slower of two limits.
+- **Rider:** the rider shifts their mass sideways at a limited speed `u` (fitted: 2.54 m/s). The bike rolls by the momentum transferred, `w = m_r·u·h_r / (m_b·h_b² + m_r·h_r²)`, with h_b = 0.5 m and h_r = 1.0 m. A 67 kg rider gives 1.6 rad/s; 80 kg gives about 1.70, 55 kg about 1.48.
+- **Damping:** the spinning wheels resist rolling, `300 km/h / v` (fitted to 1.0 rad/s at 300 km/h; a derivation needs the wheel inertia and tyre grip).
+Below about 190 km/h the rider limits; above it the damping does. A 40 km/h swing takes about 1.2 s.
+
+**Test:** unit tests for `maxLeanAt` and `leanRate` (GDD 13b), and physics tests that step `stepBike` and check the lean itself: the per-step change never exceeds the roll rate, a 40 km/h swing takes about 1.2 s, a 300 km/h swing about 0.8 s, and the lean stays at 40° at 300 km/h but can pass 50° at low speed. The lean cap was not reproduced in a headless run, because the scenario needs a braking corner ahead.
+
 ## 12. Track and graphics
 
 - Centreline from the TUMFTM racetrack-database (LGPL-3.0), resampled every ~2 m (5 888 m, 2 944 points); start line at the real finish line.

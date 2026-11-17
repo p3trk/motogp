@@ -536,3 +536,10 @@ test('gravelStone: four stone colours by a random number', () => {
   const { G } = load();
   assert.equal(G.gravelStone(0.1), '#8f8a80'); assert.equal(G.gravelStone(0.3), '#e3d6b8'); assert.equal(G.gravelStone(0.6), '#a8916a'); assert.equal(G.gravelStone(0.8), '#d8cdb6');
 });
+
+// --- Bike graphics 3D / Classic (GDD 11l) ---------------------------------------
+test('useBike3D: on by default, off for Classic', () => {
+  const { G } = load();
+  assert.equal(G.UI.opts.gfx, '3d'); assert.equal(G.useBike3D(), true);
+  G.UI.opts.gfx = 'classic'; assert.equal(G.useBike3D(), false);
+});

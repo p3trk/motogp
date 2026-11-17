@@ -204,7 +204,8 @@ function gl3DDraw(list) {
   gl3DPrune(list);
   if (!list.length) return false;
   const w = cv.width, h = cv.height, P = tiltP();
-  GL3D.renderer.setPixelRatio(1); GL3D.renderer.setSize(w, h, false);
+  // resize only when the page size changes: setSize rewrites the canvas size every call, which reallocates the canvas
+  if (GL3D.w !== w || GL3D.h !== h) { GL3D.renderer.setPixelRatio(1); GL3D.renderer.setSize(w, h, false); GL3D.w = w; GL3D.h = h; }
   GL3D.cam.projectionMatrix.set(...gl3DProjection(P)); GL3D.cam.matrixWorldInverse.identity();
   for (const b of list) { gl3DPlaceBike(b); }
   GL3D.renderer.clear(); GL3D.renderer.render(GL3D.scene, GL3D.cam);

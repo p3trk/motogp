@@ -777,7 +777,9 @@ function aiControl(b, dt, W) {
     if (A.side) A.offT = clamp(myLine + A.offT + A.side * 1.2, lo, hi) - myLine;
   }
   A.off = lerp(A.off, A.offT, Math.min(1, dt * 1.6));
-  const look = 6 + v * 0.42; const j = (b.i + Math.round(look / DS)) % N;
+  // the look-ahead covers the time the lean needs to build: at 0.42 the bike could not roll into a corner in time
+  // at the rider's roll rate (GDD 11m), so it ran wide at speed
+  const look = 6 + v * 0.7; const j = (b.i + Math.round(look / DS)) % N;
   let dT = T.lat[j] + A.off;
   const sj = T.rel(j * DS);
   const pitting = b.inPitLane;
@@ -7538,7 +7540,8 @@ function gl3DDraw(list) {
   gl3DPrune(list);
   if (!list.length) return false;
   const w = cv.width, h = cv.height, P = tiltP();
-  GL3D.renderer.setPixelRatio(1); GL3D.renderer.setSize(w, h, false);
+  // resize only when the page size changes: setSize rewrites the canvas size every call, which reallocates the canvas
+  if (GL3D.w !== w || GL3D.h !== h) { GL3D.renderer.setPixelRatio(1); GL3D.renderer.setSize(w, h, false); GL3D.w = w; GL3D.h = h; }
   GL3D.cam.projectionMatrix.set(...gl3DProjection(P)); GL3D.cam.matrixWorldInverse.identity();
   for (const b of list) { gl3DPlaceBike(b); }
   GL3D.renderer.clear(); GL3D.renderer.render(GL3D.scene, GL3D.cam);

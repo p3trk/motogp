@@ -579,7 +579,9 @@ function aiControl(b, dt, W) {
     if (A.side) A.offT = clamp(myLine + A.offT + A.side * 1.2, lo, hi) - myLine;
   }
   A.off = lerp(A.off, A.offT, Math.min(1, dt * 1.6));
-  const look = 6 + v * 0.42; const j = (b.i + Math.round(look / DS)) % N;
+  // the look-ahead covers the time the lean needs to build: at 0.42 the bike could not roll into a corner in time
+  // at the rider's roll rate (GDD 11m), so it ran wide at speed
+  const look = 6 + v * 0.7; const j = (b.i + Math.round(look / DS)) % N;
   let dT = T.lat[j] + A.off;
   const sj = T.rel(j * DS);
   const pitting = b.inPitLane;

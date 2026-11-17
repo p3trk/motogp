@@ -968,6 +968,8 @@ Asked by Petr (2026-11-16): "Improve graphics of the bike", after §11j, and "bi
 - **Damping:** the spinning wheels resist rolling, `300 km/h / v` (fitted to 1.0 rad/s at 300 km/h; a derivation needs the wheel inertia and tyre grip).
 Below about 190 km/h the rider limits; above it the damping does. A 40 km/h swing takes about 1.2 s.
 
+**Autopilot fix (2026-11-17):** the slower roll rate (`leanRate`) made the autopilot run wide. Its look-ahead (6 + 0.42·v m) was shorter than the distance a bike needs to roll into a corner, so at about 140 km/h it chased a 7 m offset with a 62° lean target, could not roll that fast, and ran onto the gravel. The look-ahead is now 6 + 0.7·v m. Headless, a minute of practice laps goes clean (no crash, 1.4 m RMS offset over 240 s, against 0.8 m before the slower roll), and the camera test passes on both runs. Tried and rejected: a lower steering gain (runs 25 m wide), a lead term on the lean target (no effect), and feedforward from the track curvature (worse).
+
 **Test:** unit tests for `maxLeanAt` and `leanRate` (GDD 13b), and physics tests that step `stepBike` and check the lean itself: the per-step change never exceeds the roll rate, a 40 km/h swing takes about 1.2 s, a 300 km/h swing about 0.8 s, and the lean stays at 40° at 300 km/h but can pass 50° at low speed. The lean cap was not reproduced in a headless run, because the scenario needs a braking corner ahead.
 
 ## 12. Track and graphics

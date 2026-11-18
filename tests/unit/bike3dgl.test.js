@@ -229,3 +229,12 @@ test('gl3DPlaceBike: every mesh of the bike is shown and placed; the tail light 
   const body = list.find(m => m.userData.role === 'body');
   assert.notDeepEqual([...body.matrix.elements], [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1], 'placed on the road');
 });
+test('gl3DShow: shows or hides the 3D layer, writing the style only on a change', () => {
+  const { G } = load();
+  let writes = 0; const style = {}; const c = { style: new Proxy(style, { set(o, k, v) { writes++; o[k] = v; return true; } }) };
+  G.GL3D.canvas = c; G.GL3D.shown = undefined;
+  G.gl3DShow(true); assert.equal(style.display, 'block');
+  G.gl3DShow(true); assert.equal(writes, 1, 'no change: no write');
+  G.gl3DShow(false); assert.equal(style.display, 'none'); assert.equal(writes, 2);
+  G.GL3D.canvas = null; G.gl3DShow(true); // no 3D canvas: nothing happens
+});

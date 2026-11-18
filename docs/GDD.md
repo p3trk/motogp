@@ -976,11 +976,13 @@ Below about 190 km/h the rider limits; above it the damping does. A 40 km/h swin
 
 Asked by Petr (2026-11-18): the game is not smooth since the 3D bikes (1.26.0); plan to double the frame rate.
 
-**Step 1, measure (this step):** a frame-time overlay, toggled with **P** during a session. Averaged over the last 30 frames it shows the frame rate and the time per frame, split into: physics (`simStep`), camera, 2D world (the road layers), projection and speed blur, 3D bikes (placing the meshes and the three.js render call), 3D copy (copying the 3D canvas into the game canvas), and HUD. It also shows how many bikes are drawn in 3D, the canvas size and the pixel ratio. Browsers run the GPU work in the background, so the 3D render time is the CPU side only; the 3D copy waits for the GPU to finish, so its time includes the GPU work. The overlay is off by default and costs nothing when off.
+**Step 1, measure:** a frame-time overlay, toggled with **P** during a session. Averaged over the last 30 frames it shows the frame rate and the time per frame, split into: physics (`simStep`), camera, 2D world (the road layers), projection and speed blur, 3D bikes (placing the meshes and the three.js render call), and HUD. It also shows how many bikes are drawn in 3D, the canvas size and the pixel ratio. Browsers run GPU work in the background, so the 3D time is the CPU side only. The overlay is off by default and costs nothing when off.
+**Result (Petr, 2026-11-18):** Safari runs at 60 fps and is smooth; Brave (Chrome) runs at 33 fps.
+**Step 3, done first:** the 3D bikes are on their own canvas layer (`#gl3d`), above the game canvas and below the HUD, shown only while 3D bikes are drawn. Before, the 3D canvas was copied into the game canvas with `drawImage` every frame; in Chrome that copy makes the 2D canvas wait for the GPU. The picture is the same: the bikes were already drawn after the road warp and the speed blur, and screen shake never moved them.
 
 **Next steps (proposed, decided from the measurements):**
 2. Skip 3D bikes that are off screen (the same visibility test as the 2D bikes).
-3. Show the 3D canvas as its own layer above the game canvas and below the HUD, instead of copying it each frame.
+3. ~~Show the 3D canvas as its own layer~~ (done, above).
 4. Cheaper rendering: no MSAA, single-sided materials, the 3D canvas at 1× on high-DPI screens.
 5. A low-detail bike (about 1,500–2,000 triangles) for bikes that are small on screen.
 

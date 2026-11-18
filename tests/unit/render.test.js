@@ -571,5 +571,5 @@ test('drawPerf: the overlay shows the frame rate and every part, nothing when of
   G.drawPerf(); assert.equal(texts(c).length, 0, 'off: nothing drawn');
   G.perfToggle(); G.PERF.show = { frame: 20, world: 4 }; c = rec(G); G.drawPerf();
   const t = texts(c).join('\n');
-  assert.ok(t.includes('50 fps'), t); assert.ok(t.includes('2D world'), t); assert.ok(t.includes('3D copy'), t);
+  assert.ok(t.includes('50 fps'), t); assert.ok(t.includes('2D world'), t); assert.ok(t.includes('3D bikes (CPU)'), t);
 });

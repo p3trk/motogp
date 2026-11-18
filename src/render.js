@@ -882,7 +882,7 @@ function getTile(L, tx, ty, allowRender) {
 const PERF = { on: false, cur: {}, sum: {}, n: 0, last: 0, show: null, gl3d: 0 };
 const PERF_N = 30;
 const PERF_PARTS = [['sim', 'physics'], ['camera', 'camera'], ['world', '2D world'], ['project', 'projection + blur'],
-  ['gl3d', '3D bikes (CPU)'], ['copy', '3D copy (incl. GPU)'], ['hud', 'HUD']];
+  ['gl3d', '3D bikes (CPU)'], ['hud', 'HUD']];
 function perfToggle() { PERF.on = !PERF.on; PERF.cur = {}; PERF.sum = {}; PERF.n = 0; PERF.show = null; PERF.last = 0; }
 // adds the time since t0 to a part of this frame (nothing when the overlay is off)
 function perfAdd(name, t0) { if (PERF.on) { PERF.cur[name] = (PERF.cur[name] || 0) + performance.now() - t0; } }
@@ -921,7 +921,7 @@ function drawWorld() {
   let t = performance.now();
   try { for (const Ly of LAYERS) { ctx = Ly.g; drawWorldLayer(Ly, sx, sy); } } finally { ctx = mainCtx; }
   perfAdd('world', t);
-  if (camTilted()) { t = performance.now(); projectTilted(); speedBlur(); perfAdd('project', t); gl3DDraw(W.bikes.filter(gl3DOn)); }
+  if (camTilted()) { t = performance.now(); projectTilted(); speedBlur(); perfAdd('project', t); gl3DDraw(W.bikes.filter(gl3DOn)); } else { gl3DShow(false); }
 }
 // --- speed blur (GDD 11f): at top speed the surroundings smear into zoom streaks from the horizon point straight
 // ahead, on a 1/4 resolution copy of the screen; the road with its kerbs (+0.3 m) and the bikes are cut out of it

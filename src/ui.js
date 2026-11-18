@@ -529,6 +529,7 @@ window.addEventListener('keydown', e => {
   if (e.code === 'KeyR' && UI.state === 'play' && W.mode === 'practice' && !W.paused) UI.launch('practice', {}); // back to the spot or the grid slot, ghosts re-synced (GDD 2a, 11d)
   if (e.code === 'Escape' && (UI.state === 'play')) UI.togglePause();
   if (e.code === 'KeyM') Sound.on = !Sound.on;
+  if (e.code === 'KeyP') perfToggle(); // frame-time overlay (GDD 11n)
 });
 // C and the replay Camera button: Behind -> CLOSE -> Top-down -> Behind; also sets the start-screen option (GDD 11a)
 function camCycle() {
@@ -940,6 +941,7 @@ function teamForId(id, playerTeam) { const seats = []; for (let t = 0; t < TEAMS
 let last = performance.now(), acc = 0, perfAvg = 1 / 60, perfN = 0;
 function frame(now) {
   TouchCtl.sync();
+  perfFrame(now);
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
   // adaptive resolution: drop to 1x pixels if the machine can't keep up
   perfAvg = perfAvg * 0.97 + dt * 0.03; perfN++;
@@ -947,7 +949,9 @@ function frame(now) {
   else if (perfN > 180 && perfAvg > 0.024 && camTilted() && TILT.q > 0.8 && UI.state === 'play') { TILT.q = 0.8; resize(); perfN = 0; }
   if (UI.state === 'play' && !W.paused) {
     acc += dt; let n = 0;
+    const ts = performance.now();
     while (acc >= SUB && n < 16) { simStep(SUB); acc -= SUB; n++; }
+    perfAdd('sim', ts);
     if (n >= 16) acc = 0;
     HUD.step(dt);
     if (W.endTimer > 0) { W.endTimer -= dt; if (W.endTimer <= 0) { if (W.mode === 'race') UI.raceResults(); else if (W.mode === 'quali') UI.finishQuali(); } }
@@ -959,9 +963,16 @@ function frame(now) {
     // apart, and drawing the last step made the Behind camera stutter (1.11.2)
     const lerpPose = UI.state === 'play' && !W.paused, al = clamp(acc / SUB, 0, 1), saved = [];
     if (lerpPose) for (const b of W.bikes.concat(W.ghosts)) if (b.px !== undefined && !b.crashed) { saved.push([b, b.x, b.y, b.h]); b.x = b.px + (b.x - b.px) * al; b.y = b.py + (b.y - b.py) * al; b.h = b.ph + angWrap(b.h - b.ph) * al; }
-    updateCamera((UI.state === 'play' && !W.paused) || UI.state === 'replay' ? dt : 0.0001); drawWorld();
+    let tp = performance.now();
+    updateCamera((UI.state === 'play' && !W.paused) || UI.state === 'replay' ? dt : 0.0001); perfAdd('camera', tp);
+    drawWorld();
+    tp = performance.now();
     ctx = hudCtx; ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, hcv.width, hcv.height);
-    try { drawSpeedLines(dt); if (UI.state === 'play') drawHUD(dt); else if (UI.state === 'replay') drawReplayHUD(); } finally { ctx = mainCtx; for (const [b, x, y, h] of saved) { b.x = x; b.y = y; b.h = h; } }
+    try {
+      drawSpeedLines(dt);
+      if (UI.state === 'play') { drawHUD(dt); } else if (UI.state === 'replay') { drawReplayHUD(); }
+      perfAdd('hud', tp); drawPerf();
+    } finally { ctx = mainCtx; for (const [b, x, y, h] of saved) { b.x = x; b.y = y; b.h = h; } }
   }
   Sound.update(UI.state === 'play' ? W.player : null);
   requestAnimationFrame(frame);

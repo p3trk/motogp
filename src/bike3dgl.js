@@ -207,8 +207,11 @@ function gl3DDraw(list) {
   // resize only when the page size changes: setSize rewrites the canvas size every call, which reallocates the canvas
   if (GL3D.w !== w || GL3D.h !== h) { GL3D.renderer.setPixelRatio(1); GL3D.renderer.setSize(w, h, false); GL3D.w = w; GL3D.h = h; }
   GL3D.cam.projectionMatrix.set(...gl3DProjection(P)); GL3D.cam.matrixWorldInverse.identity();
+  let t = performance.now();
   for (const b of list) { gl3DPlaceBike(b); }
   GL3D.renderer.clear(); GL3D.renderer.render(GL3D.scene, GL3D.cam);
+  perfAdd('gl3d', t); PERF.gl3d = list.length; t = performance.now();
   mainCtx.setTransform(1, 0, 0, 1, 0, 0); mainCtx.drawImage(GL3D.canvas, 0, 0, w, h);
+  perfAdd('copy', t);
   return true;
 }

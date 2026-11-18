@@ -972,6 +972,18 @@ Below about 190 km/h the rider limits; above it the damping does. A 40 km/h swin
 
 **Test:** unit tests for `maxLeanAt` and `leanRate` (GDD 13b), and physics tests that step `stepBike` and check the lean itself: the per-step change never exceeds the roll rate, a 40 km/h swing takes about 1.2 s, a 300 km/h swing about 0.8 s, and the lean stays at 40° at 300 km/h but can pass 50° at low speed. The lean cap was not reproduced in a headless run, because the scenario needs a braking corner ahead.
 
+## 11n. Frame rate (new, not released)
+
+Asked by Petr (2026-11-18): the game is not smooth since the 3D bikes (1.26.0); plan to double the frame rate.
+
+**Step 1, measure (this step):** a frame-time overlay, toggled with **P** during a session. Averaged over the last 30 frames it shows the frame rate and the time per frame, split into: physics (`simStep`), camera, 2D world (the road layers), projection and speed blur, 3D bikes (placing the meshes and the three.js render call), 3D copy (copying the 3D canvas into the game canvas), and HUD. It also shows how many bikes are drawn in 3D, the canvas size and the pixel ratio. Browsers run the GPU work in the background, so the 3D render time is the CPU side only; the 3D copy waits for the GPU to finish, so its time includes the GPU work. The overlay is off by default and costs nothing when off.
+
+**Next steps (proposed, decided from the measurements):**
+2. Skip 3D bikes that are off screen (the same visibility test as the 2D bikes).
+3. Show the 3D canvas as its own layer above the game canvas and below the HUD, instead of copying it each frame.
+4. Cheaper rendering: no MSAA, single-sided materials, the 3D canvas at 1× on high-DPI screens.
+5. A low-detail bike (about 1,500–2,000 triangles) for bikes that are small on screen.
+
 ## 12. Track and graphics
 
 - Centreline from the TUMFTM racetrack-database (LGPL-3.0), resampled every ~2 m (5 888 m, 2 944 points); start line at the real finish line.

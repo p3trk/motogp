@@ -543,3 +543,33 @@ test('useBike3D: on by default, off for Classic', () => {
   assert.equal(G.UI.opts.gfx, '3d'); assert.equal(G.useBike3D(), true);
   G.UI.opts.gfx = 'classic'; assert.equal(G.useBike3D(), false);
 });
+
+// --- frame-time overlay (GDD 11n) ----------------------------------------------
+test('perfToggle: switches the overlay and starts the averages afresh', () => {
+  const { G } = load();
+  assert.equal(G.PERF.on, false);
+  G.PERF.sum.frame = 99; G.perfToggle();
+  assert.equal(G.PERF.on, true); assert.deepEqual(G.PERF.sum, {}); assert.equal(G.PERF.show, null);
+  G.perfToggle(); assert.equal(G.PERF.on, false);
+});
+test('perfAdd: adds time to a part of the frame only while the overlay is on', () => {
+  const { G } = load();
+  G.perfAdd('world', 0); assert.deepEqual(G.PERF.cur, {}, 'off: nothing booked');
+  G.perfToggle(); G.perfAdd('world', -1e6); const one = G.PERF.cur.world; G.perfAdd('world', -1e6);
+  assert.ok(one > 0, 'booked'); assert.ok(G.PERF.cur.world > 1.9 * one, `two parts add up, ${one} then ${G.PERF.cur.world}`);
+});
+test('perfFrame: averages the frame length and the parts over PERF_N frames', () => {
+  const { G } = load();
+  G.perfToggle();
+  let now = 1000; G.perfFrame(now);
+  for (let k = 0; k < G.PERF_N; k++) { G.PERF.cur.world = 4; now += 20; G.perfFrame(now); }
+  assert.ok(G.PERF.show, 'averages ready');
+  assert.equal(G.PERF.show.frame, 20); assert.equal(G.PERF.show.world, 4);
+});
+test('drawPerf: the overlay shows the frame rate and every part, nothing when off', () => {
+  const { G } = load(); let c = rec(G);
+  G.drawPerf(); assert.equal(texts(c).length, 0, 'off: nothing drawn');
+  G.perfToggle(); G.PERF.show = { frame: 20, world: 4 }; c = rec(G); G.drawPerf();
+  const t = texts(c).join('\n');
+  assert.ok(t.includes('50 fps'), t); assert.ok(t.includes('2D world'), t); assert.ok(t.includes('3D copy'), t);
+});

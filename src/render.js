@@ -878,12 +878,50 @@ function getTile(L, tx, ty, allowRender) {
     if (L.map.size > L.cap) { let old = null, ok = 0; for (const [k, v] of L.map) { if (!old || v.used < old.used) { old = v; ok = k; } } L.map.delete(ok); } }
   t.used = tileFrame; return t.c;
 }
+// --- frame-time overlay (GDD 11n): P toggles it; times each part of the frame, averaged over PERF_N frames
+const PERF = { on: false, cur: {}, sum: {}, n: 0, last: 0, show: null, gl3d: 0 };
+const PERF_N = 30;
+const PERF_PARTS = [['sim', 'physics'], ['camera', 'camera'], ['world', '2D world'], ['project', 'projection + blur'],
+  ['gl3d', '3D bikes (CPU)'], ['copy', '3D copy (incl. GPU)'], ['hud', 'HUD']];
+function perfToggle() { PERF.on = !PERF.on; PERF.cur = {}; PERF.sum = {}; PERF.n = 0; PERF.show = null; PERF.last = 0; }
+// adds the time since t0 to a part of this frame (nothing when the overlay is off)
+function perfAdd(name, t0) { if (PERF.on) { PERF.cur[name] = (PERF.cur[name] || 0) + performance.now() - t0; } }
+// at the start of a frame: books the last frame's parts and its length, and every PERF_N frames the averages to show
+function perfFrame(now) {
+  if (!PERF.on) { return; }
+  if (PERF.last) {
+    PERF.sum.frame = (PERF.sum.frame || 0) + now - PERF.last;
+    for (const k in PERF.cur) { PERF.sum[k] = (PERF.sum[k] || 0) + PERF.cur[k]; }
+    if (++PERF.n >= PERF_N) {
+      const avg = {}; for (const k in PERF.sum) { avg[k] = PERF.sum[k] / PERF.n; }
+      PERF.show = avg; PERF.sum = {}; PERF.n = 0;
+    }
+  }
+  PERF.last = now; PERF.cur = {};
+}
+// the overlay, on the right edge of the HUD under the track map
+function drawPerf() {
+  if (!PERF.on) { return; }
+  const a = PERF.show, lines = ['Frame time (P to hide)'];
+  if (a) {
+    lines.push(`${(1000 / a.frame).toFixed(0)} fps   ${a.frame.toFixed(1)} ms per frame`);
+    for (const [k, label] of PERF_PARTS) { lines.push(`${label.padEnd(20)} ${(a[k] || 0).toFixed(2)} ms`); }
+  } else { lines.push('measuring...'); }
+  lines.push(`3D bikes ${PERF.gl3d}   canvas ${cv.width}x${cv.height}   DPR ${DPR}`);
+  const hgt = 18 * lines.length + 12, x0 = VW - 316, y0 = 220; // right edge, under the track map and clear of the standings
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.fillStyle = 'rgba(0,0,0,.72)'; ctx.fillRect(x0, y0, 300, hgt);
+  ctx.fillStyle = '#e9edf0'; ctx.font = '13px ui-monospace, Menlo, monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+  lines.forEach((l, i) => ctx.fillText(l, x0 + 8, y0 + 6 + 18 * i));
+}
 function drawWorld() {
   tileFrame++;
   let sx = 0, sy = 0; if (HUD.shake > 0.01) { sx = (Math.random() - 0.5) * 8 * HUD.shake; sy = (Math.random() - 0.5) * 8 * HUD.shake; }
   const A = speedVib(); if (A > 0) { sx += (Math.random() - 0.5) * 2 * A; sy += (Math.random() - 0.5) * 2 * A; }
+  let t = performance.now();
   try { for (const Ly of LAYERS) { ctx = Ly.g; drawWorldLayer(Ly, sx, sy); } } finally { ctx = mainCtx; }
-  if (camTilted()) { projectTilted(); speedBlur(); gl3DDraw(W.bikes.filter(gl3DOn)); }
+  perfAdd('world', t);
+  if (camTilted()) { t = performance.now(); projectTilted(); speedBlur(); perfAdd('project', t); gl3DDraw(W.bikes.filter(gl3DOn)); }
 }
 // --- speed blur (GDD 11f): at top speed the surroundings smear into zoom streaks from the horizon point straight
 // ahead, on a 1/4 resolution copy of the screen; the road with its kerbs (+0.3 m) and the bikes are cut out of it

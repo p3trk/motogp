@@ -530,6 +530,8 @@ window.addEventListener('keydown', e => {
   if (e.code === 'Escape' && (UI.state === 'play')) UI.togglePause();
   if (e.code === 'KeyM') Sound.on = !Sound.on;
   if (e.code === 'KeyP') perfToggle(); // frame-time overlay (GDD 11n)
+  if (PERF.on && e.code === 'Digit8') perfRows(); // test switches, only while the overlay is shown
+  if (PERF.on && e.code === 'Digit9') perfNo3D();
 });
 // C and the replay Camera button: Behind -> CLOSE -> Top-down -> Behind; also sets the start-screen option (GDD 11a)
 function camCycle() {

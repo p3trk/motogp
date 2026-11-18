@@ -16,7 +16,8 @@ function mulberry(seed) { return function () { seed |= 0; seed = seed + 0x6D2B79
 //  22 L tank, max lean ~64 deg, braking ~1.45 g (front stoppie limit), anti-wheelie ~1.0 g
 // ---------------------------------------------------------------------------
 const PHYS = {
-  massBike: 157, massRider: 70, fuelDensity: 0.745, tank: 22,
+  // rider with leathers and boots: the middle of the 63–70 kg range of the MotoGP grid (GDD 11m)
+  massBike: 157, massRider: 67, fuelDensity: 0.745, tank: 22,
   pMax: 205000, redline: 18000, idle: 4200,
   gears: [0, 135, 178, 220, 260, 302, 345].map(k => k / 3.6), // top speed per gear at redline
   CdA: 0.30, rho: 1.2, roll: 0.015,
@@ -327,17 +328,17 @@ const T = {};
 // Riders, teams
 // ---------------------------------------------------------------------------
 const TEAMS = [
-  { name: 'Rosso Veloce Factory', c1: '#c8102e', c2: '#f4f4f4', c3: '#1b1b1b' },
-  { name: 'Blu Tridente Racing', c1: '#1f4fd1', c2: '#0b1530', c3: '#e8e8e8' },
-  { name: 'Arancia Tech', c1: '#ff6a13', c2: '#141414', c3: '#ffffff' },
-  { name: 'Lime Works', c1: '#93d500', c2: '#121212', c3: '#ffffff' },
-  { name: 'Nero Opaco', c1: '#1e2226', c2: '#ffcc00', c3: '#ffcc00' },
-  { name: 'Celeste Squadra', c1: '#39b6e8', c2: '#ffffff', c3: '#0d2b45' },
-  { name: 'Viola Corse', c1: '#6a2bd9', c2: '#c9ff3d', c3: '#ffffff' },
-  { name: 'Argento Factory', c1: '#b9c2c9', c2: '#c8102e', c3: '#202020' },
-  { name: 'Giallo Moto', c1: '#ffd400', c2: '#0057b8', c3: '#0057b8' },
-  { name: 'Bianco Sport', c1: '#efefef', c2: '#009246', c3: '#c8102e' },
-  { name: 'Cobalt Satellite', c1: '#0a2a6b', c2: '#ff3d7f', c3: '#ffffff' }
+  { name: 'Rosso Veloce Factory', c1: '#c8102e', c2: '#f4f4f4', c3: '#1b1b1b' , suit: '#f4f4f4', accent: '#c8102e', helmet: '#c8102e'},
+  { name: 'Blu Tridente Racing', c1: '#1f4fd1', c2: '#0b1530', c3: '#e8e8e8' , suit: '#c0c8d0', accent: '#1f4fd1', helmet: '#0b1530'},
+  { name: 'Arancia Tech', c1: '#ff6a13', c2: '#141414', c3: '#ffffff' , suit: '#2a2a2e', accent: '#ff6a13', helmet: '#ff6a13'},
+  { name: 'Lime Works', c1: '#93d500', c2: '#121212', c3: '#ffffff' , suit: '#121212', accent: '#93d500', helmet: '#93d500'},
+  { name: 'Nero Opaco', c1: '#1e2226', c2: '#ffcc00', c3: '#ffcc00' , suit: '#d4a017', accent: '#1e2226', helmet: '#1e2226'},
+  { name: 'Celeste Squadra', c1: '#39b6e8', c2: '#ffffff', c3: '#0d2b45' , suit: '#f4f4f4', accent: '#39b6e8', helmet: '#39b6e8'},
+  { name: 'Viola Corse', c1: '#6a2bd9', c2: '#c9ff3d', c3: '#ffffff' , suit: '#c9ff3d', accent: '#6a2bd9', helmet: '#6a2bd9'},
+  { name: 'Argento Factory', c1: '#b9c2c9', c2: '#c8102e', c3: '#202020' , suit: '#c8102e', accent: '#b9c2c9', helmet: '#b9c2c9'},
+  { name: 'Giallo Moto', c1: '#ffd400', c2: '#0057b8', c3: '#0057b8' , suit: '#0057b8', accent: '#ffd400', helmet: '#ffd400'},
+  { name: 'Bianco Sport', c1: '#efefef', c2: '#009246', c3: '#c8102e' , suit: '#009246', accent: '#c8102e', helmet: '#efefef'},
+  { name: 'Cobalt Satellite', c1: '#0a2a6b', c2: '#ff3d7f', c3: '#ffffff' , suit: '#ff3d7f', accent: '#0a2a6b', helmet: '#0a2a6b'}
 ];
 const RIDERS = [
   ['Luca Ferrandi', 4, 'ITA'], ['Marc Albero', 7, 'SPA'], ['Jonas Weber', 11, 'GER'], ['Tom Hartley', 12, 'GBR'], ['Ryo Tanaka', 17, 'JPN'],
@@ -374,6 +375,30 @@ function shift(b, dir) {
   if (dir < 0 && rpmFor(b.v, ng) > PHYS.redline + 400) { b.overrev = 0.8; return false; } // ECU over-rev protection
   b.gear = ng; if (dir > 0) { b.shiftCut = 0.025; } b.shiftFlash = 0.25; return true;
 }
+// how fast the lean moves toward its target (rad/s) at speed v (m/s): the slower of two limits (GDD 11m)
+//  - the rider's input: the rider shifts their mass sideways at most at LEAN_RIDER_SHIFT m/s. The bike rolls by the
+//    angular momentum they transfer: w = m_r u h_r / (m_b h_b^2 + m_r h_r^2), the rider's share of the roll inertia
+//    included (so a heavier rider transfers more, and adds inertia too). Same at any speed;
+//  - the damping from the spinning wheels (gyroscopic and tyre): a resisting torque that grows with speed, so the
+//    roll rate falls as LEAN_DAMP / v. LEAN_DAMP is set so the rate is 1.0 rad/s at 300 km/h.
+// At low speed the rider's limit applies, so a swing takes about 1.2 s at 40 km/h; from about 190 km/h the damping does.
+// centre of mass heights above the contact patch (m): bike, and rider on the bike
+const LEAN_H_BIKE = 0.5, LEAN_H_RIDER = 1.0;
+// the rider's sideways shift speed (m/s): fitted so a 67 kg rider gives 1.6 rad/s, the rider limit at this mass
+const LEAN_RIDER_SHIFT = 1.6 * (157 * LEAN_H_BIKE ** 2 + 67 * LEAN_H_RIDER ** 2) / (67 * LEAN_H_RIDER);
+const LEAN_DAMP = 300 / 3.6; // 300 km/h in m/s: the damping limit is 1.0 rad/s there (fitted, not derived yet)
+function leanRiderRate() {
+  const mr = PHYS.massRider, mb = PHYS.massBike;
+  return LEAN_RIDER_SHIFT * mr * LEAN_H_RIDER / (mb * LEAN_H_BIKE ** 2 + mr * LEAN_H_RIDER ** 2);
+}
+function leanRate(v) { return Math.min(leanRiderRate(), LEAN_DAMP / Math.max(v, 1)); }
+// the most a bike leans at speed v (m/s), to either side (GDD 11m). Zero when stopped: a bike cannot hold a lean at
+// standstill. It rises to the grip maximum PHYS.maxLean by about 50 km/h, stays there to 150 km/h, and falls to
+// 40 degrees at 300 km/h, since the corner radius for a given lean grows with v^2.
+function maxLeanAt(v) {
+  const rise = clamp(v / (50 / 3.6), 0, 1), fall = clamp((v - 42) / 41, 0, 1);
+  return lerp(PHYS.maxLean, 40 * DEG, fall) * rise;
+}
 function autoBox(b) {
   const r = rpmFor(b.v, b.gear);
   if (b.gear < 6 && r > 17500) shift(b, 1);
@@ -393,12 +418,13 @@ function stepBike(b, dt, W) {
   const gripMax = PHYS.mu * SF.mu * warm * wear * (1 - 0.13 * b.dmg.c) * G;
   const v = b.v;
   // --- lean dynamics (roll rate falls with speed: gyroscopic stability)
-  let tgt = clamp(c.leanT, -PHYS.maxLean, PHYS.maxLean);
+  const leanCap = maxLeanAt(v);
+  let tgt = clamp(c.leanT, -leanCap, leanCap);
   if (b.assist) {
     const latCap = Math.sqrt(Math.max(0, gripMax * gripMax - b.aLongPrev * b.aLongPrev));
-    const maxL = Math.atan(latCap / G) * 0.985; tgt = clamp(tgt, -maxL, maxL);
+    const maxL = Math.min(leanCap, Math.atan(latCap / G) * 0.985); tgt = clamp(tgt, -maxL, maxL);
   }
-  const rate = clamp(3.4 - v / 55, 1.55, 3.2) * (1 - 0.2 * b.dmg.c);
+  const rate = leanRate(v) * (1 - 0.2 * b.dmg.c);
   b.lean += clamp(tgt - b.lean, -rate * dt, rate * dt);
   // --- path curvature from lean angle: tan(lean) = v^2 * k / g
   let kap = G * Math.tan(b.lean) / Math.max(v * v, 30);
@@ -553,7 +579,9 @@ function aiControl(b, dt, W) {
     if (A.side) A.offT = clamp(myLine + A.offT + A.side * 1.2, lo, hi) - myLine;
   }
   A.off = lerp(A.off, A.offT, Math.min(1, dt * 1.6));
-  const look = 6 + v * 0.42; const j = (b.i + Math.round(look / DS)) % N;
+  // the look-ahead covers the time the lean needs to build: at 0.42 the bike could not roll into a corner in time
+  // at the rider's roll rate (GDD 11m), so it ran wide at speed
+  const look = 6 + v * 0.7; const j = (b.i + Math.round(look / DS)) % N;
   let dT = T.lat[j] + A.off;
   const sj = T.rel(j * DS);
   const pitting = b.inPitLane;

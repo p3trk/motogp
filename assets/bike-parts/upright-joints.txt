@@ -1,0 +1,25 @@
+neck 960 892
+shoulder_L 750 900
+shoulder_R 1170 900
+elbow_L 660 827
+elbow_R 1260 827
+wrist_L 658 628
+wrist_R 1262 628
+hip_L 790 1160
+hip_R 1130 1160
+knee_L 688 1000
+knee_R 1232 1000
+ankle_L 725 1232
+ankle_R 1195 1232
+
+# overlaps (which part is on top)
+helmet over torso
+arm_L over torso
+arm_R over torso
+shoulder_pad_L over upper_arm_L
+shoulder_pad_R over upper_arm_R
+glove_L over sleeve_L
+glove_R over sleeve_R
+torso over thigh_L
+torso over thigh_R
+# to confirm: knee_pad_L/R, boot_L/R over shin or leg

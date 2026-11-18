@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.26.0 (2026-11-18)
+- Bike graphics (GDD 11l): the bikes and riders are drawn in real 3D (three.js), from models of the bike and a rider in team colours. New setting Bike graphics 3D / Classic in the menu; 3D is the default. Classic keeps the 2D drawing.
+- Rider (GDD 11l): the rider leans with the bike, shifts weight to the inside of the turn and holds the handlebar and the pegs, with a team suit, stripes and a helmet. Only your own bike has a rider.
+- Lean (GDD 11m): the bike can only lean as far as its speed allows, and not at all when stopped. The lean builds up at a rate set by the rider's mass and the spinning wheels, so a full swing from one side to the other takes time at low speed.
+- Brake light: the bike's tail light glows while braking.
+- Autopilot: looks further ahead, so it rolls into corners in time and no longer runs wide at speed.
+- Code quality (GDD 13a, 13b): new 3D bike test (tests/bike3d.test.js) and unit tests for the lean and the 3D layer. The 2D bike-view test is removed with the Classic drawing's checks.
+
 ## v1.25.0 (2026-11-02)
 - Release note beside the menu title (GDD 11): the newest release's summary shows next to the title. Click it to open the full changelog for the last 10 releases.
 - Fix: a trip through the Long Lap loop is no longer a track limits infraction (GDD 6a). The loop and the 40 m after its exit are not judged, and a trip that reaches the loop is not counted when it ends.

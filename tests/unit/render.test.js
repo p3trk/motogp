@@ -573,9 +573,10 @@ test('drawPerf: the overlay shows the frame rate and every part, nothing when of
   const t = texts(c).join('\n');
   assert.ok(t.includes('50 fps'), t); assert.ok(t.includes('2D world'), t); assert.ok(t.includes('3D bikes (CPU)'), t);
 });
-test('perfRows: the road strip height cycles 1, 2, 4, 8 device rows', () => {
+test('perfRows: the road strip height cycles 1, 2, 4, 8 device rows, 1 by default', () => {
   const { G } = load();
-  const seen = []; for (let k = 0; k < 5; k++) { G.perfRows(); seen.push(G.PERF.rows); }
+  assert.equal(G.TILT.rows, 1);
+  const seen = []; for (let k = 0; k < 5; k++) { G.perfRows(); seen.push(G.TILT.rows); }
   assert.deepEqual(seen, [2, 4, 8, 1, 2]);
 });
 test('perfNo3D: switches the 3D bikes off and on', () => {

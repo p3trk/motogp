@@ -306,7 +306,7 @@ Three cameras (since 1.14.0): **Behind**, **CLOSE** and **Top-down**. Chosen on 
   - Far band: the rest, up to ~2.6 screen heights, at 0.45 × resolution (0.4 before 1.11.6). It also covers the top 30 % of the near band, where the near band fades into it, so the picture gets softer gradually with distance instead of in one step where they join (since 1.11.6).
   - Both are projected onto the screen one screen row at a time, each row scaled by the perspective factor (since 1.11.5). Before, 3 px strips with one scale each drew straight lines (track edges, kerbs) as ~1 px steps every 3 rows, which showed as a kink across the screen, also where the near and far bands join.
   - A sky gradient fills the space above the far edge, and haze fades the far ground into it.
-  - On slow machines the resolution of both bands drops by a further 20 %.
+  - On slow machines (frames over 24 ms on average) the rows are first projected in 2-row strips, half the draw calls (since GDD 11n; straight lines bend by up to 0.6 px at the screen sides). If still slow, 1× pixels, then the resolution of both bands drops by a further 20 %.
 - **Tuning:** the tilt is **40°** with a camera distance of 1.3 × screen height. The plane is 2.3 × screen width and 2.6 × screen height.
 
 **CLOSE (since 1.14.0)**
@@ -981,6 +981,7 @@ Asked by Petr (2026-11-18): the game is not smooth since the 3D bikes (1.26.0); 
 **Step 3, done first:** the 3D bikes are on their own canvas layer (`#gl3d`), above the game canvas and below the HUD, shown only while 3D bikes are drawn. Before, the 3D canvas was copied into the game canvas with `drawImage` every frame; in Chrome that copy makes the 2D canvas wait for the GPU. The picture is the same: the bikes were already drawn after the road warp and the speed blur, and screen shake never moved them.
 **Result:** Brave still 30 fps, with the game's own work at about 2 ms of a 28 ms frame; Energy Saver off and hardware acceleration on changed nothing. Suspect: the road projection draws one `drawImage` strip per screen row (about 1,000 per frame), which Chrome runs on the GPU after the timer stops.
 **Test switches** (while the overlay is shown): **8** draws the road strips 1, 2, 4 or 8 device rows tall; **9** switches the 3D bikes off and on. Both are for measuring only and reset on reload.
+**Result:** 2-row strips bring Brave from 30 to 60 fps. 2 rows by default fails the seam check (bends 0.57–0.65 px, limit 0.5), so it is the first step of the slow-machine quality drop instead (§11a): after about 60 slow frames the road switches to 2-row strips, before the pixel and resolution steps. Safari keeps 1-row strips.
 
 **Next steps (proposed, decided from the measurements):**
 2. Skip 3D bikes that are off screen (the same visibility test as the 2D bikes).

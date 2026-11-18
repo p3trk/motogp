@@ -941,14 +941,21 @@ function teamForId(id, playerTeam) { const seats = []; for (let t = 0; t < TEAMS
 // Main loop
 // ---------------------------------------------------------------------------
 let last = performance.now(), acc = 0, perfAvg = 1 / 60, perfN = 0;
+// slow machine (frames over 24 ms on average): first the road is projected in 2-row strips, half the draw calls
+// (Chrome and Brave spend most of a frame on them, GDD 11n); then 1x pixels; then 20 % less tilted resolution
+function adaptQuality() {
+  if (perfAvg <= 0.024 || UI.state !== 'play') { return; }
+  if (perfN > 60 && camTilted() && TILT.rows < 2) { TILT.rows = 2; perfN = 0; perfAvg = 1 / 60; }
+  else if (perfN > 180 && DPR_CAP > 1) { DPR_CAP = 1; resize(); perfN = 0; }
+  else if (perfN > 180 && camTilted() && TILT.q > 0.8) { TILT.q = 0.8; resize(); perfN = 0; }
+}
 function frame(now) {
   TouchCtl.sync();
   perfFrame(now);
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
   // adaptive resolution: drop to 1x pixels if the machine can't keep up
   perfAvg = perfAvg * 0.97 + dt * 0.03; perfN++;
-  if (perfN > 180 && perfAvg > 0.024 && DPR_CAP > 1 && UI.state === 'play') { DPR_CAP = 1; resize(); perfN = 0; }
-  else if (perfN > 180 && perfAvg > 0.024 && camTilted() && TILT.q > 0.8 && UI.state === 'play') { TILT.q = 0.8; resize(); perfN = 0; }
+  adaptQuality();
   if (UI.state === 'play' && !W.paused) {
     acc += dt; let n = 0;
     const ts = performance.now();

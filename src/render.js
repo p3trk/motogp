@@ -16,7 +16,7 @@ let DPR_CAP = 1.5;
 // virtual ground canvas RW x RH (css px): the screen in top-down, larger when tilted, split into LAYERS
 let RW = 800, RH = 600, ODPR = 1;
 let LAYERS = [];
-const TILT = { a: 40 * DEG, p: 1.3, wk: 2.3, hk: 2.9, bike: 0.2, zMax: 20, zBase: 30, zK: 0.5, nearQ: 0.75, farQ: 0.45, fade: 0.3, minLen: 40, bv0: 260, bv1: 330, bs: 20, wd: 0.15, vib: 1.5, q: 1 }; // zK 1.0 and hk 2.6 before 1.24.0 (GDD 11h) // q: resolution scale, lowered on slow machines
+const TILT = { a: 40 * DEG, p: 1.3, wk: 2.3, hk: 2.9, bike: 0.2, zMax: 20, zBase: 30, zK: 0.5, nearQ: 0.75, farQ: 0.45, fade: 0.3, minLen: 40, bv0: 260, bv1: 330, bs: 20, wd: 0.15, vib: 1.5, q: 1, rows: 1 }; // zK 1.0 and hk 2.6 before 1.24.0 (GDD 11h) // q: resolution scale, lowered on slow machines; rows: device rows per road strip in projectTilted, 2 on slow machines (GDD 11n)
 // tilted camera tuning (GDD 11a): the pause-menu panel edits these in display units (deg, %), per camera (below)
 const CAM_SET = [ // k: TILT field, f: display unit -> TILT value, rs: needs resize()
   { k: 'a', lbl: 'Tilt', unit: '°', min: 20, max: 70, step: 1, f: DEG, rs: 1 },
@@ -878,12 +878,55 @@ function getTile(L, tx, ty, allowRender) {
     if (L.map.size > L.cap) { let old = null, ok = 0; for (const [k, v] of L.map) { if (!old || v.used < old.used) { old = v; ok = k; } } L.map.delete(ok); } }
   t.used = tileFrame; return t.c;
 }
+// --- frame-time overlay (GDD 11n): P toggles it; times each part of the frame, averaged over PERF_N frames
+const PERF = { on: false, cur: {}, sum: {}, n: 0, last: 0, show: null, gl3d: 0, no3d: false }; // no3d: test switch (GDD 11n)
+const PERF_N = 30;
+const PERF_PARTS = [['sim', 'physics'], ['camera', 'camera'], ['world', '2D world'], ['project', 'projection + blur'],
+  ['gl3d', '3D bikes (CPU)'], ['hud', 'HUD']];
+function perfToggle() { PERF.on = !PERF.on; PERF.cur = {}; PERF.sum = {}; PERF.n = 0; PERF.show = null; PERF.last = 0; }
+// adds the time since t0 to a part of this frame (nothing when the overlay is off)
+// test switch 8: the road projection draws one strip per 1, 2, 4 or 8 device rows (fewer draw calls, coarser picture)
+function perfRows() { TILT.rows = TILT.rows >= 8 ? 1 : TILT.rows * 2; }
+// test switch 9: the 3D bikes on or off
+function perfNo3D() { PERF.no3d = !PERF.no3d; }
+function perfAdd(name, t0) { if (PERF.on) { PERF.cur[name] = (PERF.cur[name] || 0) + performance.now() - t0; } }
+// at the start of a frame: books the last frame's parts and its length, and every PERF_N frames the averages to show
+function perfFrame(now) {
+  if (!PERF.on) { return; }
+  if (PERF.last) {
+    PERF.sum.frame = (PERF.sum.frame || 0) + now - PERF.last;
+    for (const k in PERF.cur) { PERF.sum[k] = (PERF.sum[k] || 0) + PERF.cur[k]; }
+    if (++PERF.n >= PERF_N) {
+      const avg = {}; for (const k in PERF.sum) { avg[k] = PERF.sum[k] / PERF.n; }
+      PERF.show = avg; PERF.sum = {}; PERF.n = 0;
+    }
+  }
+  PERF.last = now; PERF.cur = {};
+}
+// the overlay, on the right edge of the HUD under the track map
+function drawPerf() {
+  if (!PERF.on) { return; }
+  const a = PERF.show, lines = ['Frame time (P to hide)'];
+  if (a) {
+    lines.push(`${(1000 / a.frame).toFixed(0)} fps   ${a.frame.toFixed(1)} ms per frame`);
+    for (const [k, label] of PERF_PARTS) { lines.push(`${label.padEnd(20)} ${(a[k] || 0).toFixed(2)} ms`); }
+  } else { lines.push('measuring...'); }
+  lines.push(`3D bikes ${PERF.no3d ? 'off' : PERF.gl3d}   canvas ${cv.width}x${cv.height}   DPR ${DPR}`);
+  lines.push(`8: road strips ${TILT.rows} px   9: 3D bikes`);
+  const hgt = 18 * lines.length + 12, x0 = VW - 316, y0 = 220; // right edge, under the track map and clear of the standings
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.fillStyle = 'rgba(0,0,0,.72)'; ctx.fillRect(x0, y0, 310, hgt);
+  ctx.fillStyle = '#e9edf0'; ctx.font = '13px ui-monospace, Menlo, monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+  lines.forEach((l, i) => ctx.fillText(l, x0 + 8, y0 + 6 + 18 * i));
+}
 function drawWorld() {
   tileFrame++;
   let sx = 0, sy = 0; if (HUD.shake > 0.01) { sx = (Math.random() - 0.5) * 8 * HUD.shake; sy = (Math.random() - 0.5) * 8 * HUD.shake; }
   const A = speedVib(); if (A > 0) { sx += (Math.random() - 0.5) * 2 * A; sy += (Math.random() - 0.5) * 2 * A; }
+  let t = performance.now();
   try { for (const Ly of LAYERS) { ctx = Ly.g; drawWorldLayer(Ly, sx, sy); } } finally { ctx = mainCtx; }
-  if (camTilted()) { projectTilted(); speedBlur(); gl3DDraw(W.bikes.filter(gl3DOn)); }
+  perfAdd('world', t);
+  if (camTilted()) { t = performance.now(); projectTilted(); speedBlur(); perfAdd('project', t); gl3DDraw(PERF.no3d ? [] : W.bikes.filter(gl3DOn)); } else { gl3DShow(false); }
 }
 // --- speed blur (GDD 11f): at top speed the surroundings smear into zoom streaks from the horizon point straight
 // ahead, on a 1/4 resolution copy of the screen; the road with its kerbs (+0.3 m) and the bikes are cut out of it
@@ -1002,7 +1045,9 @@ function projectTilted() {
     const sy0 = Math.max(0, (RH - h1 - Ly.y0) * d), sh = Math.min(Ly.c.height, (RH - h0 - Ly.y0) * d) - sy0; if (sh <= 0) return;
     g.drawImage(Ly.c, 0, sy0, cw, sh, VW / 2 + (Ly.x0 - RW / 2) * sc, VH - u1, cw / d * sc, u1 - u0 + 0.5 * du);
   };
-  const du = 1 / ODPR; // one strip per device row
+  // one strip per TILT.rows device rows. The horizontal scale is linear down the screen (1 - u tan(a) / P), so a strip of
+  // n rows is off by at most n/2 * tan(a) / P * VW/2 at the screen sides: about 0.3 px for 1 row, 0.6 px for 2 (GDD 11n)
+  const du = TILT.rows / ODPR;
   for (let u0 = 0; u0 < uTop; u0 += du) {
     const u1 = Math.min(uTop, u0 + du), h0 = hOf(u0), h1 = hOf(u1), hm = (h0 + h1) / 2, sc = P / (P + hm * sa);
     if (hm < hN) row(near, u0, u1, h0, h1, sc);

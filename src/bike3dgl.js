@@ -9,6 +9,9 @@ function gl3DInit() {
   try {
     if (typeof THREE === 'undefined') return false;
     const canvas = document.createElement('canvas');
+    // its own page layer between the world and the HUD: the browser composites it, no copy into the 2D canvas (GDD 11n)
+    canvas.id = 'gl3d'; canvas.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;display:none;pointer-events:none';
+    cv.after(canvas);
     const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
     renderer.setClearColor(0x000000, 0);
     GL3D.canvas = canvas; GL3D.renderer = renderer; GL3D.scene = new THREE.Scene(); GL3D.cam = new THREE.Camera();
@@ -199,16 +202,24 @@ function gl3DPlaceBike(b) {
     m.visible = true; m.matrix.set(...(role === 'wheel' ? wmat : mat)); m.matrixWorld.copy(m.matrix);
   }
 }
+// show or hide the 3D layer; the style is written only when it changes
+function gl3DShow(on) {
+  const c = GL3D.canvas;
+  if (!c || !c.style || GL3D.shown === on) return;
+  GL3D.shown = on; c.style.display = on ? 'block' : 'none';
+}
 function gl3DDraw(list) {
   if (!gl3DInit()) return false;
   gl3DPrune(list);
+  gl3DShow(list.length > 0);
   if (!list.length) return false;
   const w = cv.width, h = cv.height, P = tiltP();
   // resize only when the page size changes: setSize rewrites the canvas size every call, which reallocates the canvas
   if (GL3D.w !== w || GL3D.h !== h) { GL3D.renderer.setPixelRatio(1); GL3D.renderer.setSize(w, h, false); GL3D.w = w; GL3D.h = h; }
   GL3D.cam.projectionMatrix.set(...gl3DProjection(P)); GL3D.cam.matrixWorldInverse.identity();
+  let t = performance.now();
   for (const b of list) { gl3DPlaceBike(b); }
   GL3D.renderer.clear(); GL3D.renderer.render(GL3D.scene, GL3D.cam);
-  mainCtx.setTransform(1, 0, 0, 1, 0, 0); mainCtx.drawImage(GL3D.canvas, 0, 0, w, h);
+  perfAdd('gl3d', t); PERF.gl3d = list.length;
   return true;
 }

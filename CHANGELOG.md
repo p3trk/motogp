@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.26.1 (2026-11-19)
+- Frame rate (GDD 11n): Chrome and Brave run at 60 fps again (were about 30). On a slow machine the road is now drawn in 2-row strips first, half the draw calls, before the pixel and resolution steps. Safari keeps the sharper 1-row road.
+- The 3D bikes are on their own page layer instead of being copied into the game canvas every frame.
+- Frame-time overlay (GDD 11n): press P during a session to see the frame rate and the time each part of the frame takes. While it is shown, 8 changes the road strip height and 9 switches the 3D bikes off, for testing.
+
 ## v1.26.0 (2026-11-18)
 - Bike graphics (GDD 11l): the bikes and riders are drawn in real 3D (three.js), from models of the bike and a rider in team colours. New setting Bike graphics 3D / Classic in the menu; 3D is the default. Classic keeps the 2D drawing.
 - Rider (GDD 11l): the rider leans with the bike, shifts weight to the inside of the turn and holds the handlebar and the pegs, with a team suit, stripes and a helmet. Only your own bike has a rider.

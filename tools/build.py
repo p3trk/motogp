@@ -48,7 +48,7 @@ def jsesc(s):
 
 def main():
     js = (read('core.js').replace('__TRACK__', read('track.txt')).replace('__CHANGELOG__', json.dumps(changelog()))
-          + read('world.js') + read('replay.js') + read('bike_art.js') + read('rig_art.js') + read('vendor/three.min.js') + read('bike3dmodel.js') + read('render.js') + read('bike3dgl.js') + read('track3d.js') + read('ui.js'))
+          + read('world.js') + read('replay.js') + read('bike_art.js') + read('rig_art.js') + read('vendor/three.min.js') + read('bike3dmodel.js') + read('render.js') + read('bike3dgl.js') + read('track3d.js') + read('scenery3d.js') + read('ui.js'))
     head = read('head.html').replace('__VERSION__', version())
     if '--utf8' in sys.argv:
         with open(sys.argv[sys.argv.index('--utf8') + 1], 'w', encoding='utf-8') as f:

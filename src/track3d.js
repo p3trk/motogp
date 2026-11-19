@@ -124,11 +124,12 @@ function ground3DMask(Q, w, h) {
 
 // the speed blur over the ground, when the speed calls for it: ground at 1/2 resolution into a render target, the
 // zoom pass into a 1/4 one, then shown over the screen
-function ground3DBlur(r) {
+function ground3DBlur(r, walls) {
   const s = BLUR.s = blurStrength(); if (s <= 0.01) { return false; }
   const Q = 0.25, w = Math.max(1, Math.ceil(VW * Q)), h = Math.max(1, Math.ceil(VH * Q)), rw = 2 * w, rh = 2 * h; // image at 1/2: the GPU samples without averaging, so 1/4 shimmered
   GROUND.rt = ground3DTarget(GROUND.rt, rw, rh); GROUND.rtZ = ground3DTarget(GROUND.rtZ, w, h);
   r.setRenderTarget(GROUND.rt); r.clear(); r.render(GROUND.scene, GL3D.cam);
+  if (walls) r.render(WALLS3D.scene, GL3D.cam); // the walls and fences smear with the land (GDD 11o phase 2)
   const P = tiltP(), uTop = RH * Math.cos(tiltA()) * P / (P + RH * Math.sin(tiltA())), hx = VW / 2, hy = Math.max(0, VH - uTop);
   const far = Math.hypot(VW / 2, Math.max(hy, VH - hy)), u = GROUND.blur.zoom.mesh.material.uniforms, us = GROUND.blur.show.mesh.material.uniforms;
   u.src.value = GROUND.rt.texture; u.mask.value = ground3DMask(Q, w, h); u.hz.value = [hx / VW, 1 - hy / VH]; u.k.value = TILT.bs * s / far;
@@ -142,15 +143,17 @@ function ground3DBlur(r) {
 function ground3DTarget(t, w, h) {
   if (t && t.width === w && t.height === h) { return t; }
   if (t) { t.dispose(); }
-  return new THREE.WebGLRenderTarget(w, h, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false });
+  return new THREE.WebGLRenderTarget(w, h, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: true }); // depth: the walls hide each other
 }
 
-// draws the ground (and the blur) on the 3D canvas, which gl3DDraw has just cleared and set the camera of
+// draws the ground, the walls (GDD 11o phase 2) and the blur on the 3D canvas, which gl3DDraw has just cleared and set
+// the camera of
 function ground3DRender() {
   ground3DInit(); ground3DPlace();
-  const r = GL3D.renderer;
+  const r = GL3D.renderer, walls = walls3DOn();
   r.render(GROUND.scene, GL3D.cam);
-  ground3DBlur(r);
+  if (walls) walls3DRender(r);
+  ground3DBlur(r, walls);
 }
 
 // the sky on the 2D game canvas, under the 3D ground: gradient down to the far edge of the ground, haze below it

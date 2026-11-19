@@ -827,6 +827,14 @@ function worldToScreen(x, y) {
 const TILE_PX = 512;
 const TLV = [{ m: 40, map: new Map(), cap: 160 }, { m: 80, map: new Map(), cap: 140 }, { m: 160, map: new Map(), cap: 140 }];
 let tileFrame = 0;
+// on3d: the tiles leave out the flat walls and fences while the 3D walls stand on them (GDD 11o phase 2)
+const TILE_WALLS = { on3d: false };
+// switches the tiles between flat and 3D walls; the cached tiles are dropped and baked again
+function tileWallsSync(on) {
+  if (on === TILE_WALLS.on3d) { return false; }
+  TILE_WALLS.on3d = on; for (const L of TLV) L.map.clear();
+  return true;
+}
 function drawStatic(vis, x0, y0, w, h) {
   ctx.fillStyle = TEX.pGrass; ctx.fillRect(x0, y0, w, h);
   ctx.fillStyle = 'rgba(255,255,235,.06)'; ctx.fill(GEO.mowL); ctx.fillStyle = 'rgba(0,25,0,.07)'; ctx.fill(GEO.mowD); // mowing stripes (GDD 11h)
@@ -845,12 +853,7 @@ function drawStatic(vis, x0, y0, w, h) {
   ctx.strokeStyle = 'rgba(245,245,245,.85)'; ctx.lineWidth = 0.2; ctx.stroke(GEO.grid);
   drawTrackPaint(vis);
   ctx.lineCap = 'butt';
-  ctx.strokeStyle = '#222'; ctx.lineWidth = 1.4; ctx.stroke(GEO.walls);
-  ctx.strokeStyle = '#0c0c0c'; ctx.lineWidth = 1.0; ctx.setLineDash([0.75, 0.12]); ctx.stroke(GEO.walls);
-  ctx.setLineDash([6, 6]); ctx.strokeStyle = '#1d4fd6'; ctx.lineWidth = 0.55; ctx.stroke(GEO.walls); ctx.lineDashOffset = 6; ctx.strokeStyle = '#f0f0f0'; ctx.stroke(GEO.walls); ctx.lineDashOffset = 0; ctx.setLineDash([]);
-  ctx.strokeStyle = 'rgba(40,46,50,.7)'; ctx.lineWidth = 0.15; ctx.stroke(GEO.fence);
-  ctx.strokeStyle = '#b9b9b4'; ctx.lineWidth = 0.7; ctx.stroke(GEO.pitWall);
-  ctx.strokeStyle = 'rgba(30,30,30,.6)'; ctx.lineWidth = 0.12; ctx.stroke(GEO.pitWall);
+  if (TILE_WALLS.on3d) drawWallShadows(); else drawFlatWalls();
   for (const q of GEO.posts) { // distance posts (GDD 11h)
     if (!vis(q.x, q.y, 2)) continue;
     ctx.save(); ctx.translate(q.x, q.y); ctx.rotate(q.h);
@@ -861,6 +864,20 @@ function drawStatic(vis, x0, y0, w, h) {
   drawPitBoxes(vis, true);
   drawBuildings(vis, true);
   drawTrees(vis);
+}
+// the walls, fences and pit wall as flat paint on the ground (Classic, Top-down, no WebGL)
+function drawFlatWalls() {
+  ctx.strokeStyle = '#222'; ctx.lineWidth = 1.4; ctx.stroke(GEO.walls);
+  ctx.strokeStyle = '#0c0c0c'; ctx.lineWidth = 1.0; ctx.setLineDash([0.75, 0.12]); ctx.stroke(GEO.walls);
+  ctx.setLineDash([6, 6]); ctx.strokeStyle = '#1d4fd6'; ctx.lineWidth = 0.55; ctx.stroke(GEO.walls); ctx.lineDashOffset = 6; ctx.strokeStyle = '#f0f0f0'; ctx.stroke(GEO.walls); ctx.lineDashOffset = 0; ctx.setLineDash([]);
+  ctx.strokeStyle = 'rgba(40,46,50,.7)'; ctx.lineWidth = 0.15; ctx.stroke(GEO.fence);
+  ctx.strokeStyle = '#b9b9b4'; ctx.lineWidth = 0.7; ctx.stroke(GEO.pitWall);
+  ctx.strokeStyle = 'rgba(30,30,30,.6)'; ctx.lineWidth = 0.12; ctx.stroke(GEO.pitWall);
+}
+// under the 3D walls: a soft contact shadow along their foot, so they sit on the ground (GDD 11o phase 2)
+function drawWallShadows() {
+  ctx.strokeStyle = 'rgba(0,0,0,.14)'; ctx.lineWidth = 2.4; ctx.stroke(GEO.walls); ctx.stroke(GEO.pitWall);
+  ctx.strokeStyle = 'rgba(0,0,0,.16)'; ctx.lineWidth = 1.2; ctx.stroke(GEO.walls); ctx.stroke(GEO.pitWall);
 }
 function renderTile(L, tx, ty) {
   const M = L.m, c = mkCanvas(TILE_PX, TILE_PX), g = c.getContext('2d', { alpha: false });
@@ -879,16 +896,18 @@ function getTile(L, tx, ty, allowRender) {
   t.used = tileFrame; return t.c;
 }
 // --- frame-time overlay (GDD 11n): P toggles it; times each part of the frame, averaged over PERF_N frames
-const PERF = { on: false, cur: {}, sum: {}, n: 0, last: 0, show: null, gl3d: 0, no3d: false }; // no3d: test switch (GDD 11n)
+const PERF = { on: false, cur: {}, sum: {}, n: 0, last: 0, show: null, gl3d: 0, no3d: false, noWalls: false }; // no3d, noWalls: test switches (GDD 11n, 11o)
 const PERF_N = 30;
 const PERF_PARTS = [['sim', 'physics'], ['camera', 'camera'], ['world', '2D world'], ['project', 'projection + blur'],
-  ['gl3d', '3D bikes (CPU)'], ['hud', 'HUD']];
+  ['walls', '3D walls (CPU)'], ['gl3d', '3D bikes (CPU)'], ['hud', 'HUD']];
 function perfToggle() { PERF.on = !PERF.on; PERF.cur = {}; PERF.sum = {}; PERF.n = 0; PERF.show = null; PERF.last = 0; }
 // adds the time since t0 to a part of this frame (nothing when the overlay is off)
 // test switch 8: the road projection draws one strip per 1, 2, 4 or 8 device rows (fewer draw calls, coarser picture)
 function perfRows() { TILT.rows = TILT.rows >= 8 ? 1 : TILT.rows * 2; }
 // test switch 9: the 3D bikes on or off
 function perfNo3D() { PERF.no3d = !PERF.no3d; }
+// test switch 7: the 3D walls on or off (GDD 11o phase 2)
+function perfNoWalls() { PERF.noWalls = !PERF.noWalls; }
 function perfAdd(name, t0) { if (PERF.on) { PERF.cur[name] = (PERF.cur[name] || 0) + performance.now() - t0; } }
 // at the start of a frame: books the last frame's parts and its length, and every PERF_N frames the averages to show
 function perfFrame(now) {
@@ -911,8 +930,9 @@ function drawPerf() {
     lines.push(`${(1000 / a.frame).toFixed(0)} fps   ${a.frame.toFixed(1)} ms per frame`);
     for (const [k, label] of PERF_PARTS) { lines.push(`${label.padEnd(20)} ${(a[k] || 0).toFixed(2)} ms`); }
   } else { lines.push('measuring...'); }
-  lines.push(`3D bikes ${PERF.no3d ? 'off' : PERF.gl3d}   canvas ${cv.width}x${cv.height}   DPR ${DPR}`);
-  lines.push(`8: road strips ${TILT.rows} px   9: 3D bikes`);
+  lines.push(`3D bikes ${PERF.no3d ? 'off' : PERF.gl3d}   walls ${TILE_WALLS.on3d ? WALLS3D.drawn : 'off'}   DPR ${DPR}`);
+  lines.push(`canvas ${cv.width}x${cv.height}`);
+  lines.push(`7: 3D walls  8: road strips ${TILT.rows} px  9: 3D bikes`);
   const hgt = 18 * lines.length + 12, x0 = VW - 316, y0 = 220; // right edge, under the track map and clear of the standings
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   ctx.fillStyle = 'rgba(0,0,0,.72)'; ctx.fillRect(x0, y0, 310, hgt);
@@ -923,6 +943,7 @@ function drawWorld() {
   tileFrame++;
   let sx = 0, sy = 0; if (HUD.shake > 0.01) { sx = (Math.random() - 0.5) * 8 * HUD.shake; sy = (Math.random() - 0.5) * 8 * HUD.shake; }
   const A = speedVib(); if (A > 0) { sx += (Math.random() - 0.5) * 2 * A; sy += (Math.random() - 0.5) * 2 * A; }
+  tileWallsSync(walls3DOn()); WALLS3D.shake = [sx, sy]; // the 3D walls move with the shaken ground layers
   let t = performance.now();
   try { for (const Ly of LAYERS) { ctx = Ly.g; drawWorldLayer(Ly, sx, sy); } } finally { ctx = mainCtx; }
   perfAdd('world', t);

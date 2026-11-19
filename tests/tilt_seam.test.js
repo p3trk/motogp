@@ -62,11 +62,12 @@ const SIZES = [[1280, 800, 1, 'behind'], [1470, 830, 2, 'behind'], [1024, 700, 1
       }
       return { lines: starts.length, worst, worstY: Math.round(worstY), step, stepY: Math.round(stepY) };
     });
-    // the same measurement through the 3D ground (GDD 11o): the projection hook is swapped for the 3D one meanwhile
+    // the same measurement through the 3D ground (GDD 11o): the projection hook is swapped for the 3D one meanwhile,
+    // and the 3D walls (phase 2) are off, so only the ground is measured
     const measure3D = async () => {
-      await page.evaluate(() => { const S = window.__sgp; S.tiltProject2DX = S.tiltProjectX; S.tiltProjectX = S.tiltProject3DX; });
+      await page.evaluate(() => { const S = window.__sgp; S.tiltProject2DX = S.tiltProjectX; S.tiltProjectX = S.tiltProject3DX; S.PERF.noWalls = true; });
       const m = await measure();
-      m.gl = await page.evaluate(() => { const S = window.__sgp; S.tiltProjectX = S.tiltProject2DX; return S.ground3DOn(); });
+      m.gl = await page.evaluate(() => { const S = window.__sgp; S.tiltProjectX = S.tiltProject2DX; S.PERF.noWalls = false; return S.ground3DOn(); });
       return m;
     };
     // live riding (Behind or CLOSE camera), then replay of the recorded lap

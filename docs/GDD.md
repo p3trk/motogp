@@ -989,7 +989,7 @@ Asked by Petr (2026-11-18): the game is not smooth since the 3D bikes (1.26.0); 
 4. Cheaper rendering: no MSAA, single-sided materials, the 3D canvas at 1× on high-DPI screens.
 5. A low-detail bike (about 1,500–2,000 triangles) for bikes that are small on screen.
 
-## 11o. 3D track and scenery (approved 2026-11-19, phase 1 built, phase 2 proposed, not released)
+## 11o. 3D track and scenery (approved 2026-11-19, phases 1 and 2 built, not released)
 
 Asked by Petr (2026-11-19): the track should be 3D, with trees and other objects around it, to make the bike feel really fast.
 
@@ -1021,7 +1021,7 @@ Asked by Petr (2026-11-19): the track should be 3D, with trees and other objects
 - Debris fence on top of the walls: posts every 3 m, about 3 m tall, with a see-through mesh. Posts every few metres are the main speed cue: at 300 km/h about 28 of them pass each second.
 - Kerbs get a few centimetres of height and a sloped edge, so they catch the light.
 - Done when: walls follow the track edge checks of `track_edges.test.js` (no square ends, no jumps), and no wall or fence crosses the road or the pit lane.
-- **Design (proposed 2026-11-20, `src/scenery3d.js`):**
+- **Design (approved 2026-11-20, built, `src/scenery3d.js`):**
   - **Where:** on today's wall line `T.WALL` (both sides, the garage frontage left open as now), plus the pit wall (`PIT.wallD`, beside the flat pit lane). The line already keeps clear of the road, the run-off and the pit lane, and has no square steps (§1.11.4), so the 3D walls inherit that.
   - **Heights are scaled like the bikes:** the bikes are drawn 1.35× real size (`PHYS.VS`), so heights are 1.35× too, or a 1 m wall would look knee-high next to a rider. Real values below; footprint on the ground stays real.
   - **Concrete wall** (default): 1.0 m high, 0.5 m thick, grey with a light top edge, painted in 6 m blue and white blocks on the track face (as the flat wall today).
@@ -1036,6 +1036,7 @@ Asked by Petr (2026-11-19): the track should be 3D, with trees and other objects
   - **Kerbs: no height (changed from the plan).** A few centimetres are 1 px or less from the CLOSE camera, so it would cost work and frame time for nothing visible.
   - P overlay: a "3D walls" line (pieces drawn, ms). Test switch **7**: 3D walls on/off.
   - Tests: unit tests for each function; `tests/track3d.test.js` (new browser test): over the whole lap no wall, rail, tyre or post point is on the road, the kerbs, the run-off or the pit lane (`T.surface`); walls change by at most 1.5 m between neighbouring points (as `track_edges`); with walls on, the screen at the start/finish and Hangar Straight has pixels above the ground line that the walls drew (they stand up); frame cost of the walls under 15 % of the world drawing.
+  - **Built, results:** 24 pieces, about 58,000 triangles and 2,900 posts over the lap; 2–3 pieces are drawn at a time. Where the wall line would stand in another part of the circuit's run-off or gravel (where two parts come close, about 80 m in all), the barrier leaves a gap; the flat walls were drawn through there. The pit wall stands on the strip between the track and the pit lane, as the flat one did. Frame cost in headless Chromium: +3 % of the world drawing (limit 15 %). The 3D seam checks of `tilt_seam` measure the ground with the walls off (they stand over its test pattern).
 
 **Phase 3: trees, grandstands, buildings.**
 - Trees as real 3D objects (trunk plus 2–3 leaf cones or a rounded crown), 3–5 types, up to about 3,000, in groups behind the run-off as now. Far trees become flat cards that always face the camera.

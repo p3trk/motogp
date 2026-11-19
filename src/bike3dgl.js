@@ -15,12 +15,17 @@ function gl3DInit() {
     const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
     renderer.setClearColor(0x000000, 0); renderer.autoClear = false; // gl3DDraw clears once, then draws the ground and the bikes
     GL3D.canvas = canvas; GL3D.renderer = renderer; GL3D.scene = new THREE.Scene(); GL3D.cam = new THREE.Camera();
-    GL3D.scene.add(new THREE.AmbientLight(0xffffff, 0.55));
-    const sun = new THREE.DirectionalLight(0xffffff, 1.5); sun.position.set(0.35, -0.5, 0.8); GL3D.scene.add(sun);
-    const fill = new THREE.DirectionalLight(0xdfe8ff, 0.5); fill.position.set(-0.6, 0.4, 0.3); GL3D.scene.add(fill); // soft fill from the other side, so the shadow side is not black // in the view frame: from the viewer's side, above
+    gl3DAddLights(GL3D.scene);
     GL3D.ok = true;
   } catch { /* no WebGL here: the 2D bikes are drawn */ }
   return GL3D.ok;
+}
+// the lights of the 3D scenes (bikes, walls): ambient, the sun from the viewer's side above, and a soft fill from the
+// other side so the shadow side is not black; directions in the view frame
+function gl3DAddLights(scene) {
+  scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+  const sun = new THREE.DirectionalLight(0xffffff, 1.5); sun.position.set(0.35, -0.5, 0.8); scene.add(sun);
+  const fill = new THREE.DirectionalLight(0xdfe8ff, 0.5); fill.position.set(-0.6, 0.4, 0.3); scene.add(fill);
 }
 // clip = M * [u, Y, Z, 1]; ndc = clip / w. Screen x = VW/2 + u*P/w, screen y = VH + Y*P/w, w = P - Z: the worldToScreen
 // projection, with the road plane at height Y (down the screen) and Z (towards the viewer). Depth: nearer is smaller.

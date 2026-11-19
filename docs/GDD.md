@@ -989,7 +989,7 @@ Asked by Petr (2026-11-18): the game is not smooth since the 3D bikes (1.26.0); 
 4. Cheaper rendering: no MSAA, single-sided materials, the 3D canvas at 1× on high-DPI screens.
 5. A low-detail bike (about 1,500–2,000 triangles) for bikes that are small on screen.
 
-## 11o. 3D track and scenery (proposed, not approved)
+## 11o. 3D track and scenery (approved 2026-11-19, phase 1 built, not released)
 
 Asked by Petr (2026-11-19): the track should be 3D, with trees and other objects around it, to make the bike feel really fast.
 
@@ -1008,6 +1008,13 @@ Asked by Petr (2026-11-19): the track should be 3D, with trees and other objects
 - The 3D bikes and the ground are in one canvas and one depth buffer, so a bike can later pass behind a tree or a grandstand.
 - Speed blur (§11f) moves with it: the same three zoomed copies, done in a final shader pass, with the road and bikes cut out as now.
 - Done when: the tilt seam, camera and speed blur checks still pass; the picture matches today's within 2 px; Brave runs at 60 fps with the sharp road.
+- **Built (`src/track3d.js`):**
+  - The ground bands are drawn as three textured quads in their own three.js scene, before the bikes, on the 3D canvas (`#gl3d`, §11n): the near band, the far band where it fades in over the top `hB` of the near band (alpha 0 to 1, as `projectTilted`), and the rest of the far band. A ground-canvas point `(cx, cy)` sits at `(cx − RW/2, (cy − RH)·cos a, (cy − RH)·sin a)` in the frame of `gl3DProjection`, so it lands exactly where `worldToScreen` puts it. The band canvases are uploaded as textures each frame (they are redrawn each frame anyway).
+  - The sky (gradient and haze) stays on the 2D game canvas, under the 3D canvas; `projectTilted` is not called.
+  - Speed blur: the ground is drawn into a 1/2-resolution image; a shader zooms it about the horizon point from 1 to 1 + k times in 8 equal steps into a 1/4-resolution image, with the road and bikes cut out (a 1/4-resolution mask canvas); a last pass lays that over the screen at the blur strength, one sample per pixel. Same strength curve, horizon point and cut-out as §11f. 8 steps instead of 3 copies: the GPU samples without averaging, so 3 copies showed as 3 separate images. The sky is not in the blur image, so it is not hazed over. Cost in headless Chromium (software WebGL, GPU included): +12 % of the world drawing, limit 15 %.
+  - Browser tests that read the screen now read the game canvas with the 3D canvas over it, in the same frame (`screenX()` test hook; the sky check of `camera_tuning`, `speed_blur`), and the frame-cost checks wait for the 3D canvas too.
+  - Used when the 3D bikes are (3D graphics, tilted camera, WebGL). Classic graphics, Top-down and machines without WebGL keep the 2D projection, with the 2-row strip step for slow machines (§11n).
+  - Tests: `tilt_seam.test.js` runs every case also through the 3D ground (bends 0.29–0.35 px, limit 0.5; sharpness step at most 10 %, limit 15 %); unit tests in `tests/unit/track3d.test.js`.
 
 **Phase 2: walls, barriers and fences with height.**
 - Concrete walls and Armco barriers on today's wall line, about 1 m high; tyre walls on the outside of the fastest corners (Copse, Maggotts, Stowe, Club, Abbey).

@@ -926,7 +926,14 @@ function drawWorld() {
   let t = performance.now();
   try { for (const Ly of LAYERS) { ctx = Ly.g; drawWorldLayer(Ly, sx, sy); } } finally { ctx = mainCtx; }
   perfAdd('world', t);
-  if (camTilted()) { t = performance.now(); projectTilted(); speedBlur(); perfAdd('project', t); gl3DDraw(PERF.no3d ? [] : W.bikes.filter(gl3DOn)); } else { gl3DShow(false); }
+  if (!camTilted()) { gl3DShow(false); return; }
+  t = performance.now();
+  if (ground3DOn()) { // the GPU draws the ground (GDD 11o); only the sky is left for the 2D canvas
+    const P = tiltP(), uTop = RH * Math.cos(tiltA()) * P / (P + RH * Math.sin(tiltA()));
+    drawSky(mainCtx, uTop);
+  } else { projectTilted(); speedBlur(); }
+  perfAdd('project', t);
+  gl3DDraw(PERF.no3d ? [] : W.bikes.filter(gl3DOn));
 }
 // --- speed blur (GDD 11f): at top speed the surroundings smear into zoom streaks from the horizon point straight
 // ahead, on a 1/4 resolution copy of the screen; the road with its kerbs (+0.3 m) and the bikes are cut out of it
@@ -1030,10 +1037,7 @@ function drawSpeedLines(dt) { // on the HUD layer, before the HUD
 function projectTilted() {
   const P = tiltP(), sa = Math.sin(tiltA()), ca = Math.cos(tiltA());
   const hOf = u => u * P / (ca * P - u * sa), uTop = RH * ca * P / (P + RH * sa);
-  const g = mainCtx; g.setTransform(ODPR, 0, 0, ODPR, 0, 0); g.imageSmoothingEnabled = true;
-  const sky = g.createLinearGradient(0, 0, 0, VH - uTop + 2); sky.addColorStop(0, '#6fa3d2'); sky.addColorStop(1, '#c9d8de');
-  g.fillStyle = sky; g.fillRect(0, 0, VW, VH - uTop + 2);
-  g.fillStyle = '#c9d8de'; g.fillRect(0, VH - uTop, VW, uTop); // haze where a narrow ground area does not reach the screen sides
+  const g = mainCtx; drawSky(g, uTop); g.imageSmoothingEnabled = true;
   const near = LAYERS[1], far = LAYERS[0], hN = near.h;
   // one strip per screen row: the horizontal scale changes from row to row, so taller strips drew straight lines
   // as small steps, worst where the near and far bands join (GDD 1.11.5)

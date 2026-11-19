@@ -989,7 +989,7 @@ Asked by Petr (2026-11-18): the game is not smooth since the 3D bikes (1.26.0); 
 4. Cheaper rendering: no MSAA, single-sided materials, the 3D canvas at 1× on high-DPI screens.
 5. A low-detail bike (about 1,500–2,000 triangles) for bikes that are small on screen.
 
-## 11o. 3D track and scenery (approved 2026-11-19, phase 1 built, not released)
+## 11o. 3D track and scenery (approved 2026-11-19, phase 1 built, phase 2 proposed, not released)
 
 Asked by Petr (2026-11-19): the track should be 3D, with trees and other objects around it, to make the bike feel really fast.
 
@@ -1021,6 +1021,21 @@ Asked by Petr (2026-11-19): the track should be 3D, with trees and other objects
 - Debris fence on top of the walls: posts every 3 m, about 3 m tall, with a see-through mesh. Posts every few metres are the main speed cue: at 300 km/h about 28 of them pass each second.
 - Kerbs get a few centimetres of height and a sloped edge, so they catch the light.
 - Done when: walls follow the track edge checks of `track_edges.test.js` (no square ends, no jumps), and no wall or fence crosses the road or the pit lane.
+- **Design (proposed 2026-11-20, `src/scenery3d.js`):**
+  - **Where:** on today's wall line `T.WALL` (both sides, the garage frontage left open as now), plus the pit wall (`PIT.wallD`, beside the flat pit lane). The line already keeps clear of the road, the run-off and the pit lane, and has no square steps (§1.11.4), so the 3D walls inherit that.
+  - **Heights are scaled like the bikes:** the bikes are drawn 1.35× real size (`PHYS.VS`), so heights are 1.35× too, or a 1 m wall would look knee-high next to a rider. Real values below; footprint on the ground stays real.
+  - **Concrete wall** (default): 1.0 m high, 0.5 m thick, grey with a light top edge, painted in 6 m blue and white blocks on the track face (as the flat wall today).
+  - **Armco** where the wall stands far back (more than 20 m from the track edge): two steel rails at 0.45 and 0.75 m on posts every 4 m. Lower and see-through, so the land behind still shows.
+  - **Tyre walls** on the outside of Copse, Maggotts, Stowe, Club and Abbey (from 60 m before to 60 m after each corner): 1.0 m of stacked black tyres with a coloured belt (red and white blocks) in front of the concrete.
+  - **Debris fence** on top of concrete and tyre walls and the pit wall: posts every **4 m** (not 3 m) up to 3.0 m above the ground, a top rail, and a see-through dark mesh between wall and rail (about 25 % cover). 4 m because at 330 km/h a bike moves 1.5 m per frame at 60 fps: with posts 3 m apart that is half the spacing, where the eye can read posts as standing still or going backwards (the wagon-wheel effect); at 4 m it stays well under half. That still gives 21 posts a second at 300 km/h.
+  - **Built once, moved by one matrix:** all walls, rails, tyres and fence panels are built once in world metres when the track is loaded; posts are one `InstancedMesh`. Each frame they get one matrix from world metres to the camera frame (the same affine map as `gl3DPlanePoint`), so the CPU cost per frame does not grow with the number of posts. Split into pieces of about 250 m; a piece is drawn only if it reaches into the ground area on screen.
+  - **One depth buffer with the bikes:** they are in the bikes' scene, lit by the same sun, so a bike can pass behind a wall and the walls hide each other correctly.
+  - **Far edge:** the ground ends at the far band's edge (§11a), so walls fade into the haze colour over the last 40 % of the ground depth (fog) and are cut at the ground's far edge and sides; nothing stands in the sky.
+  - **Speed blur:** the walls and fences go into the blur image with the ground (§11o phase 1), so they smear at top speed like the land, and the road and bikes stay sharp.
+  - **The flat walls go:** while the 3D walls are on, the ground tiles leave out the flat wall and fence lines and draw a soft contact shadow at the wall foot instead, so the walls sit on the ground. Switching (Classic, Top-down, no WebGL) rebuilds the tiles with the flat walls.
+  - **Kerbs: no height (changed from the plan).** A few centimetres are 1 px or less from the CLOSE camera, so it would cost work and frame time for nothing visible.
+  - P overlay: a "3D walls" line (pieces drawn, ms). Test switch **7**: 3D walls on/off.
+  - Tests: unit tests for each function; `tests/track3d.test.js` (new browser test): over the whole lap no wall, rail, tyre or post point is on the road, the kerbs, the run-off or the pit lane (`T.surface`); walls change by at most 1.5 m between neighbouring points (as `track_edges`); with walls on, the screen at the start/finish and Hangar Straight has pixels above the ground line that the walls drew (they stand up); frame cost of the walls under 15 % of the world drawing.
 
 **Phase 3: trees, grandstands, buildings.**
 - Trees as real 3D objects (trunk plus 2–3 leaf cones or a rounded crown), 3–5 types, up to about 3,000, in groups behind the run-off as now. Far trees become flat cards that always face the camera.

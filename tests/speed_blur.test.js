@@ -49,7 +49,7 @@ const COST = 0.15; // largest share the blur may add to drawing the world
       window.__frame = () => { t += 1000 / 60; S.CAM.init = false; window.__tick(t); };
       window.__shot = blur => { // one frame with Speed blur On or Off, as device pixels
         S.UI.opts.blur = blur ? 'on' : 'off'; window.__frame();
-        const c = document.getElementById('game'); return c.getContext('2d').getImageData(0, 0, c.width, c.height);
+        const c = S.screenX(); return c.getContext('2d').getImageData(0, 0, c.width, c.height); // the game canvas with the 3D ground over it (GDD 11o)
       };
       window.__masks = c => { // road (3 px inside), off-road (10 px outside, below the horizon, away from bikes), bike
         const T = S.T, TL = S.TILT, k = c.width / innerWidth, VW = innerWidth, VH = innerHeight;
@@ -150,7 +150,7 @@ const COST = 0.15; // largest share the blur may add to drawing the world
     const r = await page.evaluate(() => {
       const S = window.__sgp, opt = S.UI.opts.blur, chip = document.querySelector('#optBlur [aria-pressed="true"]').textContent;
       window.__place('behind', 340); window.__frame();
-      const c = document.getElementById('game'), d = () => c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+      const d = () => { const c = S.screenX(); return c.getContext('2d').getImageData(0, 0, c.width, c.height).data; };
       const a = d(); S.UI.opts.blur = 'on'; window.__frame(); const b = d(); S.UI.opts.blur = 'off'; window.__frame(); const e = d();
       let mxOff = 0, mxOn = 0; for (let i = 0; i < a.length; i++) { mxOff = Math.max(mxOff, Math.abs(a[i] - e[i])); mxOn = Math.max(mxOn, Math.abs(a[i] - b[i])); }
       return { opt, chip, mxOff, mxOn };
@@ -200,7 +200,7 @@ const COST = 0.15; // largest share the blur may add to drawing the world
     const r = await page.evaluate(async () => {
       const S = window.__sgp; window.__place('close', 340);
       const c = document.getElementById('game'), one = document.createElement('canvas'); one.width = one.height = 1; const g = one.getContext('2d');
-      const sync = () => { g.drawImage(c, 0, 0, 1, 1); g.getImageData(0, 0, 1, 1); }; // waits for the GPU (reads back a 1 px copy, so the game canvas stays on the GPU)
+      const sync = () => { g.drawImage(c, 0, 0, 1, 1); if (S.GL3D.canvas && S.GL3D.shown) { g.drawImage(S.GL3D.canvas, 0, 0, 1, 1); } g.getImageData(0, 0, 1, 1); }; // waits for the GPU (reads back a 1 px copy, so the game canvas stays on the GPU)
       const med = a => a.slice().sort((x, y) => x - y)[a.length >> 1], tOn = [], tOff = [];
       for (let k = 0; k < 40; k++) { S.UI.opts.blur = k & 1 ? 'on' : 'off'; S.drawWorldX(); sync(); }
       for (let k = 0; k < 600; k++) {

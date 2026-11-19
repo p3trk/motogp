@@ -116,7 +116,7 @@ const COST = 0.10; // largest share 1.24.0 may add to drawing the world at top s
     const r = await page.evaluate(async () => {
       const S = window.__sgp, TL = S.TILT; window.__place('behind', 340);
       const c = document.getElementById('game'), one = document.createElement('canvas'); one.width = one.height = 1; const g = one.getContext('2d');
-      const sync = () => { g.drawImage(c, 0, 0, 1, 1); g.getImageData(0, 0, 1, 1); };
+      const sync = () => { g.drawImage(c, 0, 0, 1, 1); if (S.GL3D.canvas && S.GL3D.shown) { g.drawImage(S.GL3D.canvas, 0, 0, 1, 1); } g.getImageData(0, 0, 1, 1); };
       const med = a => a.slice().sort((x, y) => x - y)[a.length >> 1], tNew = [], tOld = [], NEW = { zK: TL.zK, hk: TL.hk, wd: TL.wd };
       const set = old => { Object.assign(TL, old ? { zK: 1.0, hk: 2.6, wd: 0 } : NEW); S.UI.opts.fx = old ? 'off' : 'on'; S.resizeX(); window.__frame(true); for (let k = 0; k < 20; k++) { S.drawWorldX(); sync(); } };
       for (let blk = 0; blk < 8; blk++) {

@@ -210,7 +210,10 @@ const UNIT = { a: DEG, bike: 0.01, fade: 0.01, wd: 0.01 }; // display unit -> TI
   await p2.waitForTimeout(300);
   const sk = await p2.evaluate(v => {
     const S = window.__sgp;
-    const c = document.getElementById('game'), d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let rows = 0;
+    // the screen as seen: the game canvas (sky), with the 3D canvas (ground and bikes, GDD 11o) over it, read in the same frame
+    S.drawWorldX(); const g0 = document.getElementById('game'), c = document.createElement('canvas'); c.width = g0.width; c.height = g0.height;
+    const cx = c.getContext('2d'); cx.drawImage(g0, 0, 0); const gl = S.GL3D.canvas; if (gl && gl.style.display !== 'none') { cx.drawImage(gl, 0, 0, c.width, c.height); }
+    const d = cx.getImageData(0, 0, c.width, c.height).data; let rows = 0;
     for (let y = 0; y < c.height; y++) { // a row is sky while at least 1/8 of it is the blue-to-haze sky colour
       let n = 0; for (let x = 0; x < c.width; x += 4) { const i = (y * c.width + x) * 4, R = d[i], G = d[i + 1], B = d[i + 2]; if (B > 150 && B >= G && G >= R - 5 && R > 90) n++; }
       if (n > c.width / 8) rows++; else break;

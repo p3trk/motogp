@@ -989,6 +989,64 @@ Asked by Petr (2026-11-18): the game is not smooth since the 3D bikes (1.26.0); 
 4. Cheaper rendering: no MSAA, single-sided materials, the 3D canvas at 1× on high-DPI screens.
 5. A low-detail bike (about 1,500–2,000 triangles) for bikes that are small on screen.
 
+## 11o. 3D track and scenery (approved 2026-11-19, phase 1 built, not released)
+
+Asked by Petr (2026-11-19): the track should be 3D, with trees and other objects around it, to make the bike feel really fast.
+
+**Where we are:** everything except the bikes is flat paint. The ground (road, kerbs, grass, gravel, walls, trees, grandstands, buildings) is drawn top-down into 2D canvases and warped onto the screen with the tilted-camera projection (§11a). Trees and grandstands are pictures lying on the grass, so nothing passes the camera at height. The strongest cue for speed is parallax: tall things close to the track rushing past faster than the ground under them. That is what is missing.
+
+**Approach:** move the world into the three.js scene the bikes already use (§11l), with the same camera (`gl3DProjection`), one phase at a time. Each phase is a separate feature branch, ends playable, and is released on its own. Physics, the track data, the AI and the Top-down camera do not change: the 3D is drawing only. Classic graphics and Top-down keep today's 2D world.
+
+**Rules for every phase**
+- 60 fps in Safari and Brave on Petr's MacBook at 1470×830 @2× in CLOSE, with 22 bikes; the P overlay (§11n) gets a line per new part.
+- Objects are built in code from simple shapes (low-poly boxes, cylinders, cones, flat cards) with no external files, so the game stays one HTML file. Many copies of one object are one draw call (three.js `InstancedMesh`).
+- Things far away or behind the camera are not drawn. Small far things switch to a cheaper version (level of detail).
+- Every new function gets its unit test (§13b); each phase adds browser checks to `tests/track3d.test.js`.
+
+**Phase 1: the ground in 3D (foundation, looks the same).**
+- The ground is one large plane in the 3D scene, textured with today's baked ground canvases (the near and far bands, §11a). The GPU does the perspective, so the 1,000 strips per frame of `projectTilted` go away. That is the cost behind Brave's 30 fps (§11n), and it removes the 0.6 px bends of the 2-row fallback in every browser.
+- The 3D bikes and the ground are in one canvas and one depth buffer, so a bike can later pass behind a tree or a grandstand.
+- Speed blur (§11f) moves with it: the same three zoomed copies, done in a final shader pass, with the road and bikes cut out as now.
+- Done when: the tilt seam, camera and speed blur checks still pass; the picture matches today's within 2 px; Brave runs at 60 fps with the sharp road.
+- **Built (`src/track3d.js`):**
+  - The ground bands are drawn as three textured quads in their own three.js scene, before the bikes, on the 3D canvas (`#gl3d`, §11n): the near band, the far band where it fades in over the top `hB` of the near band (alpha 0 to 1, as `projectTilted`), and the rest of the far band. A ground-canvas point `(cx, cy)` sits at `(cx − RW/2, (cy − RH)·cos a, (cy − RH)·sin a)` in the frame of `gl3DProjection`, so it lands exactly where `worldToScreen` puts it. The band canvases are uploaded as textures each frame (they are redrawn each frame anyway).
+  - The sky (gradient and haze) stays on the 2D game canvas, under the 3D canvas; `projectTilted` is not called.
+  - Speed blur: the ground is drawn into a 1/2-resolution image; a shader zooms it about the horizon point from 1 to 1 + k times in 8 equal steps into a 1/4-resolution image, with the road and bikes cut out (a 1/4-resolution mask canvas); a last pass lays that over the screen at the blur strength, one sample per pixel. Same strength curve, horizon point and cut-out as §11f. 8 steps instead of 3 copies: the GPU samples without averaging, so 3 copies showed as 3 separate images. The sky is not in the blur image, so it is not hazed over. Cost in headless Chromium (software WebGL, GPU included): +12 % of the world drawing, limit 15 %.
+  - Browser tests that read the screen now read the game canvas with the 3D canvas over it, in the same frame (`screenX()` test hook; the sky check of `camera_tuning`, `speed_blur`), and the frame-cost checks wait for the 3D canvas too.
+  - Used when the 3D bikes are (3D graphics, tilted camera, WebGL). Classic graphics, Top-down and machines without WebGL keep the 2D projection, with the 2-row strip step for slow machines (§11n).
+  - Tests: `tilt_seam.test.js` runs every case also through the 3D ground (bends 0.29–0.35 px, limit 0.5; sharpness step at most 10 %, limit 15 %); unit tests in `tests/unit/track3d.test.js`.
+
+**Phase 2: walls, barriers and fences with height.**
+- Concrete walls and Armco barriers on today's wall line, about 1 m high; tyre walls on the outside of the fastest corners (Copse, Maggotts, Stowe, Club, Abbey).
+- Debris fence on top of the walls: posts every 3 m, about 3 m tall, with a see-through mesh. Posts every few metres are the main speed cue: at 300 km/h about 28 of them pass each second.
+- Kerbs get a few centimetres of height and a sloped edge, so they catch the light.
+- Done when: walls follow the track edge checks of `track_edges.test.js` (no square ends, no jumps), and no wall or fence crosses the road or the pit lane.
+
+**Phase 3: trees, grandstands, buildings.**
+- Trees as real 3D objects (trunk plus 2–3 leaf cones or a rounded crown), 3–5 types, up to about 3,000, in groups behind the run-off as now. Far trees become flat cards that always face the camera.
+- A tree line on the horizon, as a strip of cards, so the land does not end in haze.
+- Grandstands as stepped blocks with a crowd texture and a roof; the Wing pit building and garages as boxes with the team doors (today's layout in `SCN`).
+- Done when: no object stands on the road, the run-off, the gravel or the pit lane (checked over the whole lap); 60 fps with all of it in view at Abbey and Club.
+
+**Phase 4: trackside rhythm (the most speed per triangle).**
+- Small, repeated objects close to the track: marshal posts with flags every 250–300 m, distance boards in 3D (300/200/100 before braking zones), advertising boards along the walls (fictional brands only), light posts, TV camera towers, a few gantries over the track (start/finish gantry with lights, sponsor bridge on Hamilton Straight).
+- A gantry over the road is the biggest single "whoosh": something tall that the camera passes under.
+- Done when: the speed-feel checks show more on-screen motion at the same speed than Phase 3 (measured as pixel change at screen edges per frame at 300 km/h).
+
+**Phase 5: depth of the world.**
+- Sky dome with a sun and clouds that move slowly, light fog with distance, soft shadows of walls and stands on the ground (baked once, not per frame).
+- Gentle hills around the circuit (Silverstone is nearly flat; the track itself stays flat, the land beyond the walls rises and falls by a few metres) so the view is not one flat sheet.
+
+**Phase 6 (optional, Petr to decide later): a lower chase camera.**
+- A true 3D world allows a camera just behind and above the rider, at about 1.5 m, looking along the road, like TV on-board shots. It is the most intense sense of speed, but it is a new camera with its own tuning (§11a), so it is listed separately.
+
+**Order and size (rough):** Phase 1 is the largest and riskiest (the ground, blur and all camera tests move); Phases 2–4 are each about one session of work plus tuning by eye; Phase 5 is small; Phase 6 is its own design. Recommended order: 1, 2, 4, 3, 5 (fences and trackside rhythm give more speed per frame-time than trees), then decide on 6.
+
+**Open questions (recommended answer in bold)**
+1. Objects built in code, or modelled in Blender like the bike? **Code for walls, fences, posts, boards and gantries (simple shapes, many copies); Blender only if a hero object (the Wing, a bridge) needs it later.**
+2. Keep Classic and Top-down as 2D? **Yes, as fallback and for phones that cannot run it.**
+3. Real brand names on boards? **No, fictional only, as for the teams.**
+
 ## 12. Track and graphics
 
 - Centreline from the TUMFTM racetrack-database (LGPL-3.0), resampled every ~2 m (5 888 m, 2 944 points); start line at the real finish line.

@@ -442,7 +442,7 @@ test('frame: race results when the end timer runs out; lower resolution on a slo
   const { G, W } = play('sprint'); W.endTimer = 0.05; W.bikes.forEach(x => Object.assign(x, { finished: true, lap: 10, finishT: 1300, bestLap: 128 })); G.last = 0;
   G.frame(100); assert.equal(G.UI.state, 'results');
   const s = play('practice', { dpr: 2 }); s.G.perfN = 0; s.G.last = 0; let t = 0;
-  for (let k = 0; k < 200 && s.G.DPR_CAP > 1; k++) { t += 40; s.G.frame(t); }
+  for (let k = 0; k < 600 && s.G.DPR_CAP > 1; k++) { t += 40; s.G.frame(t); } // after the road strip step (adaptQuality)
   assert.equal(s.G.DPR_CAP, 1);
 });
 test('attractSession: AI field running behind the menu', () => {
@@ -521,4 +521,12 @@ test('screenAxes: gravity in screen axes for each screen angle', () => {
   const { G } = load(); const g = { x: 1, y: 2 };
   assert.deepEqual([...G.screenAxes(0, g)], [1, 2]); assert.deepEqual([...G.screenAxes(90, g)], [2, -1]);
   assert.deepEqual([...G.screenAxes(180, g)], [-1, -2]); assert.deepEqual([...G.screenAxes(270, g)], [-2, 1]);
+});
+test('adaptQuality: a slow machine first gets 2-row road strips, then 1x pixels, then lower tilted resolution', () => {
+  const { G } = play('practice', { dpr: 2 });
+  const tilted = G.camTilted();
+  G.perfAvg = 0.01; G.perfN = 999; G.adaptQuality(); assert.equal(G.TILT.rows, 1, 'fast: nothing changes');
+  if (tilted) { G.perfAvg = 0.033; G.perfN = 61; G.adaptQuality(); assert.equal(G.TILT.rows, 2, 'road strips first'); assert.equal(G.DPR_CAP > 1, true, 'pixels kept'); }
+  G.perfAvg = 0.033; G.perfN = 181; G.adaptQuality(); assert.equal(G.DPR_CAP, 1, 'then 1x pixels');
+  G.UI.state = 'menu'; G.TILT.rows = 1; G.perfAvg = 0.05; G.perfN = 999; G.adaptQuality(); assert.equal(G.TILT.rows, 1, 'only while playing');
 });

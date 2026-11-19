@@ -306,7 +306,7 @@ Three cameras (since 1.14.0): **Behind**, **CLOSE** and **Top-down**. Chosen on 
   - Far band: the rest, up to ~2.6 screen heights, at 0.45 × resolution (0.4 before 1.11.6). It also covers the top 30 % of the near band, where the near band fades into it, so the picture gets softer gradually with distance instead of in one step where they join (since 1.11.6).
   - Both are projected onto the screen one screen row at a time, each row scaled by the perspective factor (since 1.11.5). Before, 3 px strips with one scale each drew straight lines (track edges, kerbs) as ~1 px steps every 3 rows, which showed as a kink across the screen, also where the near and far bands join.
   - A sky gradient fills the space above the far edge, and haze fades the far ground into it.
-  - On slow machines the resolution of both bands drops by a further 20 %.
+  - On slow machines (frames over 24 ms on average) the rows are first projected in 2-row strips, half the draw calls (since GDD 11n; straight lines bend by up to 0.6 px at the screen sides). If still slow, 1× pixels, then the resolution of both bands drops by a further 20 %.
 - **Tuning:** the tilt is **40°** with a camera distance of 1.3 × screen height. The plane is 2.3 × screen width and 2.6 × screen height.
 
 **CLOSE (since 1.14.0)**
@@ -971,6 +971,23 @@ Below about 190 km/h the rider limits; above it the damping does. A 40 km/h swin
 **Autopilot fix (2026-11-17):** the slower roll rate (`leanRate`) made the autopilot run wide. Its look-ahead (6 + 0.42·v m) was shorter than the distance a bike needs to roll into a corner, so at about 140 km/h it chased a 7 m offset with a 62° lean target, could not roll that fast, and ran onto the gravel. The look-ahead is now 6 + 0.7·v m. Headless, a minute of practice laps goes clean (no crash, 1.4 m RMS offset over 240 s, against 0.8 m before the slower roll), and the camera test passes on both runs. Tried and rejected: a lower steering gain (runs 25 m wide), a lead term on the lean target (no effect), and feedforward from the track curvature (worse).
 
 **Test:** unit tests for `maxLeanAt` and `leanRate` (GDD 13b), and physics tests that step `stepBike` and check the lean itself: the per-step change never exceeds the roll rate, a 40 km/h swing takes about 1.2 s, a 300 km/h swing about 0.8 s, and the lean stays at 40° at 300 km/h but can pass 50° at low speed. The lean cap was not reproduced in a headless run, because the scenario needs a braking corner ahead.
+
+## 11n. Frame rate (new, not released)
+
+Asked by Petr (2026-11-18): the game is not smooth since the 3D bikes (1.26.0); plan to double the frame rate.
+
+**Step 1, measure:** a frame-time overlay, toggled with **P** during a session. Averaged over the last 30 frames it shows the frame rate and the time per frame, split into: physics (`simStep`), camera, 2D world (the road layers), projection and speed blur, 3D bikes (placing the meshes and the three.js render call), and HUD. It also shows how many bikes are drawn in 3D, the canvas size and the pixel ratio. Browsers run GPU work in the background, so the 3D time is the CPU side only. The overlay is off by default and costs nothing when off.
+**Result (Petr, 2026-11-18):** Safari runs at 60 fps and is smooth; Brave (Chrome) runs at 33 fps.
+**Step 3, done first:** the 3D bikes are on their own canvas layer (`#gl3d`), above the game canvas and below the HUD, shown only while 3D bikes are drawn. Before, the 3D canvas was copied into the game canvas with `drawImage` every frame; in Chrome that copy makes the 2D canvas wait for the GPU. The picture is the same: the bikes were already drawn after the road warp and the speed blur, and screen shake never moved them.
+**Result:** Brave still 30 fps, with the game's own work at about 2 ms of a 28 ms frame; Energy Saver off and hardware acceleration on changed nothing. Suspect: the road projection draws one `drawImage` strip per screen row (about 1,000 per frame), which Chrome runs on the GPU after the timer stops.
+**Test switches** (while the overlay is shown): **8** draws the road strips 1, 2, 4 or 8 device rows tall; **9** switches the 3D bikes off and on. Both are for measuring only and reset on reload.
+**Result:** 2-row strips bring Brave from 30 to 60 fps. 2 rows by default fails the seam check (bends 0.57–0.65 px, limit 0.5), so it is the first step of the slow-machine quality drop instead (§11a): after about 60 slow frames the road switches to 2-row strips, before the pixel and resolution steps. Safari keeps 1-row strips.
+
+**Next steps (proposed, decided from the measurements):**
+2. Skip 3D bikes that are off screen (the same visibility test as the 2D bikes).
+3. ~~Show the 3D canvas as its own layer~~ (done, above).
+4. Cheaper rendering: no MSAA, single-sided materials, the 3D canvas at 1× on high-DPI screens.
+5. A low-detail bike (about 1,500–2,000 triangles) for bikes that are small on screen.
 
 ## 12. Track and graphics
 

@@ -126,11 +126,13 @@ test('ground3DBlur: nothing at low speed; at top speed the ground goes to a 1/2 
   const u = G.GROUND.blur.zoom.mesh.material.uniforms; assert.ok(u.k.value > 0); assert.ok(u.hz.value[1] > 0.5, 'horizon in the upper half');
   assert.ok(G.GROUND.blur.show.mesh.material.uniforms.s.value > 0.9);
 });
-test('ground3DRender: the ground is drawn, then the blur when fast', () => {
+test('ground3DRender: the ground is drawn, then the walls (GDD 11o phase 2), then the blur when fast', () => {
   const { G } = tilted();
   const log = stubRenderer(G); G.CAM.v = 50 / 3.6;
   G.ground3DRender();
-  assert.deepEqual(log.map(e => e[1]), [G.GROUND.scene]);
+  assert.deepEqual(log.map(e => e[1]), [G.GROUND.scene, G.WALLS3D.scene]);
+  log.length = 0; G.PERF.noWalls = true; G.ground3DRender();
+  assert.deepEqual(log.map(e => e[1]), [G.GROUND.scene], 'test switch 7: no walls');
 });
 test('drawSky: gradient down to the far edge of the ground, haze below it', () => {
   const { G } = tilted();

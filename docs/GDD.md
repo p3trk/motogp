@@ -168,8 +168,8 @@ Asked by Petr (2026-11-20), riding the Onboard camera (§11p): "When acceleratin
 
   | Lean | ≤ 25° | 35° | 45° | 50° | 59° (grip limit) |
   |---|---|---|---|---|---|
-  | Drive allowed | 1.02 g (wheelie limit, as now) | 0.86 g | 0.51 g | 0.34 g | 0.20 g |
-  | Today | 1.02 g | 1.02 g | 1.02 g | 1.02 g | 0.55 g |
+  | Drive allowed | 1.02 g (wheelie limit, as now) | 0.85 g | 0.51 g | 0.35 g | 0.20 g |
+  | Today | 1.02 g | 1.02 g | 1.02 g | 1.02 g | 0.23 g |
 
   The numbers are a design choice to be tuned by riding (no sourced telemetry for drive against lean). Full drive up to 25° keeps straights, kinks and fast exits as they are.
 - **Rider aids on:** traction control holds the drive at the cap: no wheelspin, the bike simply accelerates less until it is picked up. The lean limiter is unchanged.

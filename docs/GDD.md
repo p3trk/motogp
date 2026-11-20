@@ -1042,7 +1042,7 @@ Asked by Petr (2026-11-18): the game is not smooth since the 3D bikes (1.26.0); 
 4. Cheaper rendering: no MSAA, single-sided materials, the 3D canvas at 1× on high-DPI screens.
 5. A low-detail bike (about 1,500–2,000 triangles) for bikes that are small on screen.
 
-## 11o. 3D track and scenery (approved 2026-11-19, phases 1 to 4 built, not released)
+## 11o. 3D track and scenery (approved 2026-11-19, phases 1 to 5 built, not released)
 
 Asked by Petr (2026-11-19): the track should be 3D, with trees and other objects around it, to make the bike feel really fast.
 
@@ -1135,7 +1135,7 @@ Asked by Petr (2026-11-19): the track should be 3D, with trees and other objects
 **Phase 5: depth of the world.**
 - Sky dome with a sun and clouds that move slowly, light fog with distance, soft shadows of walls and stands on the ground (baked once, not per frame).
 - Gentle hills around the circuit (Silverstone is nearly flat; the track itself stays flat, the land beyond the walls rises and falls by a few metres) so the view is not one flat sheet.
-- **Design (proposed 2026-11-20, `src/sky3d.js`):**
+- **Design (approved 2026-11-20, built, `src/sky3d.js`):**
   - **What the camera sees, measured:** the sky is a thin strip at the top of the screen, 7.7 % in CLOSE (64 of 830 px, camera tilt 55°) and 8.7 % in Behind, and the ground ends at a haze line about RH ahead. A sun high in the sky is never in view, and a few metres of hills 300 m away cover only a few pixels. So this phase works where it shows: the sky strip, the horizon line, and shadows on the ground, which fill most of the screen.
   - **One sun, fixed in the world:** the sun stands to the north-west on the map (−x, −y), 40° high. This matches the shadows the 2D game already draws (bikes and trees cast towards +x, +y). Today the 3D light of the walls and estate turns with the camera, so a stand's lit side changes as the rider turns. From now on that scene's sun light is turned by the camera rotation every frame, so the lit and dark faces stay put in the world and agree with the shadows on the ground. The bikes keep their own light (open question 1).
   - **Shadows on the ground (baked into the ground tiles, drawn once per tile, no per-frame cost):** each 3D object casts its shape along the sun, 1.2 × its height long (sun at 40°), soft-edged, in the same dark as the 2D shadows (about 28 % black):
@@ -1147,9 +1147,9 @@ Asked by Petr (2026-11-19): the track should be 3D, with trees and other objects
     These come back to what 2D mode had: since phase 3, stands and buildings stand in 3D with no shadow at all (`drawBuildings` returns early while the 3D scenery is on). Key 7 (3D scenery off) also takes the shadows off with it.
   - **Sky strip with clouds:** the sky stays on the 2D game canvas under the 3D layer, the same blue-to-haze gradient. Over it goes one cloud texture (made in code once, soft white puffs on a 2048 px wide strip that wraps around), drawn in the strip above the horizon:
     - it slides sideways when the camera turns (a full turn = one strip width, like the tree line), so corners show in the sky too;
-    - it drifts slowly on its own (about one strip width in 10 minutes), so the sky is alive when standing on the grid;
+    - it drifts slowly on its own (about one strip width in 10 minutes) on the game clock: it stops while the game or the replay is paused, so a paused picture stays still;
     - towards the sun's side the sky is a little brighter and warmer (a broad glow, no sun disc, since the sun is above the screen).
-  - **Hills on the horizon, not in the land:** a strip of low distant hills (2–6 m high where it meets the haze, in a blue-grey between the tree line and the sky) stands just behind the tree line and slides with the camera in the same way. It breaks the straight line where the ground meets the sky, which is the only place hills would show from 28 m up. The land itself stays flat (open question 2).
+  - **Hills on the horizon, not in the land:** a strip of low distant hills (2.5–4.5 m high as at the ground's far edge, so they show above the 4 m tree line's lower tops without filling the sky strip, in a blue-grey between the tree line and the sky) stands just behind the tree line and slides with the camera in the same way. It breaks the straight line where the ground meets the sky, which is the only place hills would show from 28 m up. The land itself stays flat (open question 2).
   - **Fog with distance:** already in place since phases 1–3 (the 2D haze over the far 22 % of the ground and the matching 3D fog). This phase only makes the clouds and hills fade into the same haze colour at the horizon; the haze itself does not change.
   - Classic graphics and Top-down stay as they are. The speed blur does not take in the sky strip (as today).
   - **Cost:** clouds and hills are two `drawImage` calls per frame on the 2D canvas; the shadows cost only when a tile is drawn (tiles are cached); the sun turn is one vector per frame. Target: phase 5 adds at most 3 % frame time in CLOSE (headless) and does not move the speed blur check.
@@ -1158,9 +1158,10 @@ Asked by Petr (2026-11-19): the track should be 3D, with trees and other objects
     - the clouds move: standing on the grid, the sky strip changes over 10 s; turning through a corner, the sky strip slides the way the camera turns;
     - the horizon is not a straight line: the hills strip makes the row where the ground meets the sky vary across the screen;
     - shadows: a road patch under the start gantry's shadow is darker than the road beside it, and the ground on the shadow side of the Abbey stand is darker than on its sun side; with key 7 off, both differences go away;
-    - one sun: the lit face of a stand keeps the same brightness when the camera turns by 90°;
+    - one sun (unit test `sunLightPlace`): a face towards the sun is lit the same before and after the camera turns by 90°;
     - frame cost of phase 5 under 3 %; `camera_tuning`'s sky check (at most 12 %) still passes.
-  - **Open questions (recommended answer in bold):**
+  - **Built, results:** about 450 trackside boxes and posts, the 10 stands, the 56 paddock units and the Wing (in 4 m slices) cast baked shadows; the trees' round shadows lie along the sun. The start gantry's shadow crosses the road just past the line. Hills 2.5–4.5 m (the first try at 4–10 m filled the whole sky strip). The clouds are 16 wide soft clusters (a first try with 70 small puffs read as speckle) and drift on the game clock, so a paused game or replay stands still (the speed blur test compares frames that must be identical). Frame cost against `dev` in headless Chromium, CLOSE at 250 km/h: −0.3 % (Hangar Straight), +0.2 % (Abbey), +0.8 % (Club), within the noise (target 3 %). All 3D scenery together at Abbey and Club: +8 to +14 % over three runs (limit 15 %; phase 3 measured +8 %; the spread is the headless timing). Speed blur +14.4 to +15.6 % (limit 20 %); CLOSE sky 3.2 % (limit 12 %).
+  - **Questions, answered by Petr (2026-11-20):** 1 no, 2 not now (planned as Phase 7), 3 as recommended.
     1. Should the bikes' light also be fixed in the world? Then a bike riding towards the sun shows its dark side, which matches the shadows but changes the look you approved in §11l. **No: keep the bike light as it is; only the scenery gets the world sun.**
     2. Should the land rise and fall as real 3D hills? It needs the ground plane cut into a grid that follows a height map, every tree, stand and building raised to the height under it, and the seam tests run with the hills off. From 28 m up, a few metres of rise 200 m away shows as a few pixels. **No: hills on the horizon strip only. Real 3D land can come with the lower camera of Phase 6, where it would show.**
     3. A low sun (warm, long shadows) or a midday sun (short shadows)? **40°, mid-afternoon: shadows long enough to read (1.2 × height) without covering the road at the stands.**
@@ -1168,7 +1169,17 @@ Asked by Petr (2026-11-19): the track should be 3D, with trees and other objects
 **Phase 6 (optional, Petr to decide later): a lower chase camera.**
 - A true 3D world allows a camera just behind and above the rider, at about 1.5 m, looking along the road, like TV on-board shots. It is the most intense sense of speed, but it is a new camera with its own tuning (§11a), so it is listed separately.
 
-**Order and size (rough):** Phase 1 is the largest and riskiest (the ground, blur and all camera tests move); Phases 2–4 are each about one session of work plus tuning by eye; Phase 5 is small; Phase 6 is its own design. Recommended order: 1, 2, 4, 3, 5 (fences and trackside rhythm give more speed per frame-time than trees), then decide on 6.
+**Phase 7 (planned, Petr 2026-11-20: "not now, prepare for another phase"): land in 3D.**
+- The land beyond the walls rises and falls by a few metres as real 3D ground; the track, its kerbs, run-off and gravel and the pit lane stay flat.
+- What it takes (from the phase 5 question 2):
+  - **Height map:** one height per point of the land from a smooth noise, 0 within about 40 m of the track, run-off, gravel and the pit compound, rising to its full ±4 m over the next 100 m, so no wall, board or post stands on a slope.
+  - **Ground mesh:** the far and near ground quads (phase 1) become grids (for example 48 × 32 cells) whose points sit at the height under them; the texture (the baked ground canvases) stays as it is, mapped by canvas position, so nothing in the tiles changes.
+  - **Objects on the land:** every tree, stand, building and the Wing raised to the height under its foot when the estate is built (one number each, no per-frame cost); the tree line and the horizon hills strip (phase 5) stay.
+  - **Shadows:** the baked shadows (phase 5) stay flat on the tiles; on a slope they are a little off, which reads as normal at this height.
+  - **Tests:** the seam tests (`tilt_seam`) and the speed blur run with the land flat (test switch 7 already turns all 3D scenery off); a whole-lap check that the height is 0 under every wall, board, post and the road.
+- Best done together with, or after, the lower camera of Phase 6: from the CLOSE camera 28 m up, a few metres of rise 200 m away shows as a few pixels; from 1.5 m up it fills the view.
+
+**Order and size (rough):** Phase 1 is the largest and riskiest (the ground, blur and all camera tests move); Phases 2–4 are each about one session of work plus tuning by eye; Phase 5 is small; Phase 6 is its own design, Phase 7 goes with it. Recommended order: 1, 2, 4, 3, 5 (fences and trackside rhythm give more speed per frame-time than trees), then decide on 6 and 7.
 
 **Open questions (recommended answer in bold)**
 1. Objects built in code, or modelled in Blender like the bike? **Code for walls, fences, posts, boards and gantries (simple shapes, many copies); Blender only if a hero object (the Wing, a bridge) needs it later.**

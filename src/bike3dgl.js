@@ -21,11 +21,13 @@ function gl3DInit() {
   return GL3D.ok;
 }
 // the lights of the 3D scenes (bikes, walls): ambient, the sun from the viewer's side above, and a soft fill from the
-// other side so the shadow side is not black; directions in the view frame
+// other side so the shadow side is not black; directions in the view frame (the walls scene turns them to the sun
+// fixed in the world each frame, sunLightPlace); returns the sun and the fill
 function gl3DAddLights(scene) {
   scene.add(new THREE.AmbientLight(0xffffff, 0.55));
   const sun = new THREE.DirectionalLight(0xffffff, 1.5); sun.position.set(0.35, -0.5, 0.8); scene.add(sun);
   const fill = new THREE.DirectionalLight(0xdfe8ff, 0.5); fill.position.set(-0.6, 0.4, 0.3); scene.add(fill);
+  return { sun, fill };
 }
 // clip = M * [u, Y, Z, 1]; ndc = clip / w. Screen x = VW/2 + u*P/w, screen y = VH + Y*P/w, w = P - Z: the worldToScreen
 // projection, with the road plane at height Y (down the screen) and Z (towards the viewer). Depth: nearer is smaller.

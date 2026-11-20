@@ -48,7 +48,7 @@ const COST = 0.2; // largest share the blur may add to drawing the world
       let t = 1000; window.__tick(t);
       window.__frame = () => { t += 1000 / 60; S.CAM.init = false; window.__tick(t); };
       window.__shot = blur => { // one frame with Speed blur On or Off, as device pixels
-        S.UI.opts.blur = blur ? 'on' : 'off'; window.__frame();
+        S.UI.opts.blur = blur ? 'on' : 'off'; S.SKY.t = window.__skyT ??= S.SKY.t; window.__frame(); // the clouds (GDD 11o phase 5) held still between compared frames
         const c = S.screenX(); return c.getContext('2d').getImageData(0, 0, c.width, c.height); // the game canvas with the 3D ground over it (GDD 11o)
       };
       window.__masks = c => { // road (3 px inside), off-road (10 px outside, below the horizon, away from bikes), bike
@@ -149,9 +149,9 @@ const COST = 0.2; // largest share the blur may add to drawing the world
     await page.reload(); await ready(page); await helpers(page, false);
     const r = await page.evaluate(() => {
       const S = window.__sgp, opt = S.UI.opts.blur, chip = document.querySelector('#optBlur [aria-pressed="true"]').textContent;
-      window.__place('behind', 340); window.__frame();
+      window.__place('behind', 340); const sky = S.SKY.t, f = () => { S.SKY.t = sky; window.__frame(); }; f(); // the clouds held still (GDD 11o phase 5)
       const d = () => { const c = S.screenX(); return c.getContext('2d').getImageData(0, 0, c.width, c.height).data; };
-      const a = d(); S.UI.opts.blur = 'on'; window.__frame(); const b = d(); S.UI.opts.blur = 'off'; window.__frame(); const e = d();
+      const a = d(); S.UI.opts.blur = 'on'; f(); const b = d(); S.UI.opts.blur = 'off'; f(); const e = d();
       let mxOff = 0, mxOn = 0; for (let i = 0; i < a.length; i++) { mxOff = Math.max(mxOff, Math.abs(a[i] - e[i])); mxOn = Math.max(mxOn, Math.abs(a[i] - b[i])); }
       return { opt, chip, mxOff, mxOn };
     });

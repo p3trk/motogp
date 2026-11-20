@@ -1,7 +1,7 @@
 // --- trackside rhythm in 3D (GDD 11o, phase 4): braking boards, distance posts, marshal posts, advertising on the
 // fences, TV camera towers and gantries over the road. Built into the same 250 m pieces as the walls (scenery3d.js):
 // solid shapes in the vertex-colour buffer, posts as instances, and the boards and adverts as cards on one texture.
-const SIDE3D = { atlas: null, spots: [] }; // spots: [x, y, radius] of the marshal posts, towers and gantry pillars (trees keep clear, phase 3)
+const SIDE3D = { atlas: null, spots: [], casts: [] }; // spots: [x, y, radius] of the marshal posts, towers and gantry pillars (trees keep clear, phase 3); casts: the corners [x, y, z] of each box, for its shadow (phase 5)
 // made-up brands for the adverts (GDD: fictional only): name, background, lettering
 const SIDE_BRANDS = [['KESTRAN', '#0b3d91', '#ffffff'], ['VOLTANO', '#f2c200', '#111111'], ['NOVAPEAK', '#ffffff', '#d1121b'],
   ['ZEFIRA', '#00897b', '#ffffff'], ['RIVALTO', '#c62828', '#ffffff'], ['OKTARA', '#111111', '#ff8f00'],
@@ -45,12 +45,13 @@ function sidePt(p, x, y, z) {
 // the world point d metres out from the centre line at track point q, a metres along the track
 function sideAt(q, d, a = 0) { return [T.X[q] + T.NX[q] * d + T.TX[q] * a, T.Y[q] + T.NY[q] * d + T.TY[q] * a]; }
 // a box lined up with the track at point q: centre d out and a along, L long (along), w wide (across), from z0 to z1;
-// four sides in col and the top in top (no bottom)
+// four sides in col and the top in top (no bottom); its corners go to SIDE3D.casts
 function sideBox(p, q, d, a, L, w, z0, z1, col, top = col) {
   const pt = (da, dd, z) => sidePt(p, ...sideAt(q, d + dd, a + da), z), l = L / 2, h = w / 2;
   const c = [[-l, -h], [l, -h], [l, h], [-l, h]];
   for (let i = 0; i < 4; i++) { const [a0, d0] = c[i], [a1, d1] = c[(i + 1) % 4]; wallQuad(p.buf, pt(a0, d0, z0), pt(a1, d1, z0), pt(a1, d1, z1), pt(a0, d0, z1), col); }
   wallQuad(p.buf, pt(-l, -h, z1), pt(l, -h, z1), pt(l, h, z1), pt(-l, h, z1), top);
+  SIDE3D.casts.push(c.flatMap(([da, dd]) => { const w = sideAt(q, d + dd, a + da); return [[...w, z0], [...w, z1]]; })); // its shadow (phase 5)
 }
 // a textured card a-b-c-d (bottom left, bottom right, top right, top left as seen from the front) showing uv rectangle r
 function sideCard(p, a, b, c, d, r) {
@@ -82,6 +83,7 @@ function sidePosts(piece) {
   for (const q of GEO.posts) {
     const p = piece(q.i), [x, y] = sidePt(p, q.x, q.y, 0);
     p.posts.push([x, y, 1, 0.25, SIDE_COL.white], [x, y, 0.2, 0.27, SIDE_COL.band, 0.6]);
+    SIDE3D.casts.push([[-1, -1], [1, -1], [1, 1], [-1, 1]].flatMap(([a, b]) => [[q.x + 0.125 * a, q.y + 0.125 * b, 0], [q.x + 0.125 * a, q.y + 0.125 * b, 1]]));
   }
 }
 // marshal posts every SIDE_MARSHAL_STEP metres on alternating sides, behind the wall: hut, roof, pole and two flags
@@ -159,6 +161,6 @@ function wallAd(p, at, k, j, fk, fj, sg) {
 }
 // everything of phase 4, into the pieces of walls3DBuild
 function sideBuild(piece) {
-  SIDE3D.spots = [];
+  SIDE3D.spots = []; SIDE3D.casts = [];
   sideBoards(piece); sidePosts(piece); sideMarshals(piece); sideTowers(piece); sideGantries(piece);
 }

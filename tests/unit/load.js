@@ -10,7 +10,7 @@ const path = require('path');
 const ROOT = path.join(__dirname, '..', '..');
 const SRC = path.join(ROOT, 'src');
 const read = n => fs.readFileSync(path.join(SRC, n), 'utf-8');
-const ORDER = ['core.js', 'world.js', 'replay.js', 'bike_art.js', 'rig_art.js', 'vendor/three.min.js', 'bike3dmodel.js', 'render.js', 'bike3dgl.js', 'track3d.js', 'scenery3d.js', 'trackside3d.js', 'estate3d.js', 'ui.js'];
+const ORDER = ['core.js', 'world.js', 'replay.js', 'bike_art.js', 'rig_art.js', 'vendor/three.min.js', 'bike3dmodel.js', 'render.js', 'bike3dgl.js', 'track3d.js', 'scenery3d.js', 'trackside3d.js', 'estate3d.js', 'sky3d.js', 'ui.js'];
 
 // ---------------------------------------------------------------------------
 // recording 2D context: known properties are plain, every other name is a method that logs [name, ...args]

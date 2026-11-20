@@ -228,9 +228,10 @@ test('walls3DRender: places the walls and draws their scene with clipping on', (
   G.walls3DRender(r);
   assert.deepEqual(log, [G.WALLS3D.scene]); assert.equal(r.localClippingEnabled, true);
 });
-test('gl3DAddLights: ambient, sun and fill light', () => {
-  const { G } = load(); const s = new G.THREE.Scene(); G.gl3DAddLights(s);
+test('gl3DAddLights: ambient, sun and fill light; returns the sun and the fill', () => {
+  const { G } = load(); const s = new G.THREE.Scene(), L = G.gl3DAddLights(s);
   assert.deepEqual(s.children.map(c => c.type), ['AmbientLight', 'DirectionalLight', 'DirectionalLight']);
+  assert.equal(L.sun, s.children[1]); assert.equal(L.fill, s.children[2]);
 });
 test('perfNoWalls: switches the 3D walls off and on', () => {
   const { G } = load();

@@ -163,4 +163,5 @@ function drawSky(g, uTop) {
   const sky = g.createLinearGradient(0, 0, 0, VH - uTop + 2); sky.addColorStop(0, '#6fa3d2'); sky.addColorStop(1, '#c9d8de');
   g.fillStyle = sky; g.fillRect(0, 0, VW, VH - uTop + 2);
   g.fillStyle = '#c9d8de'; g.fillRect(0, VH - uTop, VW, uTop);
+  if (TILE_WALLS.on3d) skyDecor(g, uTop); // clouds, sun glow and hills with the 3D scenery (GDD 11o phase 5)
 }

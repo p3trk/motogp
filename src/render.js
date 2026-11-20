@@ -855,7 +855,7 @@ function drawStatic(vis, x0, y0, w, h) {
   ctx.strokeStyle = 'rgba(245,245,245,.85)'; ctx.lineWidth = 0.2; ctx.stroke(GEO.grid);
   drawTrackPaint(vis);
   ctx.lineCap = 'butt';
-  if (TILE_WALLS.on3d) drawWallShadows(); else drawFlatWalls();
+  if (TILE_WALLS.on3d) { drawWallShadows(); drawSunShadows(vis); } else drawFlatWalls(); // sun shadows of the 3D scenery (GDD 11o phase 5)
   for (const q of GEO.posts) { // distance posts (GDD 11h); in 3D while the 3D scenery stands (GDD 11o phase 4)
     if (TILE_WALLS.on3d || !vis(q.x, q.y, 2)) continue;
     ctx.save(); ctx.translate(q.x, q.y); ctx.rotate(q.h);
@@ -1263,8 +1263,8 @@ function drawBuildings(vis, still) {
 function drawTrees(vis) {
   for (const t of SCN.trees) {
     if (!vis(t.x, t.y, 10) || (TILE_WALLS.on3d && t.gone3d)) continue;
+    if (TILE_WALLS.on3d) { drawTreeShadow(t); continue; } // the 3D tree, its shadow along the sun (GDD 11o phases 3, 5)
     ctx.globalAlpha = 0.45; ctx.drawImage(TEX.shadow, t.x - t.r + t.r * 0.5, t.y - t.r + t.r * 0.65, t.r * 2.3, t.r * 2.3); ctx.globalAlpha = 1;
-    if (TILE_WALLS.on3d) continue; // the 3D tree stands on its shadow (GDD 11o phase 3)
     ctx.save(); ctx.translate(t.x, t.y); ctx.rotate(t.rot); ctx.drawImage(TEX.trees[t.v], -t.r * 1.2, -t.r * 1.2, t.r * 2.4, t.r * 2.4); ctx.restore();
   }
 }

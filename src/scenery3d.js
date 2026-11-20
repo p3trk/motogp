@@ -231,7 +231,7 @@ function wallShadowSide(path, s) {
 function walls3DInit() {
   if (WALLS3D.ready && WALLS3D.src === T.X) { return; }
   if (WALLS3D.scene) { for (const m of WALLS3D.pieces.flatMap(p => p.meshes).concat(EST.meshes)) { if (m.geometry !== WALLS3D.postGeo) m.geometry.dispose(); } }
-  WALLS3D.scene = new THREE.Scene(); gl3DAddLights(WALLS3D.scene);
+  WALLS3D.scene = new THREE.Scene(); WALLS3D.lights = gl3DAddLights(WALLS3D.scene);
   WALLS3D.scene.fog = new THREE.Fog(0xc9d8de, 1, 2);
   if (!WALLS3D.clip.length) WALLS3D.clip.push(new THREE.Plane(), new THREE.Plane(), new THREE.Plane());
   WALLS3D.pieces = walls3DBuild(); estate3DBuild(WALLS3D.scene); WALLS3D.src = T.X; WALLS3D.ready = true; // the estate: phase 3 (estate3d.js)
@@ -281,6 +281,7 @@ function walls3DPlace() {
   left.normal.set(1, 0, 0); left.constant = RW / 2;
   right.normal.set(-1, 0, 0); right.constant = RW / 2;
   estate3DPlace(F); // trees, stands, buildings and the tree line (phase 3)
+  sunLightPlace(F, WALLS3D.lights); // the sun fixed in the world (phase 5)
   WALLS3D.drawn = n;
   return n;
 }

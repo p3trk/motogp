@@ -15,7 +15,7 @@ function gl3DInit() {
     const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
     renderer.setClearColor(0x000000, 0); renderer.autoClear = false; // gl3DDraw clears once, then draws the ground and the bikes
     GL3D.canvas = canvas; GL3D.renderer = renderer; GL3D.scene = new THREE.Scene(); GL3D.cam = new THREE.Camera();
-    gl3DAddLights(GL3D.scene);
+    GL3D.lights = gl3DAddLights(GL3D.scene); // turned to the Chase camera each frame there (GDD 11o phase 6)
     GL3D.ok = true;
   } catch { /* no WebGL here: the 2D bikes are drawn */ }
   return GL3D.ok;
@@ -43,12 +43,14 @@ function gl3DPlanePoint(x, y, z) {
   const u = cx - RW / 2, v = cy - RH, hpx = z * CAM.ppm, a = tiltA(), sa = Math.sin(a), ca = Math.cos(a);
   return [u, v * ca - hpx * sa, v * sa + hpx * ca];
 }
-// the model frame of one bike: metres in the bike's own axes (+x forward, +y left, +z up) scaled by VS, placed on the road
-function gl3DBikeFrame(b) {
-  const VS = PHYS.VS * CAM.boost, c = Math.cos(b.h), s = Math.sin(b.h);
-  const O = gl3DPlanePoint(b.x, b.y, 0);
+// the model frame of one bike: metres in the bike's own axes (+x forward, +y left, +z up) scaled by VS, placed on the road.
+// map takes a game point (x, y, height z) into the drawing frame: the tilted camera's (default) or the Chase camera's
+// (GDD 11o phase 6, lowMap), which draws at real size (VS 1)
+function gl3DBikeFrame(b, map = gl3DPlanePoint, VS = PHYS.VS * CAM.boost) {
+  const c = Math.cos(b.h), s = Math.sin(b.h);
+  const O = map(b.x, b.y, 0);
   const sub = p => [p[0] - O[0], p[1] - O[1], p[2] - O[2]];
-  const fw = sub(gl3DPlanePoint(b.x + c, b.y + s, 0)), lf = sub(gl3DPlanePoint(b.x - s, b.y + c, 0)), up = sub(gl3DPlanePoint(b.x, b.y, 1));
+  const fw = sub(map(b.x + c, b.y + s, 0)), lf = sub(map(b.x - s, b.y + c, 0)), up = sub(map(b.x, b.y, 1));
   // lean: the bike rolls about its forward axis through the contact point, so the wheels stay on the road.
   // Positive lean is a right turn (core.js: curvature = G tan(lean) / v^2, which turns the heading clockwise on screen),
   // so the bike rolls to its right: the up axis moves to the right of the bike's centre line.
@@ -58,7 +60,11 @@ function gl3DBikeFrame(b) {
   const P = gl3DPitch(b), cp = Math.cos(P), sp = Math.sin(P);
   const Xw = X.map((k, i) => k * cp + Z[i] * sp), Zw = Z.map((k, i) => -X[i] * sp + k * cp);
   const Ow = O.map((k, i) => k + 0.65 * VS * (Xw[i] - X[i])); // keep the rear axle on its contact point while the bike pitches
-  return { O: Ow, X: Xw.map(k => k * VS), Y: Y.map(k => k * VS), Z: Zw.map(k => k * VS) };
+  // a left-handed map (Chase's, which flips the game's y) would draw the model mirrored: its left axis is turned round
+  // after the lean, so the lean keeps its direction (found on the Onboard branch, GDD 11p 1f)
+  const det = fw[0] * (lf[1] * up[2] - lf[2] * up[1]) - fw[1] * (lf[0] * up[2] - lf[2] * up[0]) + fw[2] * (lf[0] * up[1] - lf[1] * up[0]);
+  const Ys = det < 0 ? -VS : VS;
+  return { O: Ow, X: Xw.map(k => k * VS), Y: Y.map(k => k * Ys), Z: Zw.map(k => k * VS) };
 }
 // a 4x4 row-major matrix whose columns are the bike's axes and whose last column is its origin
 function gl3DMatrix(f) {
@@ -161,8 +167,9 @@ function gl3DLightGeometry() {
   if (!GL3D.lightGeo) { const g = new THREE.BoxGeometry(0.05, 0.14, 0.04); g.translate(-0.74, 0, 0.88); GL3D.lightGeo = g; }
   return GL3D.lightGeo;
 }
-// a bike drawn in 3D: 3D is on, the view is tilted, the bike is running (crashed and retired bikes stay 2D)
-function gl3DOn(b) { return useBike3D() && camTilted() && !b.crashed && !b.dnf && gl3DInit(); }
+// a bike drawn in 3D: 3D is on, the view is tilted or Chase (GDD 11o phase 6), the bike is running (crashed and
+// retired bikes stay 2D)
+function gl3DOn(b) { return useBike3D() && (camTilted() || lowOn()) && !b.crashed && !b.dnf && gl3DInit(); }
 // draws the bikes in list on the transparent canvas and composites it over the current frame
 // bikes that have left the session (end of a race, a new session) lose their meshes; the others not drawn in 3D
 // this frame (crashed, retired, out of view) are hidden, so no bike stays frozen on screen
@@ -196,9 +203,9 @@ function gl3DPoseWeights(lean) {
   return w;
 }
 // one bike's meshes for this frame: placed on the road, the front wheel steered, the rider posed for the lean, and
-// the tail light lit while braking
-function gl3DPlaceBike(b) {
-  const f = gl3DBikeFrame(b), mat = gl3DMatrix(f), wmat = gl3DMatrix(gl3DWheelFrame(f, b.ctl && b.ctl.steer));
+// the tail light lit while braking; map and VS as gl3DBikeFrame
+function gl3DPlaceBike(b, map, VS) {
+  const f = gl3DBikeFrame(b, map, VS), mat = gl3DMatrix(f), wmat = gl3DMatrix(gl3DWheelFrame(f, b.ctl && b.ctl.steer));
   const pose = gl3DPoseWeights(b.lean);
   const braking = (b.ctl && b.ctl.brk > 0.3) && b.v > 5; // the same rule as the 2D brake glow (drawBike)
   const light = braking ? 0xff2a1a : 0x5a0d0a;
@@ -215,15 +222,20 @@ function gl3DShow(on) {
   if (!c || !c.style || GL3D.shown === on) return;
   GL3D.shown = on; c.style.display = on ? 'block' : 'none';
 }
+// the 3D canvas at the game canvas's size; resized only when the page size changes: setSize rewrites the canvas size
+// every call, which reallocates the canvas
+function gl3DSize() {
+  const w = cv.width, h = cv.height;
+  if (GL3D.w !== w || GL3D.h !== h) { GL3D.renderer.setPixelRatio(1); GL3D.renderer.setSize(w, h, false); GL3D.w = w; GL3D.h = h; }
+}
 function gl3DDraw(list) {
   if (!gl3DInit()) return false;
   gl3DPrune(list);
   const ground = ground3DOn(); // the ground is drawn on this canvas too (GDD 11o)
   gl3DShow(list.length > 0 || ground);
   if (!list.length && !ground) return false;
-  const w = cv.width, h = cv.height, P = tiltP();
-  // resize only when the page size changes: setSize rewrites the canvas size every call, which reallocates the canvas
-  if (GL3D.w !== w || GL3D.h !== h) { GL3D.renderer.setPixelRatio(1); GL3D.renderer.setSize(w, h, false); GL3D.w = w; GL3D.h = h; }
+  const P = tiltP();
+  gl3DSize();
   GL3D.cam.projectionMatrix.set(...gl3DProjection(P)); GL3D.cam.matrixWorldInverse.identity();
   let t = performance.now();
   for (const b of list) { gl3DPlaceBike(b); }

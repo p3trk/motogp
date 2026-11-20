@@ -774,18 +774,21 @@ function stretchAt(x, y) {
   ctx.translate(x, y); ctx.rotate(-CAM.rot); ctx.scale(1, s); ctx.rotate(CAM.rot); ctx.translate(-x, -y);
 }
 
-// --- camera: 'behind' and 'close' = tilted chase views with their own values, 'chase' = top-down rotating (GDD 11a)
+// --- camera: 'behind' and 'close' = tilted chase views with their own values, 'low' = the Chase camera, a low 3D follow
+// shot (GDD 11o phase 6, chase3d.js), 'chase' = top-down rotating (GDD 11a)
 const CAM = { x: 0, y: 0, rot: 0, v: 0, ppm: 10, mode: 'behind', init: false, ax: 0.5, ay: 0.6, boost: 1, w: 0, dec: 0 }; // w: wider view at speed, dec: deceleration in m/s2 (GDD 11h)
-const CAM_ORDER = ['behind', 'close', 'chase'], CAM_NAME = { behind: 'Behind', close: 'CLOSE', chase: 'Top-down' }; // C goes through them in this order
-const camTilted = () => CAM.mode !== 'chase';
-function setCamMode(m) { if (CAM.mode === m || !CAM_NAME[m]) { return; } CAM.mode = m; if (m in CAM_KEY) { camLoad(m); } CAM.init = false; resize(); }
+const CAM_ORDER = ['behind', 'close', 'low', 'chase'], CAM_NAME = { behind: 'Behind', close: 'CLOSE', low: 'Chase', chase: 'Top-down' }; // C goes through them in this order
+const camTilted = () => CAM.mode === 'behind' || CAM.mode === 'close';
+const camTuned = () => camTilted() || CAM.mode === 'low'; // the cameras with a tuning panel in the pause menu (GDD 11a)
+// Chase needs 3D graphics, WebGL and not a phone; where it cannot be used, Behind is chosen instead (GDD 11o phase 6)
+function setCamMode(m) { if (m === 'low' && !lowAvail()) { m = 'behind'; } if (CAM.mode === m || !CAM_NAME[m]) { return; } CAM.mode = m; if (m in CAM_KEY) { camLoad(m); } CAM.init = false; resize(); }
 function updateCamera(dt) {
   const b = W.player; if (!b) return;
   let px = b.x, py = b.y, h = b.h, v = b.v;
   if (b.crashed && b.crash) { px = b.crash.rd.x; py = b.crash.rd.y; v = Math.hypot(b.crash.rd.vx, b.crash.rd.vy); }
   if (dt > 0.001) CAM.dec += ((CAM.v - v) / dt - CAM.dec) * (1 - Math.exp(-dt * 10));
   CAM.v = v; // the speed the camera follows, also for the speed blur (GDD 11f)
-  const ww = camTilted() && UI.opts.fx !== 'off' ? sstep((v * 3.6 - 200) / 140) : 0; // wider view above 200 km/h (GDD 11h)
+  const ww = (camTilted() || CAM.mode === 'low') && UI.opts.fx !== 'off' ? sstep((v * 3.6 - 200) / 140) : 0; // wider view above 200 km/h (GDD 11h; Chase, GDD 11o phase 6)
   CAM.w = CAM.init ? CAM.w + (ww - CAM.w) * (1 - Math.exp(-dt / 0.4)) : ww;
   let tx, ty, targetPpm;
   if (camTilted()) {
@@ -805,6 +808,7 @@ function updateCamera(dt) {
   CAM.rot += angWrap(tr - CAM.rot) * (1 - Math.exp(-dt * 4.5));
   CAM.ppm += (targetPpm - CAM.ppm) * (1 - Math.exp(-dt * 1.8));
   CAM.boost = camTilted() ? Math.max(1, TILT.minLen / (2.5 * PHYS.VS * CAM.ppm)) : 1; // keep bikes readable when zoomed out
+  if (CAM.mode === 'low') lowFollow(b, dt); // the Chase camera's lagged heading (GDD 11o phase 6)
 }
 function worldToCanvas(x, y) {
   const dx = x - CAM.x, dy = y - CAM.y, c = Math.cos(CAM.rot), s = Math.sin(CAM.rot);
@@ -815,6 +819,7 @@ function canvasToWorld(sx, sy) {
   return [CAM.x + dx * c + dy * s, CAM.y - dx * s + dy * c];
 }
 function worldToScreen(x, y) {
+  if (lowOn()) { return lowProject(x, y); }
   const [cx, cy] = worldToCanvas(x, y);
   if (!camTilted()) return [cx, cy];
   // same projection as the CSS perspective(P) rotateX(a) about the canvas bottom centre
@@ -902,7 +907,7 @@ function getTile(L, tx, ty, allowRender) {
 const PERF = { on: false, cur: {}, sum: {}, n: 0, last: 0, show: null, gl3d: 0, no3d: false, noWalls: false }; // no3d, noWalls: test switches (GDD 11n, 11o)
 const PERF_N = 30;
 const PERF_PARTS = [['sim', 'physics'], ['camera', 'camera'], ['world', '2D world'], ['project', 'projection + blur'],
-  ['walls', '3D scenery (CPU)'], ['gl3d', '3D bikes (CPU)'], ['hud', 'HUD']];
+  ['lowg', '3D ground (tiles)'], ['walls', '3D scenery (CPU)'], ['gl3d', '3D bikes (CPU)'], ['hud', 'HUD']];
 function perfToggle() { PERF.on = !PERF.on; PERF.cur = {}; PERF.sum = {}; PERF.n = 0; PERF.show = null; PERF.last = 0; }
 // adds the time since t0 to a part of this frame (nothing when the overlay is off)
 // test switch 8: the road projection draws one strip per 1, 2, 4 or 8 device rows (fewer draw calls, coarser picture)
@@ -944,6 +949,7 @@ function drawPerf() {
 }
 function drawWorld() {
   tileFrame++;
+  if (lowOn()) { lowDraw(PERF.no3d ? [] : W.bikes.filter(gl3DOn)); return; } // Chase draws the world in 3D (GDD 11o phase 6)
   let sx = 0, sy = 0; if (HUD.shake > 0.01) { sx = (Math.random() - 0.5) * 8 * HUD.shake; sy = (Math.random() - 0.5) * 8 * HUD.shake; }
   const A = speedVib(); if (A > 0) { sx += (Math.random() - 0.5) * 2 * A; sy += (Math.random() - 0.5) * 2 * A; }
   tileWallsSync(walls3DOn()); WALLS3D.shake = [sx, sy]; // the 3D walls move with the shaken ground layers
@@ -1034,6 +1040,7 @@ function speedVib() { // amplitude in px: speed, kerbs above 50 km/h, braking ha
 }
 const SPL = { lines: [], acc: 0 };
 function speedOrigin() { // the point the lines streak out from: the horizon point straight ahead, or ahead of the bike in Top-down
+  if (lowOn()) { return LOW.hz; }
   if (!camTilted()) return [VW / 2, VH * 0.25];
   const P = tiltP(), uTop = RH * Math.cos(tiltA()) * P / (P + RH * Math.sin(tiltA())); return [VW / 2, Math.max(0, VH - uTop)];
 }

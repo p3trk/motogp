@@ -206,7 +206,7 @@ Asked by Petr (2026-11-20), riding the Onboard camera (§11p): "When acceleratin
 1. The shape: full drive to 25°, falling to 0.2 g at the grip limit? **Yes**, then tune by riding. Alternative: start the fall at 15° for a stronger effect.
 2. Aids off: wheelspin and highside above the cap? **Yes**, it gives the throttle control real meaning. Alternative: only the cap, no highside.
 3. Old saved laps and ghosts: keep them as they are? **Yes**; a note in the CHANGELOG at release.
-4. The lap is 3.9 s slower (ideal 2:12.0). Keep the shape, or soften it (for example the fall starting at 30° instead of 25°, or the floor at 0.3 g instead of 0.2 g)? **Petr to decide after riding it.**
+4. The lap is 3.9 s slower (ideal 2:12.0). Keep the shape, or soften it (for example the fall starting at 30° instead of 25°, or the floor at 0.3 g instead of 0.2 g)? **Keep it** (Petr rode it, 2026-11-20: "5b is okay").
 
 ## 6. Collisions, crashes and damage
 

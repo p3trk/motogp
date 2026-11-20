@@ -989,7 +989,7 @@ Asked by Petr (2026-11-18): the game is not smooth since the 3D bikes (1.26.0); 
 4. Cheaper rendering: no MSAA, single-sided materials, the 3D canvas at 1× on high-DPI screens.
 5. A low-detail bike (about 1,500–2,000 triangles) for bikes that are small on screen.
 
-## 11o. 3D track and scenery (approved 2026-11-19, phases 1, 2 and 4 built, not released)
+## 11o. 3D track and scenery (approved 2026-11-19, phases 1, 2 and 4 built, phase 3 proposed, not released)
 
 Asked by Petr (2026-11-19): the track should be 3D, with trees and other objects around it, to make the bike feel really fast.
 
@@ -1043,6 +1043,17 @@ Asked by Petr (2026-11-19): the track should be 3D, with trees and other objects
 - A tree line on the horizon, as a strip of cards, so the land does not end in haze.
 - Grandstands as stepped blocks with a crowd texture and a roof; the Wing pit building and garages as boxes with the team doors (today's layout in `SCN`).
 - Done when: no object stands on the road, the run-off, the gravel or the pit lane (checked over the whole lap); 60 fps with all of it in view at Abbey and Club.
+- **Design (proposed 2026-11-20, `src/estate3d.js`):** the scenery that is already laid out in `SCN` (§12) stands up; nothing moves.
+  - **Trees:** the 1,493 trees of `SCN.trees` (crown radius 2.5–7.5 m) become low-poly 3D trees in 4 types, picked from each tree's variant: round broadleaf (faceted ball crown), wide broadleaf (two overlapping balls), conifer (three stacked cones), poplar (tall narrow crown). Trunk 0.3–0.6 m. Height from the crown size: 1.6 × radius + 2 m, so 6–14 m (scaled 1.35× like the bikes). Leaf colour varies a little per tree (instance colours). One `InstancedMesh` per type for the whole estate: 4 draws in all.
+  - **No flat-card level of detail (changed from the plan):** with 1,500 trees at 40–80 triangles each the GPU draws about 90,000 triangles of trees, cheap enough that cards would add work and popping for nothing. If Safari or Brave says otherwise, cards come back.
+  - **Tree line on the horizon:** a strip of tree silhouettes standing on the far edge of the ground, tinted towards the haze, which turns with the camera (it is far away, so it does not slide sideways). The land then ends in a tree line, not in fog.
+  - **Grandstands** (10, at the classic viewing spots): stepped blocks rising from 1 m at the front (the track side) to 8 m at the back in 8 tiers, a crowd texture on the tiers (coloured dots, drawn once), a white back wall, and a roof on pillars at 12 m.
+  - **The Wing:** the garage block along the pit lane, 6 m high, dark grey with the 22 team-coloured garage doors (4 m high, by box), and behind it the office block to 11 m under a white roof slab with a blue edge that rises towards the back. The pit boxes painted on the ground stay as they are.
+  - **Paddock buildings** (56 team units): white boxes 3.5 m high with the team colour band.
+  - **The flat drawings leave the ground tiles** while 3D scenery is on (tree crowns, stands, buildings, the Wing roof); the soft tree shadows stay on the ground so the trees sit on it. Test switch 7 still covers all 3D scenery.
+  - **Placement:** the layout already keeps clear of the track (`trackClear`), the pit compound and the stands. New rule: a tree that would touch a marshal post, a camera tower or a gantry pillar (phase 4) is left out.
+  - **Could hide the bike:** a tall tree on the inside of a tight corner can stand between the camera (28 m up, about 45 m behind) and the bike for a moment. I will watch for it at the tight corners (the Loop, Vale, Club) and lower or drop trees there if it happens.
+  - Tests: unit tests for each function; the whole-lap placement check covers trunks, stands and buildings; `tests/track3d.test.js`: a tree stands up (its crown above its shadow), a grandstand shows its crowd, the Wing's doors show in the team colours, the tree line is on the horizon; frame cost of all 3D scenery at Abbey and at Club under 15 % (headless), and the fps check in Safari and Brave by Petr.
 
 **Phase 4: trackside rhythm (the most speed per triangle).**
 - Small, repeated objects close to the track: marshal posts with flags every 250–300 m, distance boards in 3D (300/200/100 before braking zones), advertising boards along the walls (fictional brands only), light posts, TV camera towers, a few gantries over the track (start/finish gantry with lights, sponsor bridge on Hamilton Straight).

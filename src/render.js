@@ -827,13 +827,14 @@ function worldToScreen(x, y) {
 const TILE_PX = 512;
 const TLV = [{ m: 40, map: new Map(), cap: 160 }, { m: 80, map: new Map(), cap: 140 }, { m: 160, map: new Map(), cap: 140 }];
 let tileFrame = 0;
-// on3d: the tiles leave out the flat walls, fences, braking boards and distance posts while the 3D scenery stands on
-// them (GDD 11o phases 2 and 4)
+// on3d: the tiles leave out the flat walls, fences, braking boards, distance posts, tree crowns, stands, buildings and
+// the Wing while the 3D scenery stands on them (GDD 11o phases 2 to 4)
 const TILE_WALLS = { on3d: false };
 // switches the tiles between flat and 3D walls; the cached tiles are dropped and baked again
 function tileWallsSync(on) {
   if (on === TILE_WALLS.on3d) { return false; }
   TILE_WALLS.on3d = on; for (const L of TLV) L.map.clear();
+  if (on) walls3DInit(); // before the tiles bake: it marks the trees that give way to the trackside objects (GDD 11o phase 3)
   return true;
 }
 function drawStatic(vis, x0, y0, w, h) {
@@ -877,8 +878,9 @@ function drawFlatWalls() {
 }
 // under the 3D walls: a soft contact shadow along their foot, so they sit on the ground (GDD 11o phase 2)
 function drawWallShadows() {
-  ctx.strokeStyle = 'rgba(0,0,0,.14)'; ctx.lineWidth = 2.4; ctx.stroke(GEO.walls); ctx.stroke(GEO.pitWall);
-  ctx.strokeStyle = 'rgba(0,0,0,.16)'; ctx.lineWidth = 1.2; ctx.stroke(GEO.walls); ctx.stroke(GEO.pitWall);
+  const walls = wallShadowPath(); // only where a 3D wall stands (not across its gaps)
+  ctx.strokeStyle = 'rgba(0,0,0,.14)'; ctx.lineWidth = 2.4; ctx.stroke(walls); ctx.stroke(GEO.pitWall);
+  ctx.strokeStyle = 'rgba(0,0,0,.16)'; ctx.lineWidth = 1.2; ctx.stroke(walls); ctx.stroke(GEO.pitWall);
 }
 function renderTile(L, tx, ty) {
   const M = L.m, c = mkCanvas(TILE_PX, TILE_PX), g = c.getContext('2d', { alpha: false });
@@ -1223,7 +1225,7 @@ function drawPitBoxes(vis, still) {
 }
 function polyFill(pts) { ctx.beginPath(); pts.forEach((p, j) => j ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.closePath(); }
 function drawBuildings(vis, still) {
-  if (!still) return;
+  if (!still || TILE_WALLS.on3d) return; // in 3D while the 3D scenery stands (GDD 11o phase 3)
   // garages + Wing roof
   const w = SCN.wing; const mid = w.garage[Math.floor(w.garage.length / 4)];
   if (vis(mid[0], mid[1], 500)) {
@@ -1260,8 +1262,9 @@ function drawBuildings(vis, still) {
 }
 function drawTrees(vis) {
   for (const t of SCN.trees) {
-    if (!vis(t.x, t.y, 10)) continue;
+    if (!vis(t.x, t.y, 10) || (TILE_WALLS.on3d && t.gone3d)) continue;
     ctx.globalAlpha = 0.45; ctx.drawImage(TEX.shadow, t.x - t.r + t.r * 0.5, t.y - t.r + t.r * 0.65, t.r * 2.3, t.r * 2.3); ctx.globalAlpha = 1;
+    if (TILE_WALLS.on3d) continue; // the 3D tree stands on its shadow (GDD 11o phase 3)
     ctx.save(); ctx.translate(t.x, t.y); ctx.rotate(t.rot); ctx.drawImage(TEX.trees[t.v], -t.r * 1.2, -t.r * 1.2, t.r * 2.4, t.r * 2.4); ctx.restore();
   }
 }

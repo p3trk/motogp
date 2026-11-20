@@ -1,7 +1,7 @@
 // --- trackside rhythm in 3D (GDD 11o, phase 4): braking boards, distance posts, marshal posts, advertising on the
 // fences, TV camera towers and gantries over the road. Built into the same 250 m pieces as the walls (scenery3d.js):
 // solid shapes in the vertex-colour buffer, posts as instances, and the boards and adverts as cards on one texture.
-const SIDE3D = { atlas: null };
+const SIDE3D = { atlas: null, spots: [] }; // spots: [x, y, radius] of the marshal posts, towers and gantry pillars (trees keep clear, phase 3)
 // made-up brands for the adverts (GDD: fictional only): name, background, lettering
 const SIDE_BRANDS = [['KESTRAN', '#0b3d91', '#ffffff'], ['VOLTANO', '#f2c200', '#111111'], ['NOVAPEAK', '#ffffff', '#d1121b'],
   ['ZEFIRA', '#00897b', '#ffffff'], ['RIVALTO', '#c62828', '#ffffff'], ['OKTARA', '#111111', '#ff8f00'],
@@ -92,6 +92,7 @@ function sideMarshals(piece) {
     const q = [0, 5, -5, 10, -10].map(o => (n * step + o + N) % N).find(k => sideSpot(k, sg * (T.WALL[s][k] + 3), 1.2));
     if (q === undefined) continue;
     const d = sg * (T.WALL[s][q] + 3), p = piece(q);
+    SIDE3D.spots.push([...sideAt(q, d), 1.6]);
     sideBox(p, q, d, 0, 1.6, 1.6, 0, 2.4, SIDE_COL.hut);
     sideBox(p, q, d, 0, 1.9, 1.9, 2.4, 2.6, SIDE_COL.roof);
     sideBox(p, q, d - sg * 1.0, 0.8, 0.06, 0.06, 0, 4, SIDE_COL.pole);
@@ -107,6 +108,7 @@ function sideTowers(piece) {
     const q = [0, 6, -6, 12, -12].map(o => (c.i + o + N) % N).find(k => sideSpot(k, sg * (T.WALL[s][k] + 4), 1.5));
     if (q === undefined) continue;
     const d = sg * (T.WALL[s][q] + 4), p = piece(q);
+    SIDE3D.spots.push([...sideAt(q, d), 1.8]);
     for (const [da, dd] of [[-0.9, -0.9], [0.9, -0.9], [0.9, 0.9], [-0.9, 0.9]]) sideBox(p, q, d + dd, da, 0.15, 0.15, 0, 5, SIDE_COL.leg);
     sideBox(p, q, d, 0, 2.4, 2.4, 5, 5.2, SIDE_COL.deck);
     sideBox(p, q, d - sg * 0.5, 0, 0.6, 0.4, 5.2, 5.6, SIDE_COL.camera);
@@ -115,7 +117,7 @@ function sideTowers(piece) {
 // a gantry over the road at track point q: pillars at dL and dR (across), a beam from z0 to z1 (metres), L long; with
 // lights: five red start lights over the track centre; with brand: advert cards of 6 m on the face towards the rider
 function sideGantry(p, q, dL, dR, z0, z1, L, lights, brand) {
-  for (const d of [dL, dR]) sideBox(p, q, d, 0, 0.8, 0.8, 0, z1, SIDE_COL.steel);
+  for (const d of [dL, dR]) { sideBox(p, q, d, 0, 0.8, 0.8, 0, z1, SIDE_COL.steel); SIDE3D.spots.push([...sideAt(q, d), 0.8]); }
   const mid = (dL + dR) / 2, span = dR - dL;
   sideBox(p, q, mid, 0, L, span + 0.8, z0, z1, SIDE_COL.steel);
   if (lights) { for (let k = -2; k <= 2; k++) sideBox(p, q, k * 1.2, 0, 0.3, 0.6, z0 - 0.7, z0 - 0.05, SIDE_COL.lamp); }
@@ -157,5 +159,6 @@ function wallAd(p, at, k, j, fk, fj, sg) {
 }
 // everything of phase 4, into the pieces of walls3DBuild
 function sideBuild(piece) {
+  SIDE3D.spots = [];
   sideBoards(piece); sidePosts(piece); sideMarshals(piece); sideTowers(piece); sideGantries(piece);
 }

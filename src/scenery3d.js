@@ -206,14 +206,35 @@ function wallPitKinds() {
   for (let k = 0; k < N; k++) { const sr = T.rel(k * T.DS); if (sr >= PIT.flatIn - 6 && sr <= PIT.flatOut + 6) pk[k] = WALL_KIND.CONCRETE; }
   return pk;
 }
+// the wall line under the 3D walls only (the gaps of wallKinds left out), for their contact shadow in the ground tiles;
+// made once per track
+function wallShadowPath() {
+  if (WALLS3D.shadow && WALLS3D.shadow.src === T.X) { return WALLS3D.shadow.path; }
+  const path = new Path2D();
+  for (let s = 0; s < 2; s++) wallShadowSide(path, s);
+  WALLS3D.shadow = { src: T.X, path };
+  return path;
+}
+// one side's wall line into path: a segment is drawn where both its points carry a barrier, a new start after a gap
+function wallShadowSide(path, s) {
+  const N = T.N, kind = wallKinds(s), sg = s ? -1 : 1; let pen = false;
+  for (let k = 0; k <= N; k++) {
+    const q = k % N, on = kind[q] && kind[(q + 1) % N];
+    if (!on && !pen) continue;
+    const [x, y] = T.pt(q, sg * T.WALL[s][q]);
+    if (pen) path.lineTo(x, y); else path.moveTo(x, y);
+    pen = on;
+  }
+  return path;
+}
 // the scene, its lights, haze, clip planes and pieces; built again if the track changes
 function walls3DInit() {
   if (WALLS3D.ready && WALLS3D.src === T.X) { return; }
-  if (WALLS3D.scene) { for (const p of WALLS3D.pieces) for (const m of p.meshes) { if (m.geometry !== WALLS3D.postGeo) m.geometry.dispose(); } }
+  if (WALLS3D.scene) { for (const m of WALLS3D.pieces.flatMap(p => p.meshes).concat(EST.meshes)) { if (m.geometry !== WALLS3D.postGeo) m.geometry.dispose(); } }
   WALLS3D.scene = new THREE.Scene(); gl3DAddLights(WALLS3D.scene);
   WALLS3D.scene.fog = new THREE.Fog(0xc9d8de, 1, 2);
   if (!WALLS3D.clip.length) WALLS3D.clip.push(new THREE.Plane(), new THREE.Plane(), new THREE.Plane());
-  WALLS3D.pieces = walls3DBuild(); WALLS3D.src = T.X; WALLS3D.ready = true;
+  WALLS3D.pieces = walls3DBuild(); estate3DBuild(WALLS3D.scene); WALLS3D.src = T.X; WALLS3D.ready = true; // the estate: phase 3 (estate3d.js)
 }
 // the camera frame of this frame as an affine map of world metres: origin O (the camera point on the ground) and the
 // axes for one metre east, north and up; moved by the camera shake like the ground layers (drawWorldLayer)
@@ -239,7 +260,8 @@ function walls3DVisible(p) {
   }
   return c > -0.2 * RW && a < 1.2 * RW && d > -0.05 * RH && b < yMax;
 }
-// this frame's matrices and visible pieces, the haze and the cut at the ground's edges; returns the pieces drawn
+// this frame's matrices and visible pieces, the haze and the cut at the horizon and the ground's sides; returns the
+// pieces drawn
 function walls3DPlace() {
   walls3DInit();
   const F = walls3DFrame(), a = tiltA(), sa = Math.sin(a), ca = Math.cos(a);
@@ -251,11 +273,14 @@ function walls3DPlace() {
   }
   // haze as the 2D far band (drawWorldLayer: haze over the top 22 % of the ground canvas); fog depth is -Z = -v sin a
   WALLS3D.scene.fog.near = 0.78 * RH * sa; WALLS3D.scene.fog.far = RH * sa;
-  // cut at the ground's far edge (ground row v = Y cos a + Z sin a >= -RH) and at its sides (|u| <= RW/2)
-  const [far, left, right] = WALLS3D.clip;
-  far.normal.set(0, ca, sa); far.constant = RH;
+  // cut at the horizon line: the plane through the eye (0, 0, P) and the ground's far edge (row -RH), so nothing stands
+  // in the sky above the far edge (tall far trees showed there as pale ghosts, GDD 11o phase 3; the tree line covers
+  // the cut); and at the ground's sides (|u| <= RW/2)
+  const [far, left, right] = WALLS3D.clip, P = tiltP(), ny = RH * sa + P, nz = -RH * ca, nl = Math.hypot(ny, nz);
+  far.normal.set(0, ny / nl, nz / nl); far.constant = RH * ca * P / nl;
   left.normal.set(1, 0, 0); left.constant = RW / 2;
   right.normal.set(-1, 0, 0); right.constant = RW / 2;
+  estate3DPlace(F); // trees, stands, buildings and the tree line (phase 3)
   WALLS3D.drawn = n;
   return n;
 }

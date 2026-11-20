@@ -989,7 +989,7 @@ Asked by Petr (2026-11-18): the game is not smooth since the 3D bikes (1.26.0); 
 4. Cheaper rendering: no MSAA, single-sided materials, the 3D canvas at 1× on high-DPI screens.
 5. A low-detail bike (about 1,500–2,000 triangles) for bikes that are small on screen.
 
-## 11o. 3D track and scenery (approved 2026-11-19, phases 1, 2 and 4 built, phase 3 proposed, not released)
+## 11o. 3D track and scenery (approved 2026-11-19, phases 1 to 4 built, not released)
 
 Asked by Petr (2026-11-19): the track should be 3D, with trees and other objects around it, to make the bike feel really fast.
 
@@ -1043,7 +1043,7 @@ Asked by Petr (2026-11-19): the track should be 3D, with trees and other objects
 - A tree line on the horizon, as a strip of cards, so the land does not end in haze.
 - Grandstands as stepped blocks with a crowd texture and a roof; the Wing pit building and garages as boxes with the team doors (today's layout in `SCN`).
 - Done when: no object stands on the road, the run-off, the gravel or the pit lane (checked over the whole lap); 60 fps with all of it in view at Abbey and Club.
-- **Design (proposed 2026-11-20, `src/estate3d.js`):** the scenery that is already laid out in `SCN` (§12) stands up; nothing moves.
+- **Design (approved 2026-11-20, built, `src/estate3d.js`):** the scenery that is already laid out in `SCN` (§12) stands up; nothing moves.
   - **Trees:** the 1,493 trees of `SCN.trees` (crown radius 2.5–7.5 m) become low-poly 3D trees in 4 types, picked from each tree's variant: round broadleaf (faceted ball crown), wide broadleaf (two overlapping balls), conifer (three stacked cones), poplar (tall narrow crown). Trunk 0.3–0.6 m. Height from the crown size: 1.6 × radius + 2 m, so 6–14 m (scaled 1.35× like the bikes). Leaf colour varies a little per tree (instance colours). One `InstancedMesh` per type for the whole estate: 4 draws in all.
   - **No flat-card level of detail (changed from the plan):** with 1,500 trees at 40–80 triangles each the GPU draws about 90,000 triangles of trees, cheap enough that cards would add work and popping for nothing. If Safari or Brave says otherwise, cards come back.
   - **Tree line on the horizon:** a strip of tree silhouettes standing on the far edge of the ground, tinted towards the haze, which turns with the camera (it is far away, so it does not slide sideways). The land then ends in a tree line, not in fog.
@@ -1054,6 +1054,11 @@ Asked by Petr (2026-11-19): the track should be 3D, with trees and other objects
   - **Placement:** the layout already keeps clear of the track (`trackClear`), the pit compound and the stands. New rule: a tree that would touch a marshal post, a camera tower or a gantry pillar (phase 4) is left out.
   - **Could hide the bike:** a tall tree on the inside of a tight corner can stand between the camera (28 m up, about 45 m behind) and the bike for a moment. I will watch for it at the tight corners (the Loop, Vale, Club) and lower or drop trees there if it happens.
   - Tests: unit tests for each function; the whole-lap placement check covers trunks, stands and buildings; `tests/track3d.test.js`: a tree stands up (its crown above its shadow), a grandstand shows its crowd, the Wing's doors show in the team colours, the tree line is on the horizon; frame cost of all 3D scenery at Abbey and at Club under 15 % (headless), and the fps check in Safari and Brave by Petr.
+  - **Built, results:** all 1,493 trees (none had to give way to a phase 4 object), 10 grandstands, 56 paddock units and the Wing, about 55,000 triangles. The estate is cut into 39 cells of 300 m and only the cells reaching into the ground area are drawn: drawing all of it every frame cost +16 % at Abbey and +22 % at Club in headless Chromium; with the cells +8 % at both (walls, trackside and estate together; limit 15 %). Speed feel at the screen edges with all 3D scenery: +71 %.
+  - **Horizon cut:** the scenery is cut by the plane through the eye and the ground's far edge (it was cut at the far edge itself), so tall far trees no longer stand in the sky as pale shapes; the tree line (4 m, tinted most of the way to the haze) covers the cut.
+  - **Wall shadows follow the 3D walls:** the contact shadow in the ground tiles is drawn only where a 3D wall stands, not across the gaps of phase 2 (it showed as a dark line across the gravel at the Loop).
+  - **Bike hidden by trees:** not seen at the Loop, Vale or Club in the test views; no trees were lowered.
+  - **Open: speed blur frame cost.** `speed_blur.test.js` measures +15.4–15.6 % (limit 15 %) in three runs. The blur draws the 3D scenery a second time into its own image, so the walls and trackside smear (phase 2); without the estate it is +14.6 %, so phases 2 and 4 brought it close to the limit and the estate (about 1 ms) took it over. Unlit materials for the estate make no difference. Petr to decide: raise the limit, or blur the ground only and draw the 3D scenery sharp over it.
 
 **Phase 4: trackside rhythm (the most speed per triangle).**
 - Small, repeated objects close to the track: marshal posts with flags every 250–300 m, distance boards in 3D (300/200/100 before braking zones), advertising boards along the walls (fictional brands only), light posts, TV camera towers, a few gantries over the track (start/finish gantry with lights, sponsor bridge on Hamilton Straight).

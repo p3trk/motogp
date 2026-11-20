@@ -989,7 +989,7 @@ Asked by Petr (2026-11-18): the game is not smooth since the 3D bikes (1.26.0); 
 4. Cheaper rendering: no MSAA, single-sided materials, the 3D canvas at 1× on high-DPI screens.
 5. A low-detail bike (about 1,500–2,000 triangles) for bikes that are small on screen.
 
-## 11o. 3D track and scenery (approved 2026-11-19, phases 1 and 2 built, phase 4 proposed, not released)
+## 11o. 3D track and scenery (approved 2026-11-19, phases 1, 2 and 4 built, not released)
 
 Asked by Petr (2026-11-19): the track should be 3D, with trees and other objects around it, to make the bike feel really fast.
 
@@ -1048,7 +1048,7 @@ Asked by Petr (2026-11-19): the track should be 3D, with trees and other objects
 - Small, repeated objects close to the track: marshal posts with flags every 250–300 m, distance boards in 3D (300/200/100 before braking zones), advertising boards along the walls (fictional brands only), light posts, TV camera towers, a few gantries over the track (start/finish gantry with lights, sponsor bridge on Hamilton Straight).
 - A gantry over the road is the biggest single "whoosh": something tall that the camera passes under.
 - Done when: the speed-feel checks show more on-screen motion at the same speed than Phase 3 (measured as pixel change at screen edges per frame at 300 km/h).
-- **Design (proposed 2026-11-20, in `src/scenery3d.js`, built into the same 250 m pieces as the walls):**
+- **Design (approved 2026-11-20, built in `src/trackside3d.js`, into the same 250 m pieces as the walls):**
   - **Camera height, a correction to the plan:** the CLOSE camera looks down from about 28 m above the road (Behind about 53 m), so the rider passes *over* a gantry, not under it. A gantry still sweeps down the screen as the tallest thing near the road, but the "under the bridge" moment needs the lower camera of Phase 6.
   - **Distance boards in 3D:** the 44 braking boards (300/200/100/50 before each braking zone, `T.boards`) stand up where the flat ones lie today (3.2 m beyond the track edge): white 2.2 × 1.1 m boards with black numbers on two legs, bottom edge 0.4 m up, facing the oncoming rider. No collision, as now (physics unchanged).
   - **Distance posts in 3D:** the white posts every 25 m on the straights (§11h, 219 of them) become 1 m white posts with a black band.
@@ -1060,6 +1060,8 @@ Asked by Petr (2026-11-19): the track should be 3D, with trees and other objects
   - The flat braking boards and distance posts leave the ground tiles while the 3D scenery is on, as the walls did. Test switch **7** becomes "3D scenery" (walls and trackside together).
   - All of it in the same pieces: the boards and ads share one texture (one draw per piece), posts, huts, towers and gantries go into the existing vertex-colour and instanced meshes.
   - Tests: unit tests for each function; whole-lap placement check extended to the new objects; `tests/track3d.test.js`: a 3D braking board stands up at the end of the Hangar Straight, the start gantry shows over the grid, and **speed feel** (the done-check above): over 60 frames at 300 km/h along the Hangar Straight to Stowe, the pixel change per frame in the outer 25 % of the screen is larger with the scenery on than off; frame cost of all 3D scenery under 15 %.
+  - **Built, results:** 44 braking boards, 219 distance posts, 21 marshal posts, 8 camera towers (2 of the 10 corners have no clear spot behind the wall), the start gantry and two bridges; with the walls about 63,000 triangles, 3,300 posts and 880 textured cards over the lap. Placement over the whole lap: only the braking boards' legs stand off the grass (on run-off, where the flat boards lie). Speed feel at 273 km/h on the Hangar Straight: pixel change per frame at the screen edges +69 % with the 3D scenery. Frame cost in headless Chromium: +5 % for walls and trackside together (limit 15 %).
+  - Seen in testing: for a moment just after the rider passes under the start gantry, its beam hides the bike (the camera is behind and above, and the beam stands between them).
 
 **Phase 5: depth of the world.**
 - Sky dome with a sun and clouds that move slowly, light fog with distance, soft shadows of walls and stands on the ground (baked once, not per frame).

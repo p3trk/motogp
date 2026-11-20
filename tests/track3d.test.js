@@ -1,11 +1,16 @@
 #!/usr/bin/env node
-// 3D track test (GDD 11o): the walls, barriers and fences of phase 2 stand up in the 3D view.
+// 3D track test (GDD 11o): the walls, barriers and fences of phase 2 and the trackside objects of phase 4 stand up in
+// the 3D view, and they add motion on screen.
 // - Hangar Straight, CLOSE, 1470x830 @2x: a point on the track face of the concrete wall, 0.8 m up, shows the wall
 //   with the 3D walls on and the grass behind it with them off (test switch 7), so the wall stands up.
 // - Copse: the tyre wall on the outside is dark where it stands.
 // - Switching the walls off brings the flat walls back into the ground tiles; Classic graphics keep them flat.
-// - Frame cost: drawing the world with the walls at most 15 % more than without (median, blocks of frames, so the
-//   ground tiles are not baked again every frame).
+// - Phase 4: a braking board before Stowe stands up (its face at 1 m is grey to white: far away the black numbers and
+//   the white blend) and the start lights show red over the grid.
+// - Speed feel (phase 4 done-check): over 60 frames at speed along the Hangar Straight, the pixel change per frame in
+//   the outer 25 % of the screen is larger with the 3D scenery on than off (test switch 7).
+// - Frame cost: drawing the world with the 3D scenery at most 15 % more than without (median, blocks of frames, so
+//   the ground tiles are not baked again every frame).
 // Placement on the ground (no barrier on the road, kerbs, run-off, gravel or pit lane) is checked over the whole lap
 // by the unit tests (tests/unit/scenery3d.test.js).
 // Usage: node tests/track3d.test.js [path/to/index.html]   (needs Playwright + Chromium)
@@ -66,6 +71,57 @@ const COST = 0.15;
     });
     check(Math.max(...r.rgb) < 90, 'Copse: the tyre wall on the outside is dark', `rgb ${r.rgb} at ${r.ahead * 2} m ahead`);
   }
+  // phase 4: a braking board before Stowe stands up, and the start lights show over the grid
+  {
+    const r = await page.evaluate(async () => {
+      const S = window.__sgp, T = S.T, HS = S.PHYS.VS; await window.__place('Stowe', -330, 250);
+      const b = S.W.player, ahead = q => (q - b.i + T.N) % T.N;
+      const bd = T.boards.filter(x => ahead(x.i) * T.DS > 30 && ahead(x.i) * T.DS < 120).sort((u, v) => ahead(u.i) - ahead(v.i))[0];
+      const e = bd.side > 0 ? T.WR[bd.i] : T.WL[bd.i], pt = window.__scr(...T.pt(bd.i, bd.side * (e + 3.2)), 1.0 * HS);
+      S.PERF.noWalls = false; const on = window.__px(pt); S.PERF.noWalls = true; const off = window.__px(pt); S.PERF.noWalls = false;
+      return { on, off, ahead: ahead(bd.i) * T.DS, dist: bd.dist };
+    });
+    const d = r.on.reduce((a, v, k) => a + Math.abs(v - r.off[k]), 0);
+    check(Math.max(...r.on) - Math.min(...r.on) < 30 && Math.min(...r.on) > 80 && d > 60, 'Stowe: a braking board stands up (grey to white at 1 m)', `${r.dist} board rgb ${r.on}, without 3D scenery ${r.off}, ${r.ahead.toFixed(0)} m ahead`);
+    const g = await page.evaluate(async () => {
+      const S = window.__sgp, T = S.T; await window.__place('Hamilton Straight', 0, 0); // practice: stands at the pit exit, then placed
+      const b = S.W.player, q = T.N - 40; Object.assign(b, { x: T.X[q], y: T.Y[q], h: T.H[q], i: q, s: q * T.DS, v: 0 });
+      S.CAM.init = false; S.W.paused = false; S.frameX(performance.now()); S.W.paused = true;
+      return window.__px(window.__scr(T.X[0], T.Y[0], 6.7 * S.PHYS.VS));
+    });
+    check(g[0] > g[1] + 40 && g[0] > g[2] + 40, 'start gantry: the start lights are red over the grid', `rgb ${g}`);
+  }
+  // speed feel: more motion at the screen edges with the 3D scenery
+  {
+    const r = await page.evaluate(async () => {
+      const S = window.__sgp, c = document.createElement('canvas'); c.width = 368; c.height = 208; const g = c.getContext('2d');
+      // the summed colour change of the outer quarters of the screen between two frames, and the pixels counted
+      const edgeChange = (d, prev) => {
+        let sum = 0, n = 0;
+        for (let y = 0; y < c.height; y++) {
+          for (let x = 0; x < c.width; x++) {
+            if (x > c.width * 0.25 && x < c.width * 0.75) { continue; }
+            const i = (y * c.width + x) * 4; sum += Math.abs(d[i] - prev[i]) + Math.abs(d[i + 1] - prev[i + 1]) + Math.abs(d[i + 2] - prev[i + 2]); n++;
+          }
+        }
+        return [sum, n];
+      };
+      const run = async noWalls => {
+        S.PERF.noWalls = noWalls; await window.__place('Hangar Straight', 20, 300); S.PERF.noWalls = noWalls;
+        let t = performance.now(), prev = null, sum = 0, n = 0; S.W.paused = false;
+        for (let k = 0; k < 60; k++) {
+          t += 1000 / 60; S.frameX(t); g.drawImage(S.screenX(), 0, 0, c.width, c.height);
+          const d = g.getImageData(0, 0, c.width, c.height).data;
+          if (prev) { const [a, m] = edgeChange(d, prev); sum += a; n += m; }
+          prev = d;
+        }
+        S.W.paused = true; S.PERF.noWalls = false;
+        return { motion: sum / n, kmh: S.W.player.v * 3.6 };
+      };
+      return { on: await run(false), off: await run(true) };
+    });
+    check(r.on.motion > r.off.motion * 1.05, 'speed feel: more motion at the screen edges with 3D scenery', `pixel change per frame ${r.off.motion.toFixed(2)} -> ${r.on.motion.toFixed(2)} (+${((r.on.motion / r.off.motion - 1) * 100).toFixed(0)} %) at ${r.on.kmh.toFixed(0)} km/h`);
+  }
   // Classic graphics keep the flat walls
   {
     const r = await page.evaluate(async () => {
@@ -74,7 +130,7 @@ const COST = 0.15;
     });
     check(!r.on && !r.tiles, 'Classic graphics: no 3D walls, flat walls in the tiles', `walls3DOn ${r.on}, tiles without flat walls ${r.tiles}`);
   }
-  // frame cost of the walls
+  // frame cost of the 3D scenery (walls and trackside)
   {
     const r = await page.evaluate(async () => {
       const S = window.__sgp; await window.__place('Hangar Straight', 100, 300);
@@ -93,7 +149,7 @@ const COST = 0.15;
       return { on: med(tOn), off: med(tOff) };
     });
     const add = r.on / r.off - 1;
-    check(add <= COST, 'frame cost of the 3D walls at most 15 %', `world ${r.off.toFixed(2)} ms -> with walls ${r.on.toFixed(2)} ms (+${(add * 100).toFixed(1)} %)`);
+    check(add <= COST, 'frame cost of the 3D scenery at most 15 %', `world ${r.off.toFixed(2)} ms -> with 3D scenery ${r.on.toFixed(2)} ms (+${(add * 100).toFixed(1)} %)`);
   }
   await browser.close();
   console.log(failed ? `${failed} of ${total} 3D track checks FAILED` : `all ${total} 3D track checks passed`);

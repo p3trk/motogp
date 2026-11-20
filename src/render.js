@@ -218,7 +218,7 @@ function buildGeometry() {
     let straight = true; for (let o = -6; o <= 6; o++) { const q = (i + o + N) % N; if (Math.abs(T.KS[q]) > 0.0028 || T.KERB[0][q] > 0 || T.KERB[1][q] > 0) straight = false; }
     if (!straight || (s === 0 && PIT.inZone(T.rel(i * T.DS)))) continue;
     const d = T.WALL[s][i] - 1, sd = s ? -d : d; if (T.surface(i, i * T.DS, sd) !== SURF.GRASS) continue;
-    const [x, y] = P(i, sd); GEO.posts.push({ x, y, h: T.H[i] });
+    const [x, y] = P(i, sd); GEO.posts.push({ x, y, h: T.H[i], i });
   }
   // walls: skip the garage frontage
   GEO.walls = new Path2D(); GEO.fence = new Path2D();
@@ -827,7 +827,8 @@ function worldToScreen(x, y) {
 const TILE_PX = 512;
 const TLV = [{ m: 40, map: new Map(), cap: 160 }, { m: 80, map: new Map(), cap: 140 }, { m: 160, map: new Map(), cap: 140 }];
 let tileFrame = 0;
-// on3d: the tiles leave out the flat walls and fences while the 3D walls stand on them (GDD 11o phase 2)
+// on3d: the tiles leave out the flat walls, fences, braking boards and distance posts while the 3D scenery stands on
+// them (GDD 11o phases 2 and 4)
 const TILE_WALLS = { on3d: false };
 // switches the tiles between flat and 3D walls; the cached tiles are dropped and baked again
 function tileWallsSync(on) {
@@ -854,8 +855,8 @@ function drawStatic(vis, x0, y0, w, h) {
   drawTrackPaint(vis);
   ctx.lineCap = 'butt';
   if (TILE_WALLS.on3d) drawWallShadows(); else drawFlatWalls();
-  for (const q of GEO.posts) { // distance posts (GDD 11h)
-    if (!vis(q.x, q.y, 2)) continue;
+  for (const q of GEO.posts) { // distance posts (GDD 11h); in 3D while the 3D scenery stands (GDD 11o phase 4)
+    if (TILE_WALLS.on3d || !vis(q.x, q.y, 2)) continue;
     ctx.save(); ctx.translate(q.x, q.y); ctx.rotate(q.h);
     ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.fillRect(-0.25 + 0.25, -0.25 + 0.3, 0.5, 0.5);
     ctx.fillStyle = '#f4f4f2'; ctx.fillRect(-0.25, -0.25, 0.5, 0.5); ctx.fillStyle = '#151515'; ctx.fillRect(-0.15, -0.15, 0.3, 0.3);
@@ -899,14 +900,14 @@ function getTile(L, tx, ty, allowRender) {
 const PERF = { on: false, cur: {}, sum: {}, n: 0, last: 0, show: null, gl3d: 0, no3d: false, noWalls: false }; // no3d, noWalls: test switches (GDD 11n, 11o)
 const PERF_N = 30;
 const PERF_PARTS = [['sim', 'physics'], ['camera', 'camera'], ['world', '2D world'], ['project', 'projection + blur'],
-  ['walls', '3D walls (CPU)'], ['gl3d', '3D bikes (CPU)'], ['hud', 'HUD']];
+  ['walls', '3D scenery (CPU)'], ['gl3d', '3D bikes (CPU)'], ['hud', 'HUD']];
 function perfToggle() { PERF.on = !PERF.on; PERF.cur = {}; PERF.sum = {}; PERF.n = 0; PERF.show = null; PERF.last = 0; }
 // adds the time since t0 to a part of this frame (nothing when the overlay is off)
 // test switch 8: the road projection draws one strip per 1, 2, 4 or 8 device rows (fewer draw calls, coarser picture)
 function perfRows() { TILT.rows = TILT.rows >= 8 ? 1 : TILT.rows * 2; }
 // test switch 9: the 3D bikes on or off
 function perfNo3D() { PERF.no3d = !PERF.no3d; }
-// test switch 7: the 3D walls on or off (GDD 11o phase 2)
+// test switch 7: the 3D scenery (walls and trackside, GDD 11o phases 2 and 4) on or off
 function perfNoWalls() { PERF.noWalls = !PERF.noWalls; }
 function perfAdd(name, t0) { if (PERF.on) { PERF.cur[name] = (PERF.cur[name] || 0) + performance.now() - t0; } }
 // at the start of a frame: books the last frame's parts and its length, and every PERF_N frames the averages to show
@@ -930,9 +931,9 @@ function drawPerf() {
     lines.push(`${(1000 / a.frame).toFixed(0)} fps   ${a.frame.toFixed(1)} ms per frame`);
     for (const [k, label] of PERF_PARTS) { lines.push(`${label.padEnd(20)} ${(a[k] || 0).toFixed(2)} ms`); }
   } else { lines.push('measuring...'); }
-  lines.push(`3D bikes ${PERF.no3d ? 'off' : PERF.gl3d}   walls ${TILE_WALLS.on3d ? WALLS3D.drawn : 'off'}   DPR ${DPR}`);
+  lines.push(`3D bikes ${PERF.no3d ? 'off' : PERF.gl3d}   scenery ${TILE_WALLS.on3d ? WALLS3D.drawn : 'off'}   DPR ${DPR}`);
   lines.push(`canvas ${cv.width}x${cv.height}`);
-  lines.push(`7: 3D walls  8: road strips ${TILT.rows} px  9: 3D bikes`);
+  lines.push(`7: 3D scenery  8: road strips ${TILT.rows} px  9: 3D bikes`);
   const hgt = 18 * lines.length + 12, x0 = VW - 316, y0 = 220; // right edge, under the track map and clear of the standings
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   ctx.fillStyle = 'rgba(0,0,0,.72)'; ctx.fillRect(x0, y0, 310, hgt);
@@ -1169,8 +1170,8 @@ function drawTrackPaint(vis) {
     ctx.strokeStyle = '#f4f4f4'; ctx.lineWidth = 0.5; ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
     groundText(label, ...P(T.idx(sr - (label === 'END' ? -4 : 4)), T.PIT.d), T.H[i], 2.2, 'rgba(245,245,245,.9)');
   }
-  // braking boards
-  for (const bd of T.boards) {
+  // braking boards (in 3D while the 3D scenery stands, GDD 11o phase 4)
+  for (const bd of TILE_WALLS.on3d ? [] : T.boards) {
     const i = bd.i; const e = bd.side > 0 ? T.WR[i] : T.WL[i]; const [x, y] = P(i, bd.side * (e + 3.2)); if (!vis(x, y, 5)) continue;
     ctx.save(); ctx.translate(x, y); ctx.rotate(T.H[i] + Math.PI / 2);
     ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.fillRect(-1.1 + 0.4, -0.55 + 0.5, 2.2, 1.1);

@@ -107,8 +107,8 @@ function wallFence(buf, panel, at, k, j, fk, fj) {
 }
 
 // one segment of barrier from track point k to j into piece p: the wall of its kind, its fence and its posts (every
-// WALL_POST_STEP metres), and an end face where a concrete run starts or ends
-function wallSegment(p, kind, k, j, sg, fk, fj, paint = true) {
+// WALL_POST_STEP metres), an end face where a concrete run starts or ends, and with ad an advert on the fence (phase 4)
+function wallSegment(p, kind, k, j, sg, fk, fj, paint = true, ad = false) {
   const at = (q, d, z) => {
     const x = T.X[q] + T.NX[q] * sg * d, y = T.Y[q] + T.NY[q] * sg * d, b = p.box;
     b[0] = Math.min(b[0], x); b[1] = Math.min(b[1], y); b[2] = Math.max(b[2], x); b[3] = Math.max(b[3], y);
@@ -129,32 +129,41 @@ function wallSegment(p, kind, k, j, sg, fk, fj, paint = true) {
   }
   const fd = fk + off + WALL_TH - 0.15, fdj = fj + off + WALL_TH - 0.15;
   wallFence(p.buf, p.panel, at, k, j, fd, fdj);
+  if (ad) wallAd(p, at, k, j, fd - 0.04, fdj - 0.04, sg);
   if (post) { const q = at(k, fd, 0); p.posts.push([q[0], q[1], WALL_FENCE]); }
 }
 
-// a buffer of quads as a geometry with flat normals
+// a buffer of quads as a geometry with flat normals: vertex colours (buf.col) or texture coordinates (buf.uv)
 function wallGeometry(buf) {
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(buf.pos), 3));
-  g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(buf.col), 3));
+  if (buf.col) g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(buf.col), 3));
+  if (buf.uv) g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(buf.uv), 2));
   g.computeVertexNormals();
   return g;
 }
-// the posts of a piece ([x, y, height in metres]) as one instanced box, 0.12 m square
+// the posts of a piece as one instanced box: [x, y, height, width (0.12 m), colour (fence post grey), base height (0)]
+// in metres
+const WALL_TINT = new THREE.Color();
 function wallPosts(list, mat) {
   if (!WALLS3D.postGeo) { WALLS3D.postGeo = new THREE.BoxGeometry(1, 1, 1); WALLS3D.postGeo.translate(0, 0, 0.5); }
-  const m = new THREE.InstancedMesh(WALLS3D.postGeo, mat, list.length), a = m.instanceMatrix.array, w = 0.12;
-  list.forEach(([x, y, h], i) => a.set([w, 0, 0, 0, 0, w, 0, 0, 0, 0, h * WALL_HS, 0, x, y, 0, 1], i * 16));
-  m.instanceMatrix.needsUpdate = true;
+  const m = new THREE.InstancedMesh(WALLS3D.postGeo, mat, list.length), a = m.instanceMatrix.array;
+  list.forEach(([x, y, h, w = 0.12, hex = WALL_COL.post, z0 = 0], i) => {
+    a.set([w, 0, 0, 0, 0, w, 0, 0, 0, 0, h * WALL_HS, 0, x, y, z0 * WALL_HS, 1], i * 16);
+    m.setColorAt(i, WALL_TINT.set(hex));
+  });
+  m.instanceMatrix.needsUpdate = true; m.instanceColor.needsUpdate = true;
   return m;
 }
-// the three materials, shared by all pieces and cut by the clip planes: walls (vertex colours), posts, fence mesh
+// the materials, shared by all pieces and cut by the clip planes: walls (vertex colours), posts (coloured per post),
+// fence mesh, and the boards and adverts (phase 4, one texture)
 function walls3DMaterials() {
   if (!WALLS3D.mats) {
     const clippingPlanes = WALLS3D.clip, side = THREE.DoubleSide;
     WALLS3D.mats = {
       solid: new THREE.MeshLambertMaterial({ vertexColors: true, side, clippingPlanes }),
-      post: new THREE.MeshLambertMaterial({ color: new THREE.Color(WALL_COL.post), clippingPlanes }),
+      post: new THREE.MeshLambertMaterial({ color: new THREE.Color('#ffffff'), clippingPlanes }),
+      tex: new THREE.MeshLambertMaterial({ map: sideAtlas().tex, side, clippingPlanes }),
       panel: new THREE.MeshBasicMaterial({ color: new THREE.Color(WALL_COL.mesh), transparent: true, opacity: 0.25, depthWrite: false, side, clippingPlanes })
     };
   }
@@ -164,28 +173,31 @@ function walls3DMaterials() {
 function walls3DPiece(p) {
   const M = walls3DMaterials(), meshes = [new THREE.Mesh(wallGeometry(p.buf), M.solid)];
   if (p.posts.length) meshes.push(wallPosts(p.posts, M.post));
+  if (p.tex.pos.length) meshes.push(new THREE.Mesh(wallGeometry(p.tex), M.tex));
   if (p.panel.pos.length) { const m = new THREE.Mesh(wallGeometry(p.panel), M.panel); m.renderOrder = 1; meshes.push(m); }
   for (const m of meshes) { m.frustumCulled = false; m.matrixAutoUpdate = false; WALLS3D.scene.add(m); }
   return { ox: p.ox, oy: p.oy, box: p.box, meshes };
 }
-// all barriers of the track: both sides of the wall line and the pit wall, in pieces of WALL_PIECE track points
+// all barriers of the track (both sides of the wall line and the pit wall) and the trackside objects, in pieces of
+// WALL_PIECE track points
 function walls3DBuild() {
   const N = T.N, byIdx = new Map();
   const piece = k => {
     const n = Math.floor(k / WALL_PIECE);
     if (!byIdx.has(n)) {
       const m = Math.min(N - 1, n * WALL_PIECE + (WALL_PIECE >> 1));
-      byIdx.set(n, { ox: T.X[m], oy: T.Y[m], buf: { pos: [], col: [] }, panel: { pos: [], col: [] }, posts: [], box: [Infinity, Infinity, -Infinity, -Infinity] });
+      byIdx.set(n, { ox: T.X[m], oy: T.Y[m], buf: { pos: [], col: [] }, panel: { pos: [], col: [] }, posts: [], tex: { pos: [], uv: [] }, box: [Infinity, Infinity, -Infinity, -Infinity] });
     }
     return byIdx.get(n);
   };
   for (let s = 0; s < 2; s++) {
-    const kind = wallKinds(s), sg = s ? -1 : 1, Wl = T.WALL[s];
-    for (let k = 0; k < N; k++) { const j = (k + 1) % N; if (kind[k] && kind[j]) wallSegment(piece(k), kind, k, j, sg, Wl[k], Wl[j]); }
+    const kind = wallKinds(s), ads = sideAdZones(s), sg = s ? -1 : 1, Wl = T.WALL[s];
+    for (let k = 0; k < N; k++) { const j = (k + 1) % N; if (kind[k] && kind[j]) wallSegment(piece(k), kind, k, j, sg, Wl[k], Wl[j], true, ads[k] === 1); }
   }
   // the pit wall beside the flat pit lane (as the flat GEO.pitWall), 0.5 m thick about PIT.wallD, unpainted
   const pk = wallPitKinds(), f = T.PIT.wallD - WALL_TH / 2;
-  for (let k = 0; k < N; k++) { const j = (k + 1) % N; if (pk[k] && pk[j]) wallSegment(piece(k), pk, k, j, 1, f, f, false); }
+  for (let k = 0; k < N; k++) { const j = (k + 1) % N; if (pk[k] && pk[j]) wallSegment(piece(k), pk, k, j, 1, f, f, false, true); }
+  sideBuild(piece); // the trackside objects of phase 4 (trackside3d.js)
   return [...byIdx.values()].map(walls3DPiece);
 }
 // the pit wall: concrete beside the flat pit lane and 6 m beyond it (as the flat GEO.pitWall)

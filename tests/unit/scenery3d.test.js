@@ -20,18 +20,18 @@ const newBuf = () => ({ pos: [], col: [] });
 // a flat stand-in for at(): track point q, distance d, height z (scaled)
 const flatAt = G => (q, d, z) => [q, d, z * G.WALL_HS];
 // the surface under a world point, judged by the nearest part of the circuit
-// the world ground points of a piece: the first corner of each triangle and each post
-function groundPoints(p) {
-  const pts = [];
-  for (const m of p.meshes) {
-    if (m.isInstancedMesh) {
-      const a = m.instanceMatrix.array;
-      for (let i = 0; i < m.count; i++) { pts.push([a[i * 16 + 12] + p.ox, a[i * 16 + 13] + p.oy]); }
-    } else {
-      const a = m.geometry.attributes.position.array;
-      for (let i = 0; i < a.length; i += 9) { pts.push([a[i] + p.ox, a[i + 1] + p.oy]); }
-    }
-  }
+// the world points of a piece that touch the ground (z = 0): vertices and post feet; gantry beams over the road are in the air
+function groundPoints(p) { return p.meshes.flatMap(m => (m.isInstancedMesh ? postFeet(m) : vertexFeet(m)).map(([x, y]) => [x + p.ox, y + p.oy])); }
+// the feet of the posts standing on the ground (base height 0), piece-relative
+function postFeet(m) {
+  const a = m.instanceMatrix.array, pts = [];
+  for (let i = 0; i < m.count; i++) { if (a[i * 16 + 14] < 0.01) pts.push([a[i * 16 + 12], a[i * 16 + 13]]); }
+  return pts;
+}
+// the vertices at ground level, piece-relative
+function vertexFeet(m) {
+  const a = m.geometry.attributes.position.array, pts = [];
+  for (let i = 0; i < a.length; i += 3) { if (a[i + 2] < 0.01) pts.push([a[i], a[i + 1]]); }
   return pts;
 }
 function surfaceAt(G, x, y) { const o = { i: -1 }; G.T.project(x, y, -1, o); return G.T.surface(o.i, o.s, o.d); }
@@ -149,11 +149,14 @@ test('wallGeometry: positions, colours and flat normals', () => {
   assert.equal(g.attributes.position.count, 6); assert.equal(g.attributes.color.count, 6);
   near(Math.abs(n[1]), 1, 1e-6, 'a wall in the x-z plane faces along y');
 });
-test('wallPosts: one instanced box per post, 0.12 m square, scaled height, at its place', () => {
+test('wallPosts: one instanced box per post, 0.12 m square, scaled height, at its place; width, colour and base per post', () => {
   const { G } = load();
   const m = G.wallPosts([[5, 6, 3], [7, 8, 0.8]], G.walls3DMaterials().post), a = m.instanceMatrix.array;
   assert.equal(m.count, 2); assert.deepEqual([a[0], a[5]], [0.12, 0.12].map(Math.fround));
   near(a[10], 3 * G.WALL_HS, 1e-5); assert.deepEqual([a[12], a[13], a[28], a[29]], [5, 6, 7, 8]);
+  const grey = G.wallRGB(G.WALL_COL.post), c = m.instanceColor.array; near(c[0], grey[0], 1e-6, 'fence post grey by default');
+  const b = G.wallPosts([[1, 2, 0.2, 0.27, '#151515', 0.6]], G.walls3DMaterials().post), e = b.instanceMatrix.array;
+  near(e[0], 0.27, 1e-6, 'width'); near(e[14], 0.6 * G.WALL_HS, 1e-6, 'base height'); assert.ok(b.instanceColor.array[0] < 0.02, 'own colour');
 });
 test('walls3DMaterials: lit walls with vertex colours, posts, see-through fence; all cut by the clip planes; built once', () => {
   const { G } = load();
@@ -162,22 +165,27 @@ test('walls3DMaterials: lit walls with vertex colours, posts, see-through fence;
   for (const m of Object.values(M)) assert.equal(m.clippingPlanes, G.WALLS3D.clip);
   assert.equal(G.walls3DMaterials(), M);
 });
-test('walls3DPiece: walls, posts and fence meshes in the walls scene, placed by hand each frame', () => {
+test('walls3DPiece: walls, posts, boards and adverts, and fence meshes in the walls scene, placed by hand each frame', () => {
   const { G } = load(); G.walls3DInit();
-  const p = G.WALLS3D.pieces[0];
-  assert.ok(p.meshes.length === 3); assert.ok(p.meshes[1].isInstancedMesh); assert.equal(p.meshes[2].renderOrder, 1);
+  const p = G.WALLS3D.pieces[0], M = G.WALLS3D.mats; // piece 0: the start/finish straight, with adverts
+  assert.deepEqual(p.meshes.map(m => m.material), [M.solid, M.post, M.tex, M.panel]);
+  assert.ok(p.meshes[1].isInstancedMesh); assert.equal(p.meshes[3].renderOrder, 1); assert.ok(p.meshes[2].geometry.attributes.uv);
   assert.ok(p.meshes.every(m => !m.matrixAutoUpdate && G.WALLS3D.scene.children.includes(m)));
 });
-test('walls3DBuild: over the whole lap no barrier stands on the road, kerbs, run-off, gravel or pit lane', () => {
-  const { G } = load(); G.walls3DInit(); const S = G.SURF, T = G.T, PIT = T.PIT;
+// a ground point that may be off the grass: the pit wall (and the start gantry pillar on it) on the strip between
+// the track and the pit lane, as the flat pit wall; a braking board's legs off the road, where the flat board lies
+function allowedOffGrass(G, x, y, sf) {
+  const S = G.SURF, T = G.T, PIT = T.PIT, o = { i: -1 }; T.project(x, y, -1, o); const sr = T.rel(o.i * T.DS);
+  if (sf === S.RUN && Math.abs(o.d - PIT.wallD) < 0.5 && sr > PIT.flatIn - 8 && sr < PIT.flatOut + 8) return true;
+  const board = T.boards.some(bd => Math.hypot(...T.pt(bd.i, bd.side * ((bd.side > 0 ? T.WR[bd.i] : T.WL[bd.i]) + 3.2)).map((v, k) => v - [x, y][k])) < 2);
+  return board && sf !== S.ASPH && sf !== S.KERB && sf !== S.PIT;
+}
+test('walls3DBuild: over the whole lap nothing stands on the road, kerbs, run-off, gravel or pit lane', () => {
+  const { G } = load(); G.walls3DInit(); const S = G.SURF;
   const W = G.WALLS3D; assert.ok(W.pieces.length > 15);
   const pts = W.pieces.flatMap(groundPoints);
-  for (const [x, y] of pts) {
-    const sf = surfaceAt(G, x, y); if (sf === S.GRASS || sf === S.WALL) continue;
-    // the pit wall stands on the strip between the track and the pit lane (as the flat one did)
-    const o = { i: -1 }; T.project(x, y, -1, o); const sr = T.rel(o.i * T.DS);
-    assert.ok(sf === S.RUN && Math.abs(o.d - PIT.wallD) < 0.5 && sr > PIT.flatIn - 8 && sr < PIT.flatOut + 8, `barrier on surface ${sf} at ${x.toFixed(1)}, ${y.toFixed(1)}`);
-  }
+  const bad = pts.filter(([x, y]) => { const sf = surfaceAt(G, x, y); return sf !== S.GRASS && sf !== S.WALL && !allowedOffGrass(G, x, y, sf); });
+  assert.deepEqual(bad.slice(0, 5), [], `${bad.length} ground points off the grass`);
   assert.ok(pts.length > 20000);
 });
 test('walls3DInit: one scene with lights, haze and three clip planes; built again only for a new track', () => {

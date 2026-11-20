@@ -1,11 +1,9 @@
 // --- depth of the world (GDD 11o, phase 5): one sun fixed in the world, the shadows of the 3D scenery baked into the
-// ground tiles, and the sky strip with drifting clouds and a glow towards the sun, meeting the ground in haze. All of it
+// ground tiles (the sky strip with clouds was taken out again: no sky for now, Petr 2026-11-20). All of it
 // stands and falls with the 3D scenery (TILE_WALLS.on3d; test switch 7).
-const SKY = { clouds: null, shadows: null, src: null, t: 0 }; // t: the clouds' clock in seconds, running only while the game or the replay runs (skyTick)
+const SKY = { shadows: null, src: null };
 // the sun: towards the north-west of the map (-x, -y; the 2D shadows of bikes and trees fall to +x, +y), 40 degrees up
 const SUN = { az: Math.atan2(-1, -1), el: 40 * Math.PI / 180 };
-const SKY_COL = { glow: '255,236,204', haze: '201,216,222', cloud: '255,255,255' };
-const SKY_DRIFT = 2 / 600; // clouds: tree-line units (a quarter of the ground width) per second, one cloud strip in 10 minutes
 
 // the ground offset of a shadow per metre of height (heights scaled by WALL_HS, as drawn): away from the sun,
 // 1 / tan(elevation) = 1.19 times the height
@@ -113,59 +111,4 @@ function sunLightPlace(F, lights) {
   lights.sun.position.set(...ax(SUN.az, SUN.el));
   lights.fill.position.set(...ax(SUN.az + Math.PI, 30 * Math.PI / 180));
   return lights.sun.position;
-}
-
-// the cloud strip, drawn once: 16 clouds of soft overlapping puffs, wide and flat, on a strip that wraps round
-function skyClouds() {
-  if (SKY.clouds) { return SKY.clouds; }
-  const W = 2048, H = 96, c = mkCanvas(W, H), g = c.getContext('2d'), r = mulberry(17);
-  for (let k = 0; k < 16; k++) {
-    const cx = (k + 0.3 * r()) * W / 16, cy = 22 + r() * 30, n = 5 + ((r() * 5) | 0);
-    for (let j = 0; j < n; j++) {
-      const x = cx + (r() - 0.5) * 140, y = cy + (r() - 0.5) * 14, rad = 26 + r() * 30;
-      for (const ox of [-W, 0, W]) { // across the seam
-        const gr = g.createRadialGradient(x + ox, y, 0, x + ox, y, rad);
-        gr.addColorStop(0, `rgba(${SKY_COL.cloud},0.4)`); gr.addColorStop(1, `rgba(${SKY_COL.cloud},0)`);
-        g.save(); g.translate(x + ox, y); g.scale(1.8, 0.55); g.translate(-x - ox, -y);
-        g.fillStyle = gr; g.fillRect(x + ox - rad, y - rad, 2 * rad, 2 * rad); g.restore();
-      }
-    }
-  }
-  SKY.clouds = c;
-  return c;
-}
-// the clouds' clock: dt seconds on while the session runs or the replay plays; still while paused, so a paused frame
-// does not change
-function skyTick(dt) {
-  if ((UI.state === 'play' && !W.paused) || (UI.state === 'replay' && RP.playing)) SKY.t += dt;
-  return SKY.t;
-}
-// the sky strip over the gradient of drawSky, while the 3D scenery stands: the clouds (a near row up high, a far row of
-// smaller, fainter ones lower down), the haze that meets the ground's far edge in its own colour, and the warm glow
-// towards the sun over them; returns the horizon row (GDD 11o phase 5: open sky, no bar)
-function skyDecor(g, uTop) {
-  const hz = VH - uTop, sa = Math.sin(tiltA()), P = tiltP(), RWk = RW * P / (P + RH * sa);
-  g.save(); g.beginPath(); g.rect(0, 0, VW, hz + 2); g.clip();
-  // clouds: one strip per half the far edge's width, sliding with the camera's turn (a full turn = 4 strips' worth of
-  // the far edge, as the scenery turns) and drifting on their own; the far row at half the size, sliding as fast (the sky is all far away)
-  const C = skyClouds(), drift = SKY.t * SKY_DRIFT, turn = (drift + 4 * CAM.rot / TAU) / 4;
-  const row = (cw, y, h, alpha) => {
-    let x0 = VW / 2 + RWk * (turn - 0.5); x0 = ((x0 % cw) + cw) % cw - cw;
-    g.globalAlpha = alpha; for (let x = x0; x < VW; x += cw) { g.drawImage(C, x, y, cw, h); }
-  };
-  row(RWk / 2, 0, hz * 0.75, 0.9); row(RWk / 4, hz * 0.45, hz * 0.4, 0.45);
-  g.globalAlpha = 1;
-  const hg = g.createLinearGradient(0, hz * 0.6, 0, hz); // the haze: the sky's foot in the far edge's colour
-  hg.addColorStop(0, `rgba(${SKY_COL.haze},0)`); hg.addColorStop(1, `rgba(${SKY_COL.haze},1)`);
-  g.fillStyle = hg; g.fillRect(0, hz * 0.6, VW, hz * 0.4 + 2);
-  // glow: the sun's bearing from straight ahead (canvas angle of its direction + 90 degrees), over the clouds so the
-  // clouds on the sun's side are lit warmer
-  const b = Math.atan2(Math.sin(SUN.az + CAM.rot + Math.PI / 2), Math.cos(SUN.az + CAM.rot + Math.PI / 2)), s = Math.max(0, Math.cos(b));
-  if (s > 0.01) {
-    const gx = VW / 2 + RWk * b / TAU, gr = g.createRadialGradient(gx, hz, 0, gx, hz, 0.45 * VW);
-    gr.addColorStop(0, `rgba(${SKY_COL.glow},${0.65 * s})`); gr.addColorStop(1, `rgba(${SKY_COL.glow},0)`);
-    g.fillStyle = gr; g.fillRect(0, 0, VW, hz + 2);
-  }
-  g.restore();
-  return hz;
 }

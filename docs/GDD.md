@@ -1145,7 +1145,7 @@ Asked by Petr (2026-11-19): the track should be 3D, with trees and other objects
     - trees keep their round shadows, moved to lie along the sun at 1.2 × the tree's height (today about half a radius off);
     - the walls keep their contact shadow.
     These come back to what 2D mode had: since phase 3, stands and buildings stand in 3D with no shadow at all (`drawBuildings` returns early while the 3D scenery is on). Key 7 (3D scenery off) also takes the shadows off with it.
-  - **Sky strip with clouds:** the sky stays on the 2D game canvas under the 3D layer, the same blue-to-haze gradient. Over it goes one cloud texture (made in code once, soft white puffs on a 2048 px wide strip that wraps around), drawn in the strip above the horizon:
+  - **Sky strip with clouds (built, then taken out: no sky for now, see the end of this phase):** the sky stays on the 2D game canvas under the 3D layer, the same blue-to-haze gradient. Over it goes one cloud texture (made in code once, soft white puffs on a 2048 px wide strip that wraps around), drawn in the strip above the horizon:
     - it slides sideways when the camera turns (a full turn = one strip width, like the tree line), so corners show in the sky too;
     - it drifts slowly on its own (about one strip width in 10 minutes) on the game clock: it stops while the game or the replay is paused, so a paused picture stays still;
     - towards the sun's side the sky is a little brighter and warmer (a broad glow, no sun disc, since the sun is above the screen).
@@ -1177,6 +1177,11 @@ Asked by Petr (2026-11-19): the track should be 3D, with trees and other objects
     - **Tests:** the phase 5 "hills vary the horizon" check is replaced by "no hard line at the horizon": the colour step between the rows just above and just below the far edge stays under a small limit across the screen; the phase 3 "tree line on horizon" check goes; the cloud checks stay. Unit tests follow the changed functions.
     - **Petr chose (a)** (2026-11-20): a soft horizon with clouds and the sun glow (the other choice was no clouds at all).
     - **Built, results:** the colour step across the horizon went from about 100 (pale tree line 159,179,166 over the hazy ground 191,208,209) to about 6 (sky 202,217,222, ground 200,215,220). The clouds come as a near row up high and a far row at half the size, fainter, lower down; the haze at the sky's foot is whole at the horizon; the glow (65 %, a little wider) lies over the clouds. Near trees and the stands now reach into the sky uncut.
+  - **No sky for now (Petr 2026-11-20: "remove sky completely, let's work on that later"), built:**
+    - The sky is gone in every 3D view mode (Classic too): behind the ground the 2D canvas is one haze colour (#c9d8de), the colour the far ground and the 3D scenery fade into, so the strip above the far edge reads as haze, not as sky. No blue gradient, no clouds, no glow, no cloud clock.
+    - Kept from the open-sky fix: no tree line or hills, the scenery's haze by ground distance and the upright cut at the far edge (near trees and the stands reach up into the haze uncut), the world sun and the baked shadows.
+    - Tests: the cloud checks are replaced by "no sky: plain haze above the far edge" (largest difference from the haze colour at most 6 on a row in the strip); the "no hard line at the horizon" check stays; the speed blur test no longer holds the clouds.
+    - **Later:** the sky is to be designed again in its own step (Petr: "let's work on that later").
 
 **Phase 6 (optional, Petr to decide later): a lower chase camera.**
 - A true 3D world allows a camera just behind and above the rider, at about 1.5 m, looking along the road, like TV on-board shots. It is the most intense sense of speed, but it is a new camera with its own tuning (§11a), so it is listed separately.

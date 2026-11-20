@@ -134,11 +134,12 @@ test('ground3DRender: the ground is drawn, then the walls (GDD 11o phase 2), the
   log.length = 0; G.PERF.noWalls = true; G.ground3DRender();
   assert.deepEqual(log.map(e => e[1]), [G.GROUND.scene], 'test switch 7: no walls');
 });
-test('drawSky: gradient down to the far edge of the ground, haze below it', () => {
+test('drawSky: no sky, one haze colour over the whole canvas behind the ground', () => {
   const { G } = tilted();
   const g = G.mainCtx; g.calls.length = 0;
-  G.drawSky(g, 300);
+  G.drawSky(g);
   const rects = g.calls.filter(c => c[0] === 'fillRect');
-  assert.equal(rects.length, 2);
-  assert.deepEqual(rects[0].slice(1), [0, 0, G.VW, G.VH - 300 + 2]); assert.deepEqual(rects[1].slice(1), [0, G.VH - 300, G.VW, 300]);
+  assert.equal(rects.length, 1); assert.deepEqual(rects[0].slice(1), [0, 0, G.VW, G.VH]);
+  assert.deepEqual(g.calls.filter(c => c[0] === '=fillStyle').map(c => c[1]), ['#c9d8de']);
+  assert.equal(g.calls.filter(c => c[0] === 'drawImage').length, 0, 'no clouds');
 });

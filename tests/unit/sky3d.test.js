@@ -1,5 +1,5 @@
 // Unit tests for src/sky3d.js (GDD 11o, phase 5): the sun fixed in the world, the shadows of the 3D scenery baked
-// into the ground tiles, and the sky strip with clouds, the glow towards the sun and the hills.
+// into the ground tiles.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { load, makeCtx, placeAt } = require('./load');
@@ -89,41 +89,4 @@ test('sunLightPlace: the sun stays put in the world when the camera turns', () =
   const a = lit(); G.CAM.rot += Math.PI / 2; const b = lit();
   near(a, b, 1e-6); assert.ok(a > 0.5, 'facing the sun'); near(L.sun.position.length(), 1, 1e-9);
   const f = L.fill.position; assert.ok(f.x * L.sun.position.x + f.y * L.sun.position.y + f.z * L.sun.position.z < 0, 'fill from the other side');
-});
-test('skyClouds: one wrapping strip of soft puffs, drawn once', () => {
-  const { G } = load(); const c = G.skyClouds();
-  assert.equal(c.width, 2048); assert.equal(c.height, 96); assert.ok(c.getContext('2d').calls.filter(k => k[0] === 'fillRect').length > 3 * 16 * 5);
-  assert.equal(G.skyClouds(), c);
-});
-test('skyDecor: two rows of clouds, haze meeting the far edge in its own colour, the glow over them; drifting', () => {
-  const { G } = tilted(); const g = makeCtx({ width: 100, height: 100 });
-  G.SKY.t = 0; G.CAM.rot = -G.SUN.az - Math.PI / 2; // facing the sun
-  const hz = G.skyDecor(g, 300);
-  assert.equal(hz, G.VH - 300);
-  assert.deepEqual(g.calls.find(k => k[0] === 'rect').slice(1), [0, 0, G.VW, hz + 2], 'clipped to the sky');
-  const imgs = () => g.calls.filter(k => k[0] === 'drawImage');
-  const near0 = imgs().filter(k => k[3] === 0), far0 = imgs().filter(k => k[3] > 0);
-  assert.ok(near0.length >= 1 && far0.length >= 2, 'a near row and a far row');
-  near(far0[0][4], near0[0][4] / 2, 1e-9, 'far clouds half the size'); assert.ok(far0[0][3] + far0[0][5] < hz, 'above the horizon');
-  const iGlow = g.calls.findIndex(k => k[0] === 'createRadialGradient'), iImg = g.calls.findIndex(k => k[0] === 'drawImage');
-  assert.ok(iGlow > iImg, 'the glow over the clouds');
-  assert.ok(g.calls.some(k => k[0] === '=fillStyle' && k[1].stops && k[1].stops.some(([o, c]) => o === 1 && c === 'rgba(201,216,222,1)')), 'whole haze at the horizon');
-  assert.equal(g.calls.filter(k => k[0] === 'lineTo').length, 0, 'no hills');
-  const x0 = near0[0][2]; assert.ok(x0 <= 0);
-  g.calls.length = 0; G.CAM.rot += Math.PI; G.skyDecor(g, 300);
-  assert.ok(!g.calls.some(k => k[0] === 'createRadialGradient'), 'no glow with the sun behind');
-  g.calls.length = 0; G.CAM.rot -= Math.PI; G.SKY.t = 60; G.skyDecor(g, 300);
-  assert.notEqual(imgs()[0][2], x0, 'a minute later the clouds have moved');
-});
-test('drawSky: clouds and hills only while the 3D scenery stands', () => {
-  const { G } = tilted(); const g = G.mainCtx;
-  g.calls.length = 0; G.TILE_WALLS.on3d = false; G.drawSky(g, 300); assert.equal(g.calls.filter(k => k[0] === 'drawImage').length, 0);
-  g.calls.length = 0; G.TILE_WALLS.on3d = true; G.drawSky(g, 300); assert.ok(g.calls.filter(k => k[0] === 'drawImage').length >= 1);
-});
-test('skyTick: the clouds\' clock runs with the session and the playing replay, not while paused', () => {
-  const { G } = tilted(); G.SKY.t = 0;
-  G.UI.state = 'play'; G.W.paused = false; assert.equal(G.skyTick(0.5), 0.5);
-  G.W.paused = true; assert.equal(G.skyTick(0.5), 0.5, 'paused');
-  G.UI.state = 'replay'; G.RP.playing = false; assert.equal(G.skyTick(0.5), 0.5, 'replay paused');
-  G.RP.playing = true; assert.equal(G.skyTick(0.25), 0.75);
 });

@@ -9,8 +9,8 @@
 //   the white blend) and the start lights show red over the grid.
 // - Phase 3: a tree stands up (its crown, 4 m up, differs from the grass with the scenery off), a grandstand shows its
 //   crowd, the Wing's first garage door is in its team colour; frame cost of all 3D scenery at Abbey and at Club under 15 %.
-// - Phase 5: the clouds drift and slide with the camera's turn, no hard line where the ground meets the sky (open sky,
-//   no bar), the start gantry's shadow lies on the road and the Abbey stand's shadow on the grass (all gone with test switch 7).
+// - Phase 5: no sky (plain haze above the far edge), no hard line where the ground meets the haze, the start gantry's
+//   shadow lies on the road and the Abbey stand's shadow on the grass (all gone with test switch 7).
 // - Speed feel (phase 4 done-check): over 60 frames at speed along the Hangar Straight, the pixel change per frame in
 //   the outer 25 % of the screen is larger with the 3D scenery on than off (test switch 7).
 // - Frame cost: drawing the world with the 3D scenery at most 15 % more than without (median, blocks of frames, so
@@ -46,7 +46,7 @@ async function phase3(page, check) {
     check(dd < 150, 'the Wing: the first garage door is in its team colour', `rgb ${r.door.px} vs team ${r.door.col} (difference ${dd})`);
   }
 
-// phase 5: the clouds drift and slide with the camera's turn, no hard line at the horizon, the start gantry's shadow
+// phase 5: no sky, no hard line at the horizon, the start gantry's shadow
 // lies on the road and the Abbey stand's shadow on the grass
 async function phase5(page, check) {
   await page.evaluate(() => {
@@ -62,16 +62,11 @@ async function phase5(page, check) {
   const r = await page.evaluate(async () => {
     const S = window.__sgp, T = S.T, out = {}, k = document.getElementById('game').width / innerWidth;
     await window.__place('Hangar Straight', 100, 0);
-    const hz = S.horizonYX(), y = Math.round(0.25 * hz * k), W = Math.round(innerWidth * k);
-    const row = () => { S.drawWorldX(); return document.getElementById('game').getContext('2d').getImageData(0, y, W, 1).data; }; // the sky alone (2D canvas): near trees stand into it on the 3D one
-    const diff = (a, b, s) => { let d = 0, n = 0; for (let x = 100; x < W - 100; x++) { const j = x + s; for (let c = 0; c < 3; c++) { d += Math.abs(a[x * 4 + c] - b[j * 4 + c]); } n++; } return d / n; };
-    S.SKY.t = 0; const a = row(); S.SKY.t = 10; const b = row();
-    out.drift = diff(a, b, 0);
-    S.SKY.t = 0; const rot = S.CAM.rot; S.CAM.rot += 0.03; const c = row(); S.CAM.rot = rot;
-    let best = 0, bd = Infinity; for (let s = -80; s <= 80; s++) { const d = diff(a, c, s); if (d < bd) { bd = d; best = s; } }
-    const P = S.tiltP(), RH = innerHeight * S.TILT.hk, RW = innerWidth * S.TILT.wk, K = P / (P + RH * Math.sin(S.TILT.a));
-    out.slide = { px: best, want: RW * K * 0.03 / (2 * Math.PI) * k }; // a turn to the right moves the sky right, as the scenery
-    // the horizon: sky and ground meet in haze, without a step (until the fix, a pale tree line and hills made a bar)
+    const hz = S.horizonYX(), W = Math.round(innerWidth * k);
+    // no sky: above the far edge the 2D canvas is one haze colour across the screen (Petr 2026-11-20: no sky for now)
+    S.drawWorldX(); const top = document.getElementById('game').getContext('2d').getImageData(0, Math.round(0.25 * hz * k), W, 1).data;
+    out.sky = 0; for (let i = 0; i < top.length; i += 4) { out.sky = Math.max(out.sky, Math.abs(top[i] - 0xc9) + Math.abs(top[i + 1] - 0xd8) + Math.abs(top[i + 2] - 0xde)); }
+    // the horizon: sky and ground meet in haze, without a step (a pale tree line and hills once made a bar)
     out.step = window.__hzStep(W, hz, k);
     // the start gantry's shadow on the road, 40 m before the line
     const q0 = T.idx(T.L - 40), bk = S.W.player;
@@ -94,8 +89,7 @@ async function phase5(page, check) {
     }
     return out;
   });
-  check(r.drift > 0.5, 'sky: the clouds drift on their own (10 s)', `mean change ${r.drift.toFixed(2)} per pixel`);
-  check(r.slide.px > 0 && Math.abs(r.slide.px - r.slide.want) <= Math.max(3, 0.3 * r.slide.want), 'sky: the clouds slide with the camera turn', `${r.slide.px} px, expected ${r.slide.want.toFixed(1)} px`);
+  check(r.sky <= 6, 'no sky: plain haze above the far edge, no clouds', `largest difference from the haze colour ${r.sky}`);
   check(r.step < 25, 'horizon: no hard line where the ground meets the sky', `colour step across the horizon ${r.step} (lower quartile)`);
   const sum = a => a.reduce((s, v) => s + v, 0);
   const grey = c => Math.max(...c) - Math.min(...c) < 15;

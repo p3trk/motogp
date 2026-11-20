@@ -952,9 +952,8 @@ function drawWorld() {
   perfAdd('world', t);
   if (!camTilted()) { gl3DShow(false); return; }
   t = performance.now();
-  if (ground3DOn()) { // the GPU draws the ground (GDD 11o); only the sky is left for the 2D canvas
-    const P = tiltP(), uTop = RH * Math.cos(tiltA()) * P / (P + RH * Math.sin(tiltA()));
-    drawSky(mainCtx, uTop);
+  if (ground3DOn()) { // the GPU draws the ground (GDD 11o); only the haze behind it is left for the 2D canvas
+    drawSky(mainCtx);
   } else { projectTilted(); speedBlur(); }
   perfAdd('project', t);
   gl3DDraw(PERF.no3d ? [] : W.bikes.filter(gl3DOn));
@@ -1061,7 +1060,7 @@ function drawSpeedLines(dt) { // on the HUD layer, before the HUD
 function projectTilted() {
   const P = tiltP(), sa = Math.sin(tiltA()), ca = Math.cos(tiltA());
   const hOf = u => u * P / (ca * P - u * sa), uTop = RH * ca * P / (P + RH * sa);
-  const g = mainCtx; drawSky(g, uTop); g.imageSmoothingEnabled = true;
+  const g = mainCtx; drawSky(g); g.imageSmoothingEnabled = true;
   const near = LAYERS[1], far = LAYERS[0], hN = near.h;
   // one strip per screen row: the horizontal scale changes from row to row, so taller strips drew straight lines
   // as small steps, worst where the near and far bands join (GDD 1.11.5)

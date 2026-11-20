@@ -1135,6 +1135,35 @@ Asked by Petr (2026-11-19): the track should be 3D, with trees and other objects
 **Phase 5: depth of the world.**
 - Sky dome with a sun and clouds that move slowly, light fog with distance, soft shadows of walls and stands on the ground (baked once, not per frame).
 - Gentle hills around the circuit (Silverstone is nearly flat; the track itself stays flat, the land beyond the walls rises and falls by a few metres) so the view is not one flat sheet.
+- **Design (proposed 2026-11-20, `src/sky3d.js`):**
+  - **What the camera sees, measured:** the sky is a thin strip at the top of the screen, 7.7 % in CLOSE (64 of 830 px, camera tilt 55°) and 8.7 % in Behind, and the ground ends at a haze line about RH ahead. A sun high in the sky is never in view, and a few metres of hills 300 m away cover only a few pixels. So this phase works where it shows: the sky strip, the horizon line, and shadows on the ground, which fill most of the screen.
+  - **One sun, fixed in the world:** the sun stands to the north-west on the map (−x, −y), 40° high. This matches the shadows the 2D game already draws (bikes and trees cast towards +x, +y). Today the 3D light of the walls and estate turns with the camera, so a stand's lit side changes as the rider turns. From now on that scene's sun light is turned by the camera rotation every frame, so the lit and dark faces stay put in the world and agree with the shadows on the ground. The bikes keep their own light (open question 1).
+  - **Shadows on the ground (baked into the ground tiles, drawn once per tile, no per-frame cost):** each 3D object casts its shape along the sun, 1.2 × its height long (sun at 40°), soft-edged, in the same dark as the 2D shadows (about 28 % black):
+    - stands (roof 12 m: about 14 m of shadow), the Wing and the office block, the paddock units, buildings;
+    - the start gantry and the two bridges: their beams lay a dark band across the road, which the rider crosses at speed (a strong speed cue, and the road is on screen all the time);
+    - camera towers, marshal posts, braking boards (a thin strip each);
+    - trees keep their round shadows, moved to lie along the sun at 1.2 × the tree's height (today about half a radius off);
+    - the walls keep their contact shadow.
+    These come back to what 2D mode had: since phase 3, stands and buildings stand in 3D with no shadow at all (`drawBuildings` returns early while the 3D scenery is on). Key 7 (3D scenery off) also takes the shadows off with it.
+  - **Sky strip with clouds:** the sky stays on the 2D game canvas under the 3D layer, the same blue-to-haze gradient. Over it goes one cloud texture (made in code once, soft white puffs on a 2048 px wide strip that wraps around), drawn in the strip above the horizon:
+    - it slides sideways when the camera turns (a full turn = one strip width, like the tree line), so corners show in the sky too;
+    - it drifts slowly on its own (about one strip width in 10 minutes), so the sky is alive when standing on the grid;
+    - towards the sun's side the sky is a little brighter and warmer (a broad glow, no sun disc, since the sun is above the screen).
+  - **Hills on the horizon, not in the land:** a strip of low distant hills (2–6 m high where it meets the haze, in a blue-grey between the tree line and the sky) stands just behind the tree line and slides with the camera in the same way. It breaks the straight line where the ground meets the sky, which is the only place hills would show from 28 m up. The land itself stays flat (open question 2).
+  - **Fog with distance:** already in place since phases 1–3 (the 2D haze over the far 22 % of the ground and the matching 3D fog). This phase only makes the clouds and hills fade into the same haze colour at the horizon; the haze itself does not change.
+  - Classic graphics and Top-down stay as they are. The speed blur does not take in the sky strip (as today).
+  - **Cost:** clouds and hills are two `drawImage` calls per frame on the 2D canvas; the shadows cost only when a tile is drawn (tiles are cached); the sun turn is one vector per frame. Target: phase 5 adds at most 3 % frame time in CLOSE (headless) and does not move the speed blur check.
+  - **P overlay:** no new line (the clouds and hills are part of the sky drawing, the shadows part of the tiles).
+  - **Tests:** unit tests for each function; `tests/track3d.test.js`:
+    - the clouds move: standing on the grid, the sky strip changes over 10 s; turning through a corner, the sky strip slides the way the camera turns;
+    - the horizon is not a straight line: the hills strip makes the row where the ground meets the sky vary across the screen;
+    - shadows: a road patch under the start gantry's shadow is darker than the road beside it, and the ground on the shadow side of the Abbey stand is darker than on its sun side; with key 7 off, both differences go away;
+    - one sun: the lit face of a stand keeps the same brightness when the camera turns by 90°;
+    - frame cost of phase 5 under 3 %; `camera_tuning`'s sky check (at most 12 %) still passes.
+  - **Open questions (recommended answer in bold):**
+    1. Should the bikes' light also be fixed in the world? Then a bike riding towards the sun shows its dark side, which matches the shadows but changes the look you approved in §11l. **No: keep the bike light as it is; only the scenery gets the world sun.**
+    2. Should the land rise and fall as real 3D hills? It needs the ground plane cut into a grid that follows a height map, every tree, stand and building raised to the height under it, and the seam tests run with the hills off. From 28 m up, a few metres of rise 200 m away shows as a few pixels. **No: hills on the horizon strip only. Real 3D land can come with the lower camera of Phase 6, where it would show.**
+    3. A low sun (warm, long shadows) or a midday sun (short shadows)? **40°, mid-afternoon: shadows long enough to read (1.2 × height) without covering the road at the stands.**
 
 **Phase 6 (optional, Petr to decide later): a lower chase camera.**
 - A true 3D world allows a camera just behind and above the rider, at about 1.5 m, looking along the road, like TV on-board shots. It is the most intense sense of speed, but it is a new camera with its own tuning (§11a), so it is listed separately.

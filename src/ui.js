@@ -536,9 +536,11 @@ window.addEventListener('keydown', e => {
 });
 // C and the replay Camera button: Behind -> CLOSE -> Top-down -> Behind; also sets the start-screen option (GDD 11a)
 function camCycle() {
-  setCamMode(CAM_ORDER[(CAM_ORDER.indexOf(CAM.mode) + 1) % CAM_ORDER.length]);
+  let m = CAM.mode;
+  do { m = CAM_ORDER[(CAM_ORDER.indexOf(m) + 1) % CAM_ORDER.length]; } while (m === 'low' && !lowAvail()); // Chase is skipped where it cannot be used (GDD 11o phase 6)
+  setCamMode(m);
   UI.opts.cam = CAM.mode; UI.sync();
-  if (UI.state === 'play' && W.paused) UI.camIn(camTilted());
+  if (UI.state === 'play' && W.paused) UI.camIn(camTuned());
   HUD.msg('CAMERA', CAM_NAME[CAM.mode], '#4cc3ff', 1.2);
 }
 window.addEventListener('keyup', e => { Input.k[e.code] = false; });
@@ -670,6 +672,7 @@ const UI = {
     const o = this.opts;
     document.querySelectorAll('.mode').forEach(m => m.setAttribute('aria-pressed', String(m.dataset.mode === o.mode)));
     for (const [id, key] of [['optTrans', 'trans'], ['optAids', 'aids'], ['optAI', 'ai'], ['optCam', 'cam'], ['optGuide', 'guide'], ['optBlur', 'blur'], ['optFx', 'fx'], ['optGfx', 'gfx'], ['optTrain', 'train'], ['optCtl', 'controls'], ['optSide', 'side'], ['optTilt', 'tilt']]) $(id).querySelectorAll('button').forEach(bt => bt.setAttribute('aria-pressed', String(bt.dataset.v === o[key])));
+    const lowBtn = document.querySelector('#optCam [data-v="low"]'); if (lowBtn) lowBtn.hidden = !lowAvail(); // Chase only where it can be used (GDD 11o phase 6)
     $('optFuel').value = o.fuel; $('optGrid').value = o.grid; $('optTeam').value = o.team; $('optName').value = o.name; $('optNum').value = o.num;
     const laps = o.mode === 'gp' ? 20 : 10; const L = PHYS.tank * o.fuel / 100; const range = L / PHYS.lapFuel;
     $('optFuelV').textContent = L.toFixed(1) + ' L';
@@ -824,36 +827,47 @@ const UI = {
     if (pause) { P.appendChild(el); P.hidden = false; } else if (el.parentNode === P) { $('optGridWrap').before(el); P.hidden = true; }
     $('btnTrainGo').hidden = !pause;
   },
-  camIn(show) { // camera tuning panel in the pause menu (GDD 11a); built once, shown for the tilted camera in use (Behind or CLOSE)
+  camIn(show) { // camera tuning panel in the pause menu (GDD 11a); built once, shown for the camera in use with its own sliders (Behind, CLOSE or Chase)
     let P = $('pauseCam');
     if (!P && show) {
       P = document.createElement('div'); P.id = 'pauseCam'; P.className = 'opts'; P.style.marginTop = '14px';
       const head = document.createElement('div'); head.className = 'opt'; head.style.gridColumn = '1/-1';
       head.innerHTML = '<span class="lbl" id="camTitle">Camera tuning</span><span class="hint">The view behind this menu updates as you change a value. Each camera keeps its own values, saved in this browser. C switches the camera.</span>';
       P.appendChild(head);
-      const refresh = {}, rows = CAM_SET.map(d => {
-        const w = document.createElement('div'); w.className = 'opt';
-        const id = 'cam_' + d.k, lb = document.createElement('label'); lb.htmlFor = id; lb.textContent = d.lbl + (d.unit ? ' (' + d.unit + ')' : '');
-        const rg = document.createElement('input'), nb = document.createElement('input');
-        rg.type = 'range'; rg.id = id; nb.type = 'number'; nb.setAttribute('aria-label', d.lbl);
-        for (const el of [rg, nb]) { el.min = d.min; el.max = d.max; el.step = d.step; }
-        const line = document.createElement('div'); line.style.cssText = 'display:flex;gap:10px;align-items:center';
-        nb.style.width = '92px'; nb.style.flex = 'none'; line.append(rg, nb); w.append(lb, line);
-        const put = (v, save) => { v = camSet(d, v, save); rg.value = v; if (document.activeElement !== nb || !save) { nb.value = v; } if (d.rs && save) { resize(); } if (save && W.paused) CAM.init = false; // paused: the camera barely moves, so snap it to the new zoom/framing
-          const pk = { bv0: 'bv1', bv1: 'bv0' }[d.k]; if (save && pk) refresh[pk](); }; // blur start and full speed keep 10 km/h apart
-        rg.addEventListener('input', () => put(rg.value, true));
-        nb.addEventListener('input', () => { if (nb.value !== '' && isFinite(+nb.value)) put(nb.value, true); });
-        nb.addEventListener('change', () => { put(nb.value, true); nb.value = camGet(d); });
-        P.appendChild(w); refresh[d.k] = () => put(camGet(d), false); return refresh[d.k];
-      });
       const act = document.createElement('div'); act.style.gridColumn = '1/-1';
       const rb = document.createElement('button'); rb.className = 'chip'; rb.textContent = 'Reset to defaults';
-      rb.addEventListener('click', () => { camReset(); resize(); if (W.paused) { CAM.init = false; } this.camSync(); }); // this camera only
+      rb.addEventListener('click', () => { if (CAM.mode === 'low') { lowReset(); } else { camReset(); resize(); } if (W.paused) { CAM.init = false; } this.camSync(); }); // this camera only
       act.appendChild(rb); P.appendChild(act);
-      this.camSync = () => { $('camTitle').textContent = 'Camera tuning (' + CAM_NAME[TILT_CAM] + ')'; rows.forEach(r => r()); };
+      let kind = null, rows = [];
+      this.camSync = () => {
+        const low = CAM.mode === 'low';
+        if (kind !== low) { for (const r of rows) { r.el.remove(); } rows = this.camRows(low); for (const r of rows) { act.before(r.el); } kind = low; }
+        $('camTitle').textContent = 'Camera tuning (' + CAM_NAME[low ? 'low' : TILT_CAM] + ')'; rows.forEach(r => r.refresh());
+      };
       $('pause').querySelector('.wrap').appendChild(P);
     }
     if (P) { P.hidden = !show; if (show) this.camSync(); }
+  },
+  camRows(low) { // the sliders of the tuning panel: the tilted camera's (CAM_SET into TILT) or Chase's (LOW_SET, GDD 11o phase 6)
+    const refresh = {};
+    const io = low ? { set: LOW_SET, id: 'camlow_', get: d => LOW_VAL[d.k], put: lowSet, after() { /* the Chase camera is placed each frame */ } }
+      : { set: CAM_SET, id: 'cam_', get: camGet, put: camSet, after: (d, save) => { if (d.rs && save) { resize(); } if (save && W.paused) CAM.init = false; // paused: the camera barely moves, so snap it to the new zoom/framing
+        const pk = { bv0: 'bv1', bv1: 'bv0' }[d.k]; if (save && pk) refresh[pk](); } }; // blur start and full speed keep 10 km/h apart
+    return io.set.map(d => {
+      const w = document.createElement('div'); w.className = 'opt';
+      const id = io.id + d.k, lb = document.createElement('label'); lb.htmlFor = id; lb.textContent = d.lbl + (d.unit ? ' (' + d.unit + ')' : '');
+      const rg = document.createElement('input'), nb = document.createElement('input');
+      rg.type = 'range'; rg.id = id; nb.type = 'number'; nb.setAttribute('aria-label', d.lbl);
+      for (const el of [rg, nb]) { el.min = d.min; el.max = d.max; el.step = d.step; }
+      const line = document.createElement('div'); line.style.cssText = 'display:flex;gap:10px;align-items:center';
+      nb.style.width = '92px'; nb.style.flex = 'none'; line.append(rg, nb); w.append(lb, line);
+      const put = (v, save) => { v = io.put(d, v, save); rg.value = v; if (document.activeElement !== nb || !save) { nb.value = v; } io.after(d, save); };
+      rg.addEventListener('input', () => put(rg.value, true));
+      nb.addEventListener('input', () => { if (nb.value !== '' && isFinite(+nb.value)) put(nb.value, true); });
+      nb.addEventListener('change', () => { put(nb.value, true); nb.value = io.get(d); });
+      refresh[d.k] = () => put(io.get(d), false);
+      return { el: w, refresh: refresh[d.k] };
+    });
   },
   toMenu() { Rec.stop(); this.hideAll(); this.state = 'menu'; W.paused = false; $('menu').hidden = false; this.renderRecords(); },
   start() {
@@ -880,7 +894,7 @@ const UI = {
     $('pauseSub').textContent = pauseLabel();
     this.trainIn(W.paused && W.mode === 'practice');
     this.syncIn(W.paused && W.mode === 'practice');
-    this.camIn(W.paused && camTilted());
+    this.camIn(W.paused && camTuned());
     if (W.paused) $('btnResume').focus();
   },
   finishQuali() {
@@ -1000,5 +1014,5 @@ function boot() {
   requestAnimationFrame(t => { last = t; requestAnimationFrame(frame); });
   setInterval(() => { if (UI.state === 'menu') { for (let k = 0; k < 4; k++) simStep(SUB); } }, 1000 / 30);
 }
-window.__sgp = { GL3D, gl3DDraw, gl3DOn, gl3DMesh, gl3DBikeFrame, gl3DPoseWeights, worldToScreen, gl3DPlanePoint, gl3DProjection, tiltP, Touch: TouchCtl, bikeStyleNames: () => BIKE_STYLES.map(st => st && st.name), setBikeStyleX: n => { BIKE_STYLE = n; for (const k in SPRITES) { delete SPRITES[k]; } }, bikeStyleCount: () => BIKE_STYLES.length - 1, bikeSpriteX: (t, n, v) => bikeSprite(t, n, v), tiltProjectX: draw => { for (const Ly of LAYERS) { const g = Ly.g; g.setTransform(Ly.dpr, 0, 0, Ly.dpr, 0, 0); g.translate(-Ly.x0, -Ly.y0); draw(g, RW, RH); } projectTilted(); return { VW, VH, RW, RH }; }, tiltProject3DX: draw => { for (const Ly of LAYERS) { const g = Ly.g; g.setTransform(Ly.dpr, 0, 0, Ly.dpr, 0, 0); g.translate(-Ly.x0, -Ly.y0); draw(g, RW, RH); } drawSky(mainCtx); const on = gl3DDraw([]); mainCtx.setTransform(1, 0, 0, 1, 0, 0); if (on) { mainCtx.drawImage(GL3D.canvas, 0, 0); } return { VW, VH, RW, RH, on }; }, ground3DOn, walls3DOn, wallKinds, WALLS3D, WALL_KIND, PERF, TILE_WALLS, SCN, TEAMS, EST, GROUND, SKY, SUN, SIDE3D, sunShadows, walls3DFog, horizonYX: () => { const P = tiltP(), a = tiltA(); return VH - RH * Math.cos(a) * P / (P + RH * Math.sin(a)); }, screenX: () => { const o = document.createElement('canvas'); o.width = cv.width; o.height = cv.height; const g = o.getContext('2d'); g.drawImage(cv, 0, 0); if (GL3D.canvas && GL3D.shown) { g.drawImage(GL3D.canvas, 0, 0, o.width, o.height); } return o; }, worldToScreenX: (x, y) => worldToScreen(x, y), worldToCanvasX: (x, y) => worldToCanvas(x, y), frameX: t => frame(t), setCamModeX: m => setCamMode(m), CAM, RP, Rec, Lib, Ghost, W, T, PHYS, Input, FX, Records, completeLapX: b => completeLap(b), trackLimitsX: b => trackLimits(b), longLapX: b => longLap(b), applyDropX: b => applyDrop(b), limitRefX: (s0, s1) => limitRef(s0, s1), stepBikeX: (b, dt) => stepBike(b, dt, W), SURF, drawWorldX: () => drawWorld(), speedBlurX: () => speedBlur(), speedVibX: () => speedVib(), SPL, GEO, resizeX: () => resize(), drawSpeedLinesX: dt => { ctx = hudCtx; try { drawSpeedLines(dt); } finally { ctx = mainCtx; } }, camNameX: () => TILT_CAM, setupSession, simStep, standings, UI, SUB, TILT, setAIReal: v => { AI_REAL = v; } };
+window.__sgp = { LOW, LOW_VAL, LOW_DEF, LOW_FIX, lowEye, lowAvail, lowOn, lowProjectPt, GL3D, gl3DDraw, gl3DOn, gl3DMesh, gl3DBikeFrame, gl3DPoseWeights, worldToScreen, gl3DPlanePoint, gl3DProjection, tiltP, Touch: TouchCtl, bikeStyleNames: () => BIKE_STYLES.map(st => st && st.name), setBikeStyleX: n => { BIKE_STYLE = n; for (const k in SPRITES) { delete SPRITES[k]; } }, bikeStyleCount: () => BIKE_STYLES.length - 1, bikeSpriteX: (t, n, v) => bikeSprite(t, n, v), tiltProjectX: draw => { for (const Ly of LAYERS) { const g = Ly.g; g.setTransform(Ly.dpr, 0, 0, Ly.dpr, 0, 0); g.translate(-Ly.x0, -Ly.y0); draw(g, RW, RH); } projectTilted(); return { VW, VH, RW, RH }; }, tiltProject3DX: draw => { for (const Ly of LAYERS) { const g = Ly.g; g.setTransform(Ly.dpr, 0, 0, Ly.dpr, 0, 0); g.translate(-Ly.x0, -Ly.y0); draw(g, RW, RH); } drawSky(mainCtx); const on = gl3DDraw([]); mainCtx.setTransform(1, 0, 0, 1, 0, 0); if (on) { mainCtx.drawImage(GL3D.canvas, 0, 0); } return { VW, VH, RW, RH, on }; }, ground3DOn, walls3DOn, wallKinds, WALLS3D, WALL_KIND, PERF, TILE_WALLS, SCN, TEAMS, EST, GROUND, SKY, SUN, SIDE3D, sunShadows, walls3DFog, horizonYX: () => { const P = tiltP(), a = tiltA(); return VH - RH * Math.cos(a) * P / (P + RH * Math.sin(a)); }, screenX: () => { const o = document.createElement('canvas'); o.width = cv.width; o.height = cv.height; const g = o.getContext('2d'); g.drawImage(cv, 0, 0); if (GL3D.canvas && GL3D.shown) { g.drawImage(GL3D.canvas, 0, 0, o.width, o.height); } return o; }, worldToScreenX: (x, y) => worldToScreen(x, y), worldToCanvasX: (x, y) => worldToCanvas(x, y), frameX: t => frame(t), setCamModeX: m => setCamMode(m), CAM, RP, Rec, Lib, Ghost, W, T, PHYS, Input, FX, Records, completeLapX: b => completeLap(b), trackLimitsX: b => trackLimits(b), longLapX: b => longLap(b), applyDropX: b => applyDrop(b), limitRefX: (s0, s1) => limitRef(s0, s1), stepBikeX: (b, dt) => stepBike(b, dt, W), SURF, drawWorldX: () => drawWorld(), speedBlurX: () => speedBlur(), speedVibX: () => speedVib(), SPL, GEO, resizeX: () => resize(), drawSpeedLinesX: dt => { ctx = hudCtx; try { drawSpeedLines(dt); } finally { ctx = mainCtx; } }, camNameX: () => TILT_CAM, setupSession, simStep, standings, UI, SUB, TILT, setAIReal: v => { AI_REAL = v; } };
 if (document.fonts && document.fonts.ready) { Promise.race([document.fonts.ready, new Promise(r => setTimeout(r, 1500))]).then(boot).catch(e => { console.error("boot failed", e && e.stack); }); } else boot();

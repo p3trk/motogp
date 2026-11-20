@@ -238,3 +238,16 @@ test('gl3DShow: shows or hides the 3D layer, writing the style only on a change'
   G.gl3DShow(false); assert.equal(style.display, 'none'); assert.equal(writes, 2);
   G.GL3D.canvas = null; G.gl3DShow(true); // no 3D canvas: nothing happens
 });
+test('gl3DSize: the 3D canvas follows the game canvas, set only when the size changes', () => {
+  const { G } = load(); const sizes = [];
+  Object.assign(G.GL3D, { ok: true, renderer: { setPixelRatio() { }, setSize: (w, h) => sizes.push([w, h]) }, w: 0, h: 0 });
+  G.gl3DSize(); G.gl3DSize();
+  assert.deepEqual(sizes, [[G.cv.width, G.cv.height]]);
+});
+test('gl3DBikeFrame: in the Chase frame (y turned round) at real size, the lean keeps its direction', () => {
+  const { G } = load(); const b = { x: 10, y: 20, h: 0, lean: 0.5, aLong: 0 };
+  const f = G.gl3DBikeFrame(b, G.lowMap, 1);
+  assert.deepEqual(f.O.map(v => +v.toFixed(9)), [10, -20, 0].map(v => +v.toFixed(9)));
+  assert.ok(Math.abs(Math.hypot(...f.X) - 1) < 1e-9, 'real size');
+  assert.ok(f.Z[1] < 0, 'leaning right (positive lean) moves the top to the bike\'s right: -y in the Chase frame');
+});

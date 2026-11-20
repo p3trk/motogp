@@ -95,36 +95,25 @@ test('skyClouds: one wrapping strip of soft puffs, drawn once', () => {
   assert.equal(c.width, 2048); assert.equal(c.height, 96); assert.ok(c.getContext('2d').calls.filter(k => k[0] === 'fillRect').length > 3 * 16 * 5);
   assert.equal(G.skyClouds(), c);
 });
-test('skyU: one tree-line unit per quarter of the ground width, one ground width per full turn', () => {
-  const { G } = tilted(); const k = 0.5;
-  near(G.skyU(G.VW / 2 + k * G.RW / 4, k) - G.skyU(G.VW / 2, k), 1, 1e-9);
-  const u0 = G.skyU(300, k); G.CAM.rot += G.TAU; const u1 = G.skyU(300, k);
-  assert.ok(Math.abs(u1 - (u0 - 4)) < 1e-9, `${u1} vs ${u0 - 4}`);
-});
-test('skyHill: 2.5 to 4.5 m, the same after a full turn', () => {
-  const { G } = load(); let lo = Infinity, hi = -Infinity;
-  for (let u = 0; u < 4; u += 0.01) { const h = G.skyHill(u); lo = Math.min(lo, h); hi = Math.max(hi, h); near(G.skyHill(u + 4), h, 1e-9); }
-  assert.ok(lo >= 2.5 && hi <= 4.5 && hi - lo > 1.2, `${lo} ${hi}`);
-});
-test('skyRow: the far edge at the horizon row, higher points further up the screen', () => {
-  const { G } = tilted(); const P = G.tiltP(), a = G.tiltA();
-  near(G.skyRow(0), G.VH - G.RH * Math.cos(a) * P / (P + G.RH * Math.sin(a)), 1e-9);
-  assert.ok(G.skyRow(4) < G.skyRow(1));
-});
-test('skyDecor: glow, clouds, haze and hills inside the sky strip; the clouds drift with time', () => {
+test('skyDecor: two rows of clouds, haze meeting the far edge in its own colour, the glow over them; drifting', () => {
   const { G } = tilted(); const g = makeCtx({ width: 100, height: 100 });
   G.SKY.t = 0; G.CAM.rot = -G.SUN.az - Math.PI / 2; // facing the sun
   const hz = G.skyDecor(g, 300);
   assert.equal(hz, G.VH - 300);
   assert.deepEqual(g.calls.find(k => k[0] === 'rect').slice(1), [0, 0, G.VW, hz + 2], 'clipped to the sky');
-  assert.ok(g.calls.some(k => k[0] === 'createRadialGradient'), 'glow');
-  const imgs = () => g.calls.filter(k => k[0] === 'drawImage').map(k => k[2]);
-  const x0 = imgs()[0]; assert.ok(x0 <= 0 && imgs().length >= 1);
+  const imgs = () => g.calls.filter(k => k[0] === 'drawImage');
+  const near0 = imgs().filter(k => k[3] === 0), far0 = imgs().filter(k => k[3] > 0);
+  assert.ok(near0.length >= 1 && far0.length >= 2, 'a near row and a far row');
+  near(far0[0][4], near0[0][4] / 2, 1e-9, 'far clouds half the size'); assert.ok(far0[0][3] + far0[0][5] < hz, 'above the horizon');
+  const iGlow = g.calls.findIndex(k => k[0] === 'createRadialGradient'), iImg = g.calls.findIndex(k => k[0] === 'drawImage');
+  assert.ok(iGlow > iImg, 'the glow over the clouds');
+  assert.ok(g.calls.some(k => k[0] === '=fillStyle' && k[1].stops && k[1].stops.some(([o, c]) => o === 1 && c === 'rgba(201,216,222,1)')), 'whole haze at the horizon');
+  assert.equal(g.calls.filter(k => k[0] === 'lineTo').length, 0, 'no hills');
+  const x0 = near0[0][2]; assert.ok(x0 <= 0);
   g.calls.length = 0; G.CAM.rot += Math.PI; G.skyDecor(g, 300);
   assert.ok(!g.calls.some(k => k[0] === 'createRadialGradient'), 'no glow with the sun behind');
   g.calls.length = 0; G.CAM.rot -= Math.PI; G.SKY.t = 60; G.skyDecor(g, 300);
-  assert.notEqual(imgs()[0], x0, 'a minute later the clouds have moved');
-  assert.ok(g.calls.filter(k => k[0] === 'lineTo').length > G.VW / 6, 'hills outline across the screen');
+  assert.notEqual(imgs()[0][2], x0, 'a minute later the clouds have moved');
 });
 test('drawSky: clouds and hills only while the 3D scenery stands', () => {
   const { G } = tilted(); const g = G.mainCtx;

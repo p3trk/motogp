@@ -7828,7 +7828,7 @@ function drawSky(g, uTop) {
 // on the wall line, in the 3D view over the 3D ground. Built once in world metres when the track is loaded, in pieces
 // of about 250 m; each frame a piece gets one matrix from world metres to the camera frame (gl3DPlanePoint is an
 // affine map), so the cost per frame does not grow with the number of posts. Heights are scaled like the bikes.
-const WALLS3D = { ready: false, src: null, scene: null, pieces: [], clip: [], mats: null, postGeo: null, drawn: 0, shake: [0, 0] };
+const WALLS3D = { ready: false, src: null, scene: null, pieces: [], clip: [], mats: null, postGeo: null, drawn: 0, shake: [0, 0], fogU: { fogCa: { value: 1 }, fogSa: { value: 0 } } };
 const WALL_HS = PHYS.VS; // the bikes are drawn 1.35x real size, so the heights are too (the footprint stays real)
 const WALL_PIECE = 125; // track points per piece (about 250 m)
 const WALL_KIND = { NONE: 0, CONCRETE: 1, ARMCO: 2, TYRE: 3 };
@@ -7983,14 +7983,26 @@ function wallPosts(list, mat) {
 }
 // the materials, shared by all pieces and cut by the clip planes: walls (vertex colours), posts (coloured per post),
 // fence mesh, and the boards and adverts (phase 4, one texture)
+// the haze of a walls-scene material by distance along the ground, not by depth from the eye: a tall tree near the far
+// edge fades as a whole, so nothing needs cutting at the horizon line (GDD 11o phase 5: open sky, no bar). The frame
+// is the camera's (gl3DPlanePoint): ground row v and height z sit at y = v cos a - z sin a, z = v sin a + z cos a, so
+// v = y cos a + z sin a, and the haze depth is -v sin a, as for the 2D haze over the ground canvas
+function walls3DFog(mat) {
+  mat.onBeforeCompile = sh => {
+    Object.assign(sh.uniforms, WALLS3D.fogU);
+    sh.vertexShader = 'uniform float fogCa; uniform float fogSa;\n' + sh.vertexShader.replace('#include <fog_vertex>',
+      '#ifdef USE_FOG\n  vFogDepth = -(mvPosition.y * fogCa + mvPosition.z * fogSa) * fogSa;\n#endif');
+  };
+  return mat;
+}
 function walls3DMaterials() {
   if (!WALLS3D.mats) {
     const clippingPlanes = WALLS3D.clip, side = THREE.DoubleSide;
     WALLS3D.mats = {
-      solid: new THREE.MeshLambertMaterial({ vertexColors: true, side, clippingPlanes }),
-      post: new THREE.MeshLambertMaterial({ color: new THREE.Color('#ffffff'), clippingPlanes }),
-      tex: new THREE.MeshLambertMaterial({ map: sideAtlas().tex, side, clippingPlanes }),
-      panel: new THREE.MeshBasicMaterial({ color: new THREE.Color(WALL_COL.mesh), transparent: true, opacity: 0.25, depthWrite: false, side, clippingPlanes })
+      solid: walls3DFog(new THREE.MeshLambertMaterial({ vertexColors: true, side, clippingPlanes })),
+      post: walls3DFog(new THREE.MeshLambertMaterial({ color: new THREE.Color('#ffffff'), clippingPlanes })),
+      tex: walls3DFog(new THREE.MeshLambertMaterial({ map: sideAtlas().tex, side, clippingPlanes })),
+      panel: walls3DFog(new THREE.MeshBasicMaterial({ color: new THREE.Color(WALL_COL.mesh), transparent: true, opacity: 0.25, depthWrite: false, side, clippingPlanes }))
     };
   }
   return WALLS3D.mats;
@@ -8097,16 +8109,18 @@ function walls3DPlace() {
     if (on) { n++; const M = walls3DMatrix(F, p.ox, p.oy); for (const m of p.meshes) { m.matrix.set(...M); m.matrixWorld.copy(m.matrix); } }
     for (const m of p.meshes) m.visible = on;
   }
-  // haze as the 2D far band (drawWorldLayer: haze over the top 22 % of the ground canvas); fog depth is -Z = -v sin a
+  // haze as the 2D far band (drawWorldLayer: haze over the top 22 % of the ground canvas), by ground distance
+  // (walls3DFog): the haze depth -v sin a runs from 0.78 RH sin a to RH sin a
   WALLS3D.scene.fog.near = 0.78 * RH * sa; WALLS3D.scene.fog.far = RH * sa;
-  // cut at the horizon line: the plane through the eye (0, 0, P) and the ground's far edge (row -RH), so nothing stands
-  // in the sky above the far edge (tall far trees showed there as pale ghosts, GDD 11o phase 3; the tree line covers
-  // the cut); and at the ground's sides (|u| <= RW/2)
-  const [far, left, right] = WALLS3D.clip, P = tiltP(), ny = RH * sa + P, nz = -RH * ca, nl = Math.hypot(ny, nz);
-  far.normal.set(0, ny / nl, nz / nl); far.constant = RH * ca * P / nl;
+  WALLS3D.fogU.fogCa.value = ca; WALLS3D.fogU.fogSa.value = sa;
+  // cut at the ground's far edge (row -RH: v >= -RH), where the haze is whole, so things just inside it stand up into
+  // the sky in the haze's colour and nothing beyond it shows (until phase 5 the cut was the plane through the eye and
+  // the far edge, hidden by a tree line, which made a flat bar at the top); and at the ground's sides (|u| <= RW/2)
+  const [far, left, right] = WALLS3D.clip;
+  far.normal.set(0, ca, sa); far.constant = RH;
   left.normal.set(1, 0, 0); left.constant = RW / 2;
   right.normal.set(-1, 0, 0); right.constant = RW / 2;
-  estate3DPlace(F); // trees, stands, buildings and the tree line (phase 3)
+  estate3DPlace(F); // trees, stands and buildings (phase 3)
   sunLightPlace(F, WALLS3D.lights); // the sun fixed in the world (phase 5)
   WALLS3D.drawn = n;
   return n;
@@ -8285,13 +8299,13 @@ function sideBuild(piece) {
   sideBoards(piece); sidePosts(piece); sideMarshals(piece); sideTowers(piece); sideGantries(piece);
 }
 // --- the estate in 3D (GDD 11o, phase 3): the trees, grandstands, the Wing and the paddock buildings laid out in SCN
-// (render.js buildScenery) stand up, and a tree line stands on the horizon. Built once in world metres into the walls
+// (render.js buildScenery) stand up. Built once in world metres into the walls
 // scene (same lights, haze and clip planes, scenery3d.js); one matrix a frame for all of it.
-const EST = { meshes: [], cells: [], line: null, crowd: null, drawn: 0 };
+const EST = { meshes: [], cells: [], crowd: null, drawn: 0 };
 const EST_CELL = 300; // metres: the estate is cut into square cells, and only the cells in view are drawn
 const EST_COL = { trunk: '#5b4632', leaf: ['#3f7a35', '#4c8a3c', '#2f5f34', '#46803a'], conc: '#b9bcbf', back: '#eef0f2',
   roof: '#d7dbe0', edge: '#1d4fd6', garage: '#3b4148', office: '#5b7a99', wingRoof: '#e8ebee', wingEdge: '#3c6ea0',
-  unit: '#e9ecef', unitRoof: '#c9cdd1', line: '#9fb3a6' }; // line: distant trees, most of the way to the haze
+  unit: '#e9ecef', unitRoof: '#c9cdd1' };
 const EST_TREE_KIND = [0, 1, 2, 3, 0]; // tree variant (SCN.trees v, 0..4) -> round, wide, conifer, poplar
 
 // one triangle a-b-c in one colour into a quad buffer ({ pos, col }, as wallQuad)
@@ -8437,34 +8451,6 @@ function estWing(solid) {
     wallQuad(solid, at(sr, G + 3, 11.1), at(e, G + 3, 11.1), at(e, G + 3, 11.5), at(sr, G + 3, 11.5), EST_COL.wingEdge);
   }
 }
-// the tree line on the horizon: tree tops cut out of a strip, drawn once; it repeats round the horizon
-function estLineTexture() {
-  const c = mkCanvas(1024, 64), g = c.getContext('2d'), r = mulberry(11);
-  g.fillStyle = '#fff'; g.beginPath(); g.moveTo(0, 64);
-  for (let x = 0; x <= 1024; x += 8) g.lineTo(x, 64 - (26 + 22 * r() + 10 * Math.sin(x / 40)));
-  g.lineTo(1024, 64); g.closePath(); g.fill();
-  const t = new THREE.CanvasTexture(c); t.wrapS = THREE.RepeatWrapping;
-  return t;
-}
-// the tree line mesh: one quad in the camera frame, placed each frame by estLinePlace (not cut, no haze: tinted instead)
-function estLine() {
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(12), 3));
-  g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array([0, 0, 4, 0, 4, 1, 0, 1]), 2));
-  g.setIndex([0, 1, 2, 0, 2, 3]);
-  const mat = new THREE.MeshBasicMaterial({ map: estLineTexture(), color: new THREE.Color(EST_COL.line), transparent: true, alphaTest: 0.5, fog: false, side: THREE.DoubleSide, depthWrite: false });
-  const m = new THREE.Mesh(g, mat); m.frustumCulled = false; m.matrixAutoUpdate = false; m.renderOrder = -1;
-  return m;
-}
-// this frame's tree line: across the ground's far edge, 4 m high (scaled; the CLOSE camera shows only a thin strip of
-// sky above it), its pattern turning with the camera
-function estLinePlace(m) {
-  const a = tiltA(), sa = Math.sin(a), ca = Math.cos(a), v = -RH + 0.5, h = 4 * WALL_HS * CAM.ppm, pos = m.geometry.attributes.position;
-  const p = (u, z) => [u, v * ca - z * sa, v * sa + z * ca];
-  pos.array.set([...p(-RW / 2, 0), ...p(RW / 2, 0), ...p(RW / 2, h), ...p(-RW / 2, h)]); pos.needsUpdate = true;
-  m.material.map.offset.x = -CAM.rot / TAU * 4;
-  m.matrix.identity(); m.matrixWorld.identity();
-}
 // the cell of a ground point (cells of EST_CELL metres)
 function estCellOf(x, y) { return Math.floor(x / EST_CELL) + ',' + Math.floor(y / EST_CELL); }
 // the ground box [x0, y0, x1, y1] of a cell's meshes: their vertices, and the tree feet with their crowns
@@ -8484,10 +8470,10 @@ function estCell(c, M) {
   return { box: estCellBox(meshes), meshes };
 }
 // everything of phase 3 into the walls scene, cell by cell: trees, stands, buildings and the Wing in world metres
-// (placed each frame by estate3DPlace with one matrix, cells out of view hidden), and the tree line
+// (placed each frame by estate3DPlace with one matrix, cells out of view hidden)
 function estate3DBuild(scene) {
   const M = walls3DMaterials(), cells = new Map(), PIT = T.PIT;
-  if (!M.tree) { M.tree = new THREE.MeshLambertMaterial({ vertexColors: true, clippingPlanes: WALLS3D.clip }); M.crowd = new THREE.MeshLambertMaterial({ map: estCrowd(), side: THREE.DoubleSide, clippingPlanes: WALLS3D.clip }); }
+  if (!M.tree) { M.tree = walls3DFog(new THREE.MeshLambertMaterial({ vertexColors: true, clippingPlanes: WALLS3D.clip })); M.crowd = walls3DFog(new THREE.MeshLambertMaterial({ map: estCrowd(), side: THREE.DoubleSide, clippingPlanes: WALLS3D.clip })); }
   const cell = (x, y) => {
     const k = estCellOf(x, y);
     if (!cells.has(k)) cells.set(k, { trees: [], solid: { pos: [], col: [] }, crowd: { pos: [], uv: [] } });
@@ -8500,10 +8486,9 @@ function estate3DBuild(scene) {
   EST.cells = [...cells.values()].map(c => estCell(c, M));
   EST.meshes = EST.cells.flatMap(c => c.meshes);
   for (const m of EST.meshes) { m.frustumCulled = false; m.matrixAutoUpdate = false; scene.add(m); }
-  EST.line = estLine(); scene.add(EST.line);
   return EST.meshes;
 }
-// this frame's place of the estate (frame F of walls3DFrame) and of the tree line
+// this frame's place of the estate (frame F of walls3DFrame)
 // (only the cells in view are shown); returns the cells drawn
 function estate3DPlace(F) {
   const M = walls3DMatrix(F, 0, 0);
@@ -8512,17 +8497,16 @@ function estate3DPlace(F) {
     const on = walls3DVisible(c); if (on) n++;
     for (const m of c.meshes) { m.visible = on; if (on) { m.matrix.set(...M); m.matrixWorld.copy(m.matrix); } }
   }
-  if (EST.line) estLinePlace(EST.line);
   EST.drawn = n;
   return n;
 }
 // --- depth of the world (GDD 11o, phase 5): one sun fixed in the world, the shadows of the 3D scenery baked into the
-// ground tiles, and the sky strip with drifting clouds, a glow towards the sun and low hills on the horizon. All of it
+// ground tiles, and the sky strip with drifting clouds and a glow towards the sun, meeting the ground in haze. All of it
 // stands and falls with the 3D scenery (TILE_WALLS.on3d; test switch 7).
 const SKY = { clouds: null, shadows: null, src: null, t: 0 }; // t: the clouds' clock in seconds, running only while the game or the replay runs (skyTick)
 // the sun: towards the north-west of the map (-x, -y; the 2D shadows of bikes and trees fall to +x, +y), 40 degrees up
 const SUN = { az: Math.atan2(-1, -1), el: 40 * Math.PI / 180 };
-const SKY_COL = { glow: '255,236,204', haze: '201,216,222', hills: '#aebfc3', cloud: '255,255,255' };
+const SKY_COL = { glow: '255,236,204', haze: '201,216,222', cloud: '255,255,255' };
 const SKY_DRIFT = 2 / 600; // clouds: tree-line units (a quarter of the ground width) per second, one cloud strip in 10 minutes
 
 // the ground offset of a shadow per metre of height (heights scaled by WALL_HS, as drawn): away from the sun,
@@ -8658,48 +8642,32 @@ function skyTick(dt) {
   if ((UI.state === 'play' && !W.paused) || (UI.state === 'replay' && RP.playing)) SKY.t += dt;
   return SKY.t;
 }
-// the horizon coordinate of screen column x, in tree-line units (estLinePlace: the tree line texture repeats 4 times
-// across the ground width and moves one ground width per full turn of the camera), so the sky slides with it
-function skyU(x, k) { return 4 * ((x - VW / 2) / (k * RW) + 0.5) - 4 * CAM.rot / TAU; }
-// the height of the hills in metres at horizon coordinate U: 2.5 to 4.5 m at the far edge (the tree line is 4 m, its
-// tops 1 to 3.6 m), the same every full turn
-function skyHill(U) {
-  const a = U * TAU / 4;
-  const n = 0.45 * Math.sin(a + 0.7) + 0.3 * Math.sin(2 * a + 2.1) + 0.2 * Math.sin(5 * a + 0.3) + 0.12 * Math.sin(11 * a + 1.9);
-  return 3.5 + n / 1.07;
-}
-// the screen row of a point h metres up (scaled) on the ground's far edge
-function skyRow(h) {
-  const a = tiltA(), sa = Math.sin(a), ca = Math.cos(a), P = tiltP(), z = h * WALL_HS * CAM.ppm;
-  const Y = -RH * ca - z * sa, Z = -RH * sa + z * ca;
-  return VH + Y * P / (P - Z);
-}
-// the sky strip over the gradient of drawSky, while the 3D scenery stands: the glow towards the sun, the clouds, haze
-// near the horizon and the hills; returns the horizon row
+// the sky strip over the gradient of drawSky, while the 3D scenery stands: the clouds (a near row up high, a far row of
+// smaller, fainter ones lower down), the haze that meets the ground's far edge in its own colour, and the warm glow
+// towards the sun over them; returns the horizon row (GDD 11o phase 5: open sky, no bar)
 function skyDecor(g, uTop) {
-  const hz = VH - uTop, sa = Math.sin(tiltA()), P = tiltP(), k = P / (P + RH * sa), RWk = RW * k;
+  const hz = VH - uTop, sa = Math.sin(tiltA()), P = tiltP(), RWk = RW * P / (P + RH * sa);
   g.save(); g.beginPath(); g.rect(0, 0, VW, hz + 2); g.clip();
-  // glow: the sun's bearing from straight ahead (canvas angle of its direction + 90 degrees), placed as the tree line
+  // clouds: one strip per half the far edge's width, sliding with the camera's turn (a full turn = 4 strips' worth of
+  // the far edge, as the scenery turns) and drifting on their own; the far row at half the size, sliding as fast (the sky is all far away)
+  const C = skyClouds(), drift = SKY.t * SKY_DRIFT, turn = (drift + 4 * CAM.rot / TAU) / 4;
+  const row = (cw, y, h, alpha) => {
+    let x0 = VW / 2 + RWk * (turn - 0.5); x0 = ((x0 % cw) + cw) % cw - cw;
+    g.globalAlpha = alpha; for (let x = x0; x < VW; x += cw) { g.drawImage(C, x, y, cw, h); }
+  };
+  row(RWk / 2, 0, hz * 0.75, 0.9); row(RWk / 4, hz * 0.45, hz * 0.4, 0.45);
+  g.globalAlpha = 1;
+  const hg = g.createLinearGradient(0, hz * 0.6, 0, hz); // the haze: the sky's foot in the far edge's colour
+  hg.addColorStop(0, `rgba(${SKY_COL.haze},0)`); hg.addColorStop(1, `rgba(${SKY_COL.haze},1)`);
+  g.fillStyle = hg; g.fillRect(0, hz * 0.6, VW, hz * 0.4 + 2);
+  // glow: the sun's bearing from straight ahead (canvas angle of its direction + 90 degrees), over the clouds so the
+  // clouds on the sun's side are lit warmer
   const b = Math.atan2(Math.sin(SUN.az + CAM.rot + Math.PI / 2), Math.cos(SUN.az + CAM.rot + Math.PI / 2)), s = Math.max(0, Math.cos(b));
   if (s > 0.01) {
-    const gx = VW / 2 + RWk * b / TAU, gr = g.createRadialGradient(gx, hz, 0, gx, hz, 0.4 * VW);
-    gr.addColorStop(0, `rgba(${SKY_COL.glow},${0.5 * s})`); gr.addColorStop(1, `rgba(${SKY_COL.glow},0)`);
+    const gx = VW / 2 + RWk * b / TAU, gr = g.createRadialGradient(gx, hz, 0, gx, hz, 0.45 * VW);
+    gr.addColorStop(0, `rgba(${SKY_COL.glow},${0.65 * s})`); gr.addColorStop(1, `rgba(${SKY_COL.glow},0)`);
     g.fillStyle = gr; g.fillRect(0, 0, VW, hz + 2);
   }
-  // clouds: the strip spans 2 tree-line units, slides with the camera's turn and drifts on its own
-  const C = skyClouds(), cw = RWk / 2, drift = SKY.t * SKY_DRIFT;
-  let x0 = VW / 2 + RWk * ((drift + 4 * CAM.rot / TAU) / 4 - 0.5);
-  x0 = ((x0 % cw) + cw) % cw - cw;
-  g.globalAlpha = 0.9;
-  for (let x = x0; x < VW; x += cw) { g.drawImage(C, x, 0, cw, hz * 0.8); }
-  g.globalAlpha = 1;
-  const hg = g.createLinearGradient(0, hz * 0.55, 0, hz); // haze near the horizon over the clouds
-  hg.addColorStop(0, `rgba(${SKY_COL.haze},0)`); hg.addColorStop(1, `rgba(${SKY_COL.haze},0.9)`);
-  g.fillStyle = hg; g.fillRect(0, hz * 0.55, VW, hz * 0.45 + 2);
-  // hills behind the tree line, sliding with it
-  const m = hz - skyRow(1); g.fillStyle = SKY_COL.hills; g.beginPath(); g.moveTo(0, hz + 2);
-  for (let x = 0; x <= VW + 6; x += 6) g.lineTo(x, hz - m * skyHill(skyU(x, k)));
-  g.lineTo(VW + 6, hz + 2); g.closePath(); g.fill();
   g.restore();
   return hz;
 }
@@ -9706,7 +9674,7 @@ function boot() {
   requestAnimationFrame(t => { last = t; requestAnimationFrame(frame); });
   setInterval(() => { if (UI.state === 'menu') { for (let k = 0; k < 4; k++) simStep(SUB); } }, 1000 / 30);
 }
-window.__sgp = { GL3D, gl3DDraw, gl3DOn, gl3DMesh, gl3DBikeFrame, gl3DPoseWeights, worldToScreen, gl3DPlanePoint, gl3DProjection, tiltP, Touch: TouchCtl, bikeStyleNames: () => BIKE_STYLES.map(st => st && st.name), setBikeStyleX: n => { BIKE_STYLE = n; for (const k in SPRITES) { delete SPRITES[k]; } }, bikeStyleCount: () => BIKE_STYLES.length - 1, bikeSpriteX: (t, n, v) => bikeSprite(t, n, v), tiltProjectX: draw => { for (const Ly of LAYERS) { const g = Ly.g; g.setTransform(Ly.dpr, 0, 0, Ly.dpr, 0, 0); g.translate(-Ly.x0, -Ly.y0); draw(g, RW, RH); } projectTilted(); return { VW, VH, RW, RH }; }, tiltProject3DX: draw => { for (const Ly of LAYERS) { const g = Ly.g; g.setTransform(Ly.dpr, 0, 0, Ly.dpr, 0, 0); g.translate(-Ly.x0, -Ly.y0); draw(g, RW, RH); } const P = tiltP(), uTop = RH * Math.cos(tiltA()) * P / (P + RH * Math.sin(tiltA())); drawSky(mainCtx, uTop); const on = gl3DDraw([]); mainCtx.setTransform(1, 0, 0, 1, 0, 0); if (on) { mainCtx.drawImage(GL3D.canvas, 0, 0); } return { VW, VH, RW, RH, on }; }, ground3DOn, walls3DOn, wallKinds, WALLS3D, WALL_KIND, PERF, TILE_WALLS, SCN, TEAMS, EST, GROUND, SKY, SUN, SIDE3D, sunShadows, skyU, skyHill, skyRow, horizonYX: () => { const P = tiltP(), a = tiltA(); return VH - RH * Math.cos(a) * P / (P + RH * Math.sin(a)); }, screenX: () => { const o = document.createElement('canvas'); o.width = cv.width; o.height = cv.height; const g = o.getContext('2d'); g.drawImage(cv, 0, 0); if (GL3D.canvas && GL3D.shown) { g.drawImage(GL3D.canvas, 0, 0, o.width, o.height); } return o; }, worldToScreenX: (x, y) => worldToScreen(x, y), worldToCanvasX: (x, y) => worldToCanvas(x, y), frameX: t => frame(t), setCamModeX: m => setCamMode(m), CAM, RP, Rec, Lib, Ghost, W, T, PHYS, Input, FX, Records, completeLapX: b => completeLap(b), trackLimitsX: b => trackLimits(b), longLapX: b => longLap(b), applyDropX: b => applyDrop(b), limitRefX: (s0, s1) => limitRef(s0, s1), stepBikeX: (b, dt) => stepBike(b, dt, W), SURF, drawWorldX: () => drawWorld(), speedBlurX: () => speedBlur(), speedVibX: () => speedVib(), SPL, GEO, resizeX: () => resize(), drawSpeedLinesX: dt => { ctx = hudCtx; try { drawSpeedLines(dt); } finally { ctx = mainCtx; } }, camNameX: () => TILT_CAM, setupSession, simStep, standings, UI, SUB, TILT, setAIReal: v => { AI_REAL = v; } };
+window.__sgp = { GL3D, gl3DDraw, gl3DOn, gl3DMesh, gl3DBikeFrame, gl3DPoseWeights, worldToScreen, gl3DPlanePoint, gl3DProjection, tiltP, Touch: TouchCtl, bikeStyleNames: () => BIKE_STYLES.map(st => st && st.name), setBikeStyleX: n => { BIKE_STYLE = n; for (const k in SPRITES) { delete SPRITES[k]; } }, bikeStyleCount: () => BIKE_STYLES.length - 1, bikeSpriteX: (t, n, v) => bikeSprite(t, n, v), tiltProjectX: draw => { for (const Ly of LAYERS) { const g = Ly.g; g.setTransform(Ly.dpr, 0, 0, Ly.dpr, 0, 0); g.translate(-Ly.x0, -Ly.y0); draw(g, RW, RH); } projectTilted(); return { VW, VH, RW, RH }; }, tiltProject3DX: draw => { for (const Ly of LAYERS) { const g = Ly.g; g.setTransform(Ly.dpr, 0, 0, Ly.dpr, 0, 0); g.translate(-Ly.x0, -Ly.y0); draw(g, RW, RH); } const P = tiltP(), uTop = RH * Math.cos(tiltA()) * P / (P + RH * Math.sin(tiltA())); drawSky(mainCtx, uTop); const on = gl3DDraw([]); mainCtx.setTransform(1, 0, 0, 1, 0, 0); if (on) { mainCtx.drawImage(GL3D.canvas, 0, 0); } return { VW, VH, RW, RH, on }; }, ground3DOn, walls3DOn, wallKinds, WALLS3D, WALL_KIND, PERF, TILE_WALLS, SCN, TEAMS, EST, GROUND, SKY, SUN, SIDE3D, sunShadows, walls3DFog, horizonYX: () => { const P = tiltP(), a = tiltA(); return VH - RH * Math.cos(a) * P / (P + RH * Math.sin(a)); }, screenX: () => { const o = document.createElement('canvas'); o.width = cv.width; o.height = cv.height; const g = o.getContext('2d'); g.drawImage(cv, 0, 0); if (GL3D.canvas && GL3D.shown) { g.drawImage(GL3D.canvas, 0, 0, o.width, o.height); } return o; }, worldToScreenX: (x, y) => worldToScreen(x, y), worldToCanvasX: (x, y) => worldToCanvas(x, y), frameX: t => frame(t), setCamModeX: m => setCamMode(m), CAM, RP, Rec, Lib, Ghost, W, T, PHYS, Input, FX, Records, completeLapX: b => completeLap(b), trackLimitsX: b => trackLimits(b), longLapX: b => longLap(b), applyDropX: b => applyDrop(b), limitRefX: (s0, s1) => limitRef(s0, s1), stepBikeX: (b, dt) => stepBike(b, dt, W), SURF, drawWorldX: () => drawWorld(), speedBlurX: () => speedBlur(), speedVibX: () => speedVib(), SPL, GEO, resizeX: () => resize(), drawSpeedLinesX: dt => { ctx = hudCtx; try { drawSpeedLines(dt); } finally { ctx = mainCtx; } }, camNameX: () => TILT_CAM, setupSession, simStep, standings, UI, SUB, TILT, setAIReal: v => { AI_REAL = v; } };
 if (document.fonts && document.fonts.ready) { Promise.race([document.fonts.ready, new Promise(r => setTimeout(r, 1500))]).then(boot).catch(e => { console.error("boot failed", e && e.stack); }); } else boot();
 
 })();

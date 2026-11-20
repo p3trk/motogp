@@ -1,10 +1,10 @@
 // --- depth of the world (GDD 11o, phase 5): one sun fixed in the world, the shadows of the 3D scenery baked into the
-// ground tiles, and the sky strip with drifting clouds, a glow towards the sun and low hills on the horizon. All of it
+// ground tiles, and the sky strip with drifting clouds and a glow towards the sun, meeting the ground in haze. All of it
 // stands and falls with the 3D scenery (TILE_WALLS.on3d; test switch 7).
 const SKY = { clouds: null, shadows: null, src: null, t: 0 }; // t: the clouds' clock in seconds, running only while the game or the replay runs (skyTick)
 // the sun: towards the north-west of the map (-x, -y; the 2D shadows of bikes and trees fall to +x, +y), 40 degrees up
 const SUN = { az: Math.atan2(-1, -1), el: 40 * Math.PI / 180 };
-const SKY_COL = { glow: '255,236,204', haze: '201,216,222', hills: '#aebfc3', cloud: '255,255,255' };
+const SKY_COL = { glow: '255,236,204', haze: '201,216,222', cloud: '255,255,255' };
 const SKY_DRIFT = 2 / 600; // clouds: tree-line units (a quarter of the ground width) per second, one cloud strip in 10 minutes
 
 // the ground offset of a shadow per metre of height (heights scaled by WALL_HS, as drawn): away from the sun,
@@ -140,48 +140,32 @@ function skyTick(dt) {
   if ((UI.state === 'play' && !W.paused) || (UI.state === 'replay' && RP.playing)) SKY.t += dt;
   return SKY.t;
 }
-// the horizon coordinate of screen column x, in tree-line units (estLinePlace: the tree line texture repeats 4 times
-// across the ground width and moves one ground width per full turn of the camera), so the sky slides with it
-function skyU(x, k) { return 4 * ((x - VW / 2) / (k * RW) + 0.5) - 4 * CAM.rot / TAU; }
-// the height of the hills in metres at horizon coordinate U: 2.5 to 4.5 m at the far edge (the tree line is 4 m, its
-// tops 1 to 3.6 m), the same every full turn
-function skyHill(U) {
-  const a = U * TAU / 4;
-  const n = 0.45 * Math.sin(a + 0.7) + 0.3 * Math.sin(2 * a + 2.1) + 0.2 * Math.sin(5 * a + 0.3) + 0.12 * Math.sin(11 * a + 1.9);
-  return 3.5 + n / 1.07;
-}
-// the screen row of a point h metres up (scaled) on the ground's far edge
-function skyRow(h) {
-  const a = tiltA(), sa = Math.sin(a), ca = Math.cos(a), P = tiltP(), z = h * WALL_HS * CAM.ppm;
-  const Y = -RH * ca - z * sa, Z = -RH * sa + z * ca;
-  return VH + Y * P / (P - Z);
-}
-// the sky strip over the gradient of drawSky, while the 3D scenery stands: the glow towards the sun, the clouds, haze
-// near the horizon and the hills; returns the horizon row
+// the sky strip over the gradient of drawSky, while the 3D scenery stands: the clouds (a near row up high, a far row of
+// smaller, fainter ones lower down), the haze that meets the ground's far edge in its own colour, and the warm glow
+// towards the sun over them; returns the horizon row (GDD 11o phase 5: open sky, no bar)
 function skyDecor(g, uTop) {
-  const hz = VH - uTop, sa = Math.sin(tiltA()), P = tiltP(), k = P / (P + RH * sa), RWk = RW * k;
+  const hz = VH - uTop, sa = Math.sin(tiltA()), P = tiltP(), RWk = RW * P / (P + RH * sa);
   g.save(); g.beginPath(); g.rect(0, 0, VW, hz + 2); g.clip();
-  // glow: the sun's bearing from straight ahead (canvas angle of its direction + 90 degrees), placed as the tree line
+  // clouds: one strip per half the far edge's width, sliding with the camera's turn (a full turn = 4 strips' worth of
+  // the far edge, as the scenery turns) and drifting on their own; the far row at half the size, sliding as fast (the sky is all far away)
+  const C = skyClouds(), drift = SKY.t * SKY_DRIFT, turn = (drift + 4 * CAM.rot / TAU) / 4;
+  const row = (cw, y, h, alpha) => {
+    let x0 = VW / 2 + RWk * (turn - 0.5); x0 = ((x0 % cw) + cw) % cw - cw;
+    g.globalAlpha = alpha; for (let x = x0; x < VW; x += cw) { g.drawImage(C, x, y, cw, h); }
+  };
+  row(RWk / 2, 0, hz * 0.75, 0.9); row(RWk / 4, hz * 0.45, hz * 0.4, 0.45);
+  g.globalAlpha = 1;
+  const hg = g.createLinearGradient(0, hz * 0.6, 0, hz); // the haze: the sky's foot in the far edge's colour
+  hg.addColorStop(0, `rgba(${SKY_COL.haze},0)`); hg.addColorStop(1, `rgba(${SKY_COL.haze},1)`);
+  g.fillStyle = hg; g.fillRect(0, hz * 0.6, VW, hz * 0.4 + 2);
+  // glow: the sun's bearing from straight ahead (canvas angle of its direction + 90 degrees), over the clouds so the
+  // clouds on the sun's side are lit warmer
   const b = Math.atan2(Math.sin(SUN.az + CAM.rot + Math.PI / 2), Math.cos(SUN.az + CAM.rot + Math.PI / 2)), s = Math.max(0, Math.cos(b));
   if (s > 0.01) {
-    const gx = VW / 2 + RWk * b / TAU, gr = g.createRadialGradient(gx, hz, 0, gx, hz, 0.4 * VW);
-    gr.addColorStop(0, `rgba(${SKY_COL.glow},${0.5 * s})`); gr.addColorStop(1, `rgba(${SKY_COL.glow},0)`);
+    const gx = VW / 2 + RWk * b / TAU, gr = g.createRadialGradient(gx, hz, 0, gx, hz, 0.45 * VW);
+    gr.addColorStop(0, `rgba(${SKY_COL.glow},${0.65 * s})`); gr.addColorStop(1, `rgba(${SKY_COL.glow},0)`);
     g.fillStyle = gr; g.fillRect(0, 0, VW, hz + 2);
   }
-  // clouds: the strip spans 2 tree-line units, slides with the camera's turn and drifts on its own
-  const C = skyClouds(), cw = RWk / 2, drift = SKY.t * SKY_DRIFT;
-  let x0 = VW / 2 + RWk * ((drift + 4 * CAM.rot / TAU) / 4 - 0.5);
-  x0 = ((x0 % cw) + cw) % cw - cw;
-  g.globalAlpha = 0.9;
-  for (let x = x0; x < VW; x += cw) { g.drawImage(C, x, 0, cw, hz * 0.8); }
-  g.globalAlpha = 1;
-  const hg = g.createLinearGradient(0, hz * 0.55, 0, hz); // haze near the horizon over the clouds
-  hg.addColorStop(0, `rgba(${SKY_COL.haze},0)`); hg.addColorStop(1, `rgba(${SKY_COL.haze},0.9)`);
-  g.fillStyle = hg; g.fillRect(0, hz * 0.55, VW, hz * 0.45 + 2);
-  // hills behind the tree line, sliding with it
-  const m = hz - skyRow(1); g.fillStyle = SKY_COL.hills; g.beginPath(); g.moveTo(0, hz + 2);
-  for (let x = 0; x <= VW + 6; x += 6) g.lineTo(x, hz - m * skyHill(skyU(x, k)));
-  g.lineTo(VW + 6, hz + 2); g.closePath(); g.fill();
   g.restore();
   return hz;
 }

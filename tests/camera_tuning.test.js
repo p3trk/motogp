@@ -133,14 +133,15 @@ const UNIT = { a: DEG, bike: 0.01, fade: 0.01, wd: 0.01 }; // display unit -> TI
   await pauseCam('behind'); T = await tilt();
   check(T.bs === 20 && T.bv0 === 260 && T.bv1 === 330, 'Behind keeps its own blur values', `strength ${T.bs}  start ${T.bv0}  full ${T.bv1}`);
 
-  // i) C cycles Behind -> CLOSE -> Top-down -> Behind in a session; in the pause menu C switches the panel
+  // i) C cycles Behind -> CLOSE -> Chase -> Top-down -> Behind in a session (Chase: GDD 11o phase 6); in the pause menu C
+  //    switches the panel
   const seq = [];
-  for (let k = 0; k < 3; k++) { await page.keyboard.press('KeyC'); const x = await st(); seq.push(`${x.mode}/${x.opt}/${x.panel ? x.title.replace('Camera tuning ', '') : '-'}`); }
-  check(seq.join() === 'close/close/(CLOSE),chase/chase/-,behind/behind/(Behind)', 'C cycles cameras in a session (paused)', seq.join('  '));
+  for (let k = 0; k < 4; k++) { await page.keyboard.press('KeyC'); const x = await st(); seq.push(`${x.mode}/${x.opt}/${x.panel ? x.title.replace('Camera tuning ', '') : '-'}`); }
+  check(seq.join() === 'close/close/(CLOSE),low/low/(Chase),chase/chase/-,behind/behind/(Behind)', 'C cycles cameras in a session (paused)', seq.join('  '));
   await page.evaluate(() => window.__sgp.UI.togglePause());
   const seqLive = [];
-  for (let k = 0; k < 3; k++) { await page.keyboard.press('KeyC'); seqLive.push((await st()).mode); }
-  check(seqLive.join() === 'close,chase,behind', 'C cycles cameras while riding', seqLive.join(' -> '));
+  for (let k = 0; k < 4; k++) { await page.keyboard.press('KeyC'); seqLive.push((await st()).mode); }
+  check(seqLive.join() === 'close,low,chase,behind', 'C cycles cameras while riding', seqLive.join(' -> '));
 
   // j) Reset to defaults per camera
   await pauseCam('close'); await slide('a', 45); await slide('zK', 0.9);
@@ -161,8 +162,8 @@ const UNIT = { a: DEG, bike: 0.01, fade: 0.01, wd: 0.01 }; // display unit -> TI
     W.paused = false; S.UI.toMenu(); S.UI.opts.cam = 'close'; S.RP.open([S.Lib.data[S.Lib.meta[0].id]], 'menu');
   });
   const r0 = (await st()).mode, rs = [];
-  for (let k = 0; k < 3; k++) { await page.keyboard.press('KeyC'); rs.push((await st()).mode); }
-  check(r0 === 'close' && rs.join() === 'chase,behind,close', 'replay: start-screen camera, C cycles', `start ${r0}  then ${rs.join(' -> ')}`);
+  for (let k = 0; k < 4; k++) { await page.keyboard.press('KeyC'); rs.push((await st()).mode); }
+  check(r0 === 'close' && rs.join() === 'low,chase,behind,close', 'replay: start-screen camera, C cycles', `start ${r0}  then ${rs.join(' -> ')}`);
   await page.evaluate(() => window.__sgp.RP.close());
 
   // l) old data: sgp_cam saved by 1.13.x with the Close profile unchanged gives Behind its defaults; other values stay

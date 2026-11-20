@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.28.0 (2026-11-20)
+- New camera Chase (GDD 11o phase 6): a low follow shot about 4.5 m behind the bike and 1.6 m up, drawn in real 3D. The horizon stays level and the bike leans in the view; the camera follows the bike's heading with a short delay, so corners show a little of the bike's side. Above 200 km/h it drops back and the view widens.
+- Walls, boards, trees, stands, the Wing and the paddock stand up at eye height, lit by the same sun, with a blue sky in Chase and a soft shadow under each bike.
+- C now goes Behind -> CLOSE -> Chase -> Top-down; Chase is also on the start screen and has its own sliders in the pause menu (Distance, Height, Look down, Field of view, Follow lag, Widen at speed). Not offered with Classic graphics or on phones.
+- Tests: new Chase camera test (tests/chase_camera.test.js); camera tuning updated for the new camera order.
+
 ## v1.27.0 (2026-11-20)
 - 3D track (GDD 11o): the ground is drawn by the GPU in 3D, with the road, kerbs, run-off and gravel, and the speed blur runs on the GPU too.
 - Walls and fences stand up in 3D (GDD 11o phase 2): concrete walls, Armco, tyre walls and see-through debris fences.

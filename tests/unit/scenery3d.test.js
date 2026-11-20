@@ -249,6 +249,6 @@ test('drawFlatWalls, drawWallShadows: flat walls with fence and pit wall; under 
   try {
     G.drawFlatWalls(); const flat = g.calls.filter(c => c[0] === 'stroke').length;
     g.calls.length = 0; G.drawWallShadows(); const sh = g.calls.filter(c => c[0] === 'stroke');
-    assert.ok(flat >= 7); assert.equal(sh.length, 4); assert.ok(sh.every(c => c[1] === G.GEO.walls || c[1] === G.GEO.pitWall));
+    assert.ok(flat >= 7); assert.equal(sh.length, 4); assert.ok(sh.every(c => c[1] === G.wallShadowPath() || c[1] === G.GEO.pitWall), 'the shadow follows only the 3D walls');
   } finally { G.ctx = prev; }
 });

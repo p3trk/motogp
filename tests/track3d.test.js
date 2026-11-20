@@ -7,6 +7,9 @@
 // - Switching the walls off brings the flat walls back into the ground tiles; Classic graphics keep them flat.
 // - Phase 4: a braking board before Stowe stands up (its face at 1 m is grey to white: far away the black numbers and
 //   the white blend) and the start lights show red over the grid.
+// - Phase 3: a tree stands up (its crown, 4 m up, differs from the grass with the scenery off), a grandstand shows its
+//   crowd, the Wing's first garage door is in its team colour, the tree line stands above the far edge of the ground;
+//   frame cost of all 3D scenery at Abbey and at Club under 15 %.
 // - Speed feel (phase 4 done-check): over 60 frames at speed along the Hangar Straight, the pixel change per frame in
 //   the outer 25 % of the screen is larger with the 3D scenery on than off (test switch 7).
 // - Frame cost: drawing the world with the 3D scenery at most 15 % more than without (median, blocks of frames, so
@@ -18,6 +21,33 @@ const path = require('path');
 const { chromium } = require('playwright');
 const FILE = 'file://' + path.resolve(process.argv[2] || path.join(__dirname, '..', 'index.html'));
 const COST = 0.15;
+
+// phase 3: a tree, a grandstand, the Wing's doors and the tree line
+async function phase3(page, check) {
+    const r = await page.evaluate(async () => {
+      const S = window.__sgp, T = S.T, HS = S.PHYS.VS, out = {}; await window.__place('Hangar Straight', 100, 300);
+      const b = S.W.player, fw = [Math.cos(b.h), Math.sin(b.h)], lf = [-fw[1], fw[0]];
+      const seen = t => { const dx = t.x - b.x, dy = t.y - b.y, a = dx * fw[0] + dy * fw[1], l = Math.abs(dx * lf[0] + dy * lf[1]); return a > 25 && a < 90 && l > 20 && l < 60 && !t.gone3d; };
+      const t = S.SCN.trees.find(seen);
+      out.tree = t ? window.__onOff(window.__scr(t.x, t.y, 0.62 * (1.6 * t.r + 2) * HS)) : null;
+      // the tree line: just above the far edge of the ground, in the middle of the screen
+      const k = document.getElementById('game').width / innerWidth;
+      out.line = window.__onOff([Math.round(innerWidth / 2 * k), Math.round((S.horizonYX() - 3) * k)]);
+      await window.__place('Abbey', -110, 250);
+      const st = S.SCN.stands.find(q => Math.hypot(q.x - S.W.player.x, q.y - S.W.player.y) < 200);
+      if (st) { const ca = Math.cos(st.a), sa = Math.sin(st.a), ly = -st.flip * st.h / 2 + st.flip * (st.h - 4) * 0.5; out.stand = window.__onOff(window.__scr(st.x - sa * ly, st.y + ca * ly, 4.5 * HS)); }
+      await window.__place('Hamilton Straight', 0, 0);
+      const PIT = T.PIT, sr = PIT.boxS(0), q = T.idx(sr), col = S.TEAMS[0].c1, bk = S.W.player, q0 = T.idx(sr - 40); // 40 m before the first box
+      Object.assign(bk, { x: T.X[q0], y: T.Y[q0], h: T.H[q0], i: q0, s: q0 * T.DS, v: 0 }); S.CAM.init = false; S.W.paused = false; S.frameX(performance.now()); S.W.paused = true;
+      out.door = { px: window.__px(window.__scr(...T.pt(q, PIT.garage - 0.1), 2 * HS)), col: [1, 3, 5].map(i => parseInt(col.slice(i, i + 2), 16)) };
+      return out;
+    });
+    check(r.tree && r.tree.d > 40, 'a tree stands up (its crown 4 m up is not grass)', r.tree ? `crown rgb ${r.tree.on}, without 3D scenery ${r.tree.off}` : 'no tree in view');
+    check(r.stand && r.stand.d > 40, 'Abbey: the grandstand shows its crowd above the ground', r.stand ? `rgb ${r.stand.on}, without ${r.stand.off}` : 'no stand near Abbey');
+    const dd = r.door.px.reduce((a, v, k) => a + Math.abs(v - r.door.col[k]), 0);
+    check(dd < 150, 'the Wing: the first garage door is in its team colour', `rgb ${r.door.px} vs team ${r.door.col} (difference ${dd})`);
+    check(r.line.d > 15, 'the tree line stands above the far edge of the ground', `rgb ${r.line.on}, without ${r.line.off}`);
+  }
 
 (async () => {
   const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
@@ -41,6 +71,8 @@ const COST = 0.15;
       const S = window.__sgp, p = S.gl3DPlanePoint(x, y, z), P = S.tiltP(), w = P - p[2], k = document.getElementById('game').width / innerWidth;
       return [Math.round((innerWidth / 2 + p[0] * P / w) * k), Math.round((innerHeight + p[1] * P / w) * k)];
     };
+    // the colours at a device pixel with the 3D scenery on and off (test switch 7)
+    window.__onOff = pt => { const S = window.__sgp; S.PERF.noWalls = false; const on = window.__px(pt); S.PERF.noWalls = true; const off = window.__px(pt); S.PERF.noWalls = false; return { on, off, d: on.reduce((a, v, k) => a + Math.abs(v - off[k]), 0) }; };
     // the colour at a device pixel of the game canvas with the 3D canvas over it, after drawing the world
     window.__px = ([x, y]) => { const S = window.__sgp; S.drawWorldX(); return [...S.screenX().getContext('2d').getImageData(x, y, 1, 1).data.slice(0, 3)]; };
   });
@@ -122,6 +154,7 @@ const COST = 0.15;
     });
     check(r.on.motion > r.off.motion * 1.05, 'speed feel: more motion at the screen edges with 3D scenery', `pixel change per frame ${r.off.motion.toFixed(2)} -> ${r.on.motion.toFixed(2)} (+${((r.on.motion / r.off.motion - 1) * 100).toFixed(0)} %) at ${r.on.kmh.toFixed(0)} km/h`);
   }
+  await phase3(page, check);
   // Classic graphics keep the flat walls
   {
     const r = await page.evaluate(async () => {
@@ -133,7 +166,9 @@ const COST = 0.15;
   // frame cost of the 3D scenery (walls and trackside)
   {
     const r = await page.evaluate(async () => {
-      const S = window.__sgp; await window.__place('Hangar Straight', 100, 300);
+      const S = window.__sgp, res = {};
+      for (const [corner, off, kmh] of [['Abbey', -110, 250], ['Club', -100, 200]]) {
+      await window.__place(corner, off, kmh);
       const c = document.getElementById('game'), one = document.createElement('canvas'); one.width = one.height = 1; const g = one.getContext('2d');
       const sync = () => { g.drawImage(c, 0, 0, 1, 1); if (S.GL3D.canvas && S.GL3D.shown) { g.drawImage(S.GL3D.canvas, 0, 0, 1, 1); } g.getImageData(0, 0, 1, 1); };
       const med = a => a.slice().sort((x, y) => x - y)[a.length >> 1], tOn = [], tOff = [];
@@ -146,10 +181,14 @@ const COST = 0.15;
         await new Promise(res => setTimeout(res, 0));
       }
       S.PERF.noWalls = false;
-      return { on: med(tOn), off: med(tOff) };
+      res[corner] = { on: med(tOn), off: med(tOff) };
+      }
+      return res;
     });
-    const add = r.on / r.off - 1;
-    check(add <= COST, 'frame cost of the 3D scenery at most 15 %', `world ${r.off.toFixed(2)} ms -> with 3D scenery ${r.on.toFixed(2)} ms (+${(add * 100).toFixed(1)} %)`);
+    for (const [corner, m] of Object.entries(r)) {
+      const add = m.on / m.off - 1;
+      check(add <= COST, `${corner}: frame cost of the 3D scenery at most 15 %`, `world ${m.off.toFixed(2)} ms -> with 3D scenery ${m.on.toFixed(2)} ms (+${(add * 100).toFixed(1)} %)`);
+    }
   }
   await browser.close();
   console.log(failed ? `${failed} of ${total} 3D track checks FAILED` : `all ${total} 3D track checks passed`);

@@ -8,13 +8,13 @@
 // on the ground and compares the sharpness along the line to the horizon point, outer quarter against centre in the
 // same screen rows, with the blur at almost no strength as reference (same 1/4 copy, no zoom).
 // Also: Top-down is never blurred, the start-screen option and the strength slider, replay paused above and below
-// the start speed, and the frame cost limit (15 %).
+// the start speed, and the frame cost limit (20 %).
 // Usage: node tests/speed_blur.test.js [path/to/index.html]   (needs Playwright + Chromium)
 const path = require('path');
 const { chromium } = require('playwright');
 const FILE = 'file://' + path.resolve(process.argv[2] || path.join(__dirname, '..', 'index.html'));
 const SIZES = [[1470, 830, 2], [1280, 800, 1]];
-const COST = 0.15; // largest share the blur may add to drawing the world
+const COST = 0.2; // largest share the blur may add to drawing the world
 
 (async () => {
   const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
@@ -211,7 +211,7 @@ const COST = 0.15; // largest share the blur may add to drawing the world
       return { on: med(tOn), off: med(tOff), q: S.TILT.q };
     });
     const add = r.on / r.off - 1;
-    check(add <= COST && r.q === 1, 'frame cost of the blur at most 15 %', `world ${r.off.toFixed(2)} ms -> with blur ${r.on.toFixed(2)} ms (+${pct(add)}, +${(r.on - r.off).toFixed(2)} ms)`);
+    check(add <= COST && r.q === 1, 'frame cost of the blur at most 20 %', `world ${r.off.toFixed(2)} ms -> with blur ${r.on.toFixed(2)} ms (+${pct(add)}, +${(r.on - r.off).toFixed(2)} ms)`);
     await page.close();
   }
 

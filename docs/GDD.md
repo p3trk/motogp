@@ -1187,7 +1187,14 @@ Asked by Petr (2026-11-19): the track should be 3D, with trees and other objects
 - A true 3D world allows a camera just behind and above the rider, at about 1.5 m, looking along the road, like TV on-board shots. It is the most intense sense of speed, but it is a new camera with its own tuning (§11a), so it is listed separately.
 - **Design (proposed 2026-11-20, Petr: "start phase 6"):**
   - **What it is:** a new camera, **Chase**, in the C cycle after CLOSE: about **4.5 m behind the bike and 1.6 m up, looking 6° down**, like the low follow shots on TV. The bike and rider fill the lower middle of the screen (about 15 % of its height), the road runs to the horizon near the middle of the screen, and walls, boards, trees and stands rush past at eye height. The road just ahead of the bike moves across the screen about as fast as in CLOSE; the gain is beside the road: a board or wall 8 m to the side passes the camera at 8 m instead of about 29 m (CLOSE: 28 m up), so it sweeps past about 3–4 times faster, and the horizon ahead gives the depth.
-  - **Built on the Onboard camera's 3D pipeline (§11p), not on the tilted picture:** Behind and CLOSE warp a flat top-down picture (§11a), which fails near eye height (§11p, "Why not the tilted views"). The Onboard branch already draws the world from a real perspective camera: ground tiles laid in world metres with mipmaps (`obTiles`, `obGround`), the 3D walls and trackside objects, the bikes at real size. Chase uses that pipeline with its own camera placement; only the camera code is new (one function plus its settings).
+  - **A real perspective camera, not the tilted picture, with pieces taken from the Onboard branch (Petr 2026-11-20: "onboard camera is not going to be used actually, but feel free to use the code if you can re-use some pieces"):** Behind and CLOSE warp a flat top-down picture (§11a), which fails near eye height. The Onboard branch (`feature/onboard-camera`, not merged, not to be used) solved drawing the world from a real camera. Chase is built on `dev` and copies only these pieces from it, renamed for Chase:
+    - the ground: tiles laid in world metres, finer near the camera, cached canvases as textures with mipmaps, a texture budget (`obTiles`, `obTileImage`, `obTexture`, `obTexPrune`, `obQuad`, `obGround`, `obInit`);
+    - the projection of a point to the screen (`obProjectPt`, `obProject`), for the HUD markers and labels;
+    - the bike frame for another drawing frame (`gl3DBikeFrame` with a map, the real-size scale and the mirror fix of §11p 1f) and `gl3DSize`;
+    - three.js rebuilt with `PerspectiveCamera`, `PlaneGeometry`, `Vector3` and `LinearMipmapLinearFilter` added;
+    - the sky gradient (`obSky`), if question 3 says so.
+    - Not taken: the yoke camera, the glass, the dash, the full-detail cockpit export, the hidden rider, the eased-in steering of 1d–1e (question 5).
+  - **Name:** shown as **Chase**; inside the code it is `low`, since `chase` is already the id of the Top-down camera.
   - **How the camera follows:**
     - It sits behind the bike along a **lagged heading**: the heading eases towards the bike's over about 0.25 s, so in a corner the camera swings slightly to the outside and the bike shows a little of its side, as in TV shots, and a quick flick does not whip the view.
     - **Level horizon** (recommended, question 2): the camera does not roll, and the bike and rider lean in the view, so the lean reads at a glance and the view does not rock. The rider's hang-off poses (§11l) show as in Behind.
@@ -1203,10 +1210,11 @@ Asked by Petr (2026-11-19): the track should be 3D, with trees and other objects
   - **Tests:** unit tests for each function; a browser test `tests/chase_camera.test.js`: the camera sits behind the bike at the set distance and height, the horizon is level at 40° of lean, the player's bike is in the lower middle of the screen, a wall stands up beside the road, Chase falls back to Behind with Classic graphics, and the frame cost against CLOSE is reported.
   - **Phase 7 (land in 3D)** fits here: from 1.6 m the land's rise and fall shows, so it is the natural next step after Chase.
   - **Questions (recommended answer in bold):**
-    1. **Where to build it.** The Onboard branch (`feature/onboard-camera`, §11p steps 1–1h, not merged) holds the 3D pipeline, and it is 11 commits behind `dev` (it lacks phases 3 and 5). **(a) Merge Onboard into `dev` as it is now (it stays a work in progress, offered as today), then build Chase from `dev`**; (b) build Chase on the Onboard branch and merge both together later; (c) build Chase alone on `dev`, copying the pipeline (not recommended: two copies of the same code).
+    1. Where to build it: **answered by Petr (2026-11-20): Onboard will not be used; build Chase on `dev` and reuse pieces of its code** (above).
     2. Horizon: **level, the bike leans in the view**, or leaning with the bike like TV, or a Horizon roll slider as Onboard has?
     3. Sky in Chase: **the simple blue-to-haze gradient until the sky is designed**, or plain haze as the other cameras?
     4. Camera place: **4.5 m back, 1.6 m up (low TV follow shot)**, or higher and further (about 3 m up, 7 m back), which shows more road ahead but less speed?
+    5. The Onboard branch also changed keyboard steering in every camera (a held key eases in over 0.7 s and a short tap asks for a small lean, §11p 1d–1e; `dev` has 0.35 s straight). **Leave it out: it stays on the unused branch**, or bring it to `dev` with Chase?
 
 **Phase 7 (planned, Petr 2026-11-20: "not now, prepare for another phase"): land in 3D.**
 - The land beyond the walls rises and falls by a few metres as real 3D ground; the track, its kerbs, run-off and gravel and the pit lane stay flat.

@@ -156,11 +156,9 @@ function ground3DRender() {
   ground3DBlur(r, walls);
 }
 
-// the sky on the 2D game canvas, under the 3D ground: gradient down to the far edge of the ground, haze below it
-// where a narrow ground does not reach the screen sides (as projectTilted draws it)
-function drawSky(g, uTop) {
+// behind the ground on the 2D game canvas: one haze colour, the colour the far ground fades into, so no sky shows above
+// the far edge (Petr 2026-11-20: no sky for now; the sky is to be worked on later, GDD 11o phase 5)
+function drawSky(g) {
   g.setTransform(ODPR, 0, 0, ODPR, 0, 0);
-  const sky = g.createLinearGradient(0, 0, 0, VH - uTop + 2); sky.addColorStop(0, '#6fa3d2'); sky.addColorStop(1, '#c9d8de');
-  g.fillStyle = sky; g.fillRect(0, 0, VW, VH - uTop + 2);
-  g.fillStyle = '#c9d8de'; g.fillRect(0, VH - uTop, VW, uTop);
+  g.fillStyle = '#c9d8de'; g.fillRect(0, 0, VW, VH);
 }

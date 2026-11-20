@@ -212,6 +212,14 @@ test('walls3DVisible: a piece around the camera is drawn, one across the circuit
   const back = [b.x - Math.cos(b.h) * 600, b.y - Math.sin(b.h) * 600];
   assert.equal(G.walls3DVisible(box(...back)), false);
 });
+test('walls3DFog: the haze by distance along the ground, from uniforms shared by all the materials', () => {
+  const { G } = load(); const m = G.walls3DFog(new G.THREE.MeshBasicMaterial());
+  const sh = { uniforms: {}, vertexShader: 'void main() {\n#include <fog_vertex>\n}' }; m.onBeforeCompile(sh);
+  assert.equal(sh.uniforms.fogCa, G.WALLS3D.fogU.fogCa); assert.equal(sh.uniforms.fogSa, G.WALLS3D.fogU.fogSa);
+  assert.ok(!sh.vertexShader.includes('#include <fog_vertex>')); assert.match(sh.vertexShader, /vFogDepth = -\(mvPosition\.y \* fogCa \+ mvPosition\.z \* fogSa\) \* fogSa/);
+  assert.ok(sh.vertexShader.startsWith('uniform float fogCa; uniform float fogSa;'));
+  for (const k of Object.values(G.walls3DMaterials())) assert.equal(typeof k.onBeforeCompile, 'function', 'every walls material');
+});
 test('walls3DPlace: only pieces in view are shown and placed; haze over the far 22 % of the ground; cut at its edges', () => {
   const { G } = tilted();
   const n = G.walls3DPlace(), W = G.WALLS3D, sa = Math.sin(G.tiltA());
@@ -220,6 +228,9 @@ test('walls3DPlace: only pieces in view are shown and placed; haze over the far 
   near(W.scene.fog.far, G.RH * sa, 1e-9); near(W.scene.fog.near, 0.78 * G.RH * sa, 1e-9);
   const [far, left] = W.clip, edge = G.groundPoint(G.RW / 2, 0);
   near(far.normal.y * edge[1] + far.normal.z * edge[2] + far.constant, 0, 1e-6, 'far plane through the far edge');
+  const ca = Math.cos(G.tiltA()), up = [edge[1] - 50 * sa, edge[2] + 50 * ca]; // 50 px straight up from the far edge
+  near(far.normal.y * up[0] + far.normal.z * up[1] + far.constant, 0, 1e-6, 'upright: things on the ground stand into the sky');
+  near(W.fogU.fogCa.value, ca, 1e-12); near(W.fogU.fogSa.value, sa, 1e-12);
   near(left.normal.x * (-G.RW / 2) + left.constant, 0, 1e-9);
 });
 test('walls3DRender: places the walls and draws their scene with clipping on', () => {
@@ -228,9 +239,10 @@ test('walls3DRender: places the walls and draws their scene with clipping on', (
   G.walls3DRender(r);
   assert.deepEqual(log, [G.WALLS3D.scene]); assert.equal(r.localClippingEnabled, true);
 });
-test('gl3DAddLights: ambient, sun and fill light', () => {
-  const { G } = load(); const s = new G.THREE.Scene(); G.gl3DAddLights(s);
+test('gl3DAddLights: ambient, sun and fill light; returns the sun and the fill', () => {
+  const { G } = load(); const s = new G.THREE.Scene(), L = G.gl3DAddLights(s);
   assert.deepEqual(s.children.map(c => c.type), ['AmbientLight', 'DirectionalLight', 'DirectionalLight']);
+  assert.equal(L.sun, s.children[1]); assert.equal(L.fill, s.children[2]);
 });
 test('perfNoWalls: switches the 3D walls off and on', () => {
   const { G } = load();

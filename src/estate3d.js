@@ -1,11 +1,11 @@
 // --- the estate in 3D (GDD 11o, phase 3): the trees, grandstands, the Wing and the paddock buildings laid out in SCN
-// (render.js buildScenery) stand up, and a tree line stands on the horizon. Built once in world metres into the walls
+// (render.js buildScenery) stand up. Built once in world metres into the walls
 // scene (same lights, haze and clip planes, scenery3d.js); one matrix a frame for all of it.
-const EST = { meshes: [], cells: [], line: null, crowd: null, drawn: 0 };
+const EST = { meshes: [], cells: [], crowd: null, drawn: 0 };
 const EST_CELL = 300; // metres: the estate is cut into square cells, and only the cells in view are drawn
 const EST_COL = { trunk: '#5b4632', leaf: ['#3f7a35', '#4c8a3c', '#2f5f34', '#46803a'], conc: '#b9bcbf', back: '#eef0f2',
   roof: '#d7dbe0', edge: '#1d4fd6', garage: '#3b4148', office: '#5b7a99', wingRoof: '#e8ebee', wingEdge: '#3c6ea0',
-  unit: '#e9ecef', unitRoof: '#c9cdd1', line: '#9fb3a6' }; // line: distant trees, most of the way to the haze
+  unit: '#e9ecef', unitRoof: '#c9cdd1' };
 const EST_TREE_KIND = [0, 1, 2, 3, 0]; // tree variant (SCN.trees v, 0..4) -> round, wide, conifer, poplar
 
 // one triangle a-b-c in one colour into a quad buffer ({ pos, col }, as wallQuad)
@@ -151,34 +151,6 @@ function estWing(solid) {
     wallQuad(solid, at(sr, G + 3, 11.1), at(e, G + 3, 11.1), at(e, G + 3, 11.5), at(sr, G + 3, 11.5), EST_COL.wingEdge);
   }
 }
-// the tree line on the horizon: tree tops cut out of a strip, drawn once; it repeats round the horizon
-function estLineTexture() {
-  const c = mkCanvas(1024, 64), g = c.getContext('2d'), r = mulberry(11);
-  g.fillStyle = '#fff'; g.beginPath(); g.moveTo(0, 64);
-  for (let x = 0; x <= 1024; x += 8) g.lineTo(x, 64 - (26 + 22 * r() + 10 * Math.sin(x / 40)));
-  g.lineTo(1024, 64); g.closePath(); g.fill();
-  const t = new THREE.CanvasTexture(c); t.wrapS = THREE.RepeatWrapping;
-  return t;
-}
-// the tree line mesh: one quad in the camera frame, placed each frame by estLinePlace (not cut, no haze: tinted instead)
-function estLine() {
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(12), 3));
-  g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array([0, 0, 4, 0, 4, 1, 0, 1]), 2));
-  g.setIndex([0, 1, 2, 0, 2, 3]);
-  const mat = new THREE.MeshBasicMaterial({ map: estLineTexture(), color: new THREE.Color(EST_COL.line), transparent: true, alphaTest: 0.5, fog: false, side: THREE.DoubleSide, depthWrite: false });
-  const m = new THREE.Mesh(g, mat); m.frustumCulled = false; m.matrixAutoUpdate = false; m.renderOrder = -1;
-  return m;
-}
-// this frame's tree line: across the ground's far edge, 4 m high (scaled; the CLOSE camera shows only a thin strip of
-// sky above it), its pattern turning with the camera
-function estLinePlace(m) {
-  const a = tiltA(), sa = Math.sin(a), ca = Math.cos(a), v = -RH + 0.5, h = 4 * WALL_HS * CAM.ppm, pos = m.geometry.attributes.position;
-  const p = (u, z) => [u, v * ca - z * sa, v * sa + z * ca];
-  pos.array.set([...p(-RW / 2, 0), ...p(RW / 2, 0), ...p(RW / 2, h), ...p(-RW / 2, h)]); pos.needsUpdate = true;
-  m.material.map.offset.x = -CAM.rot / TAU * 4;
-  m.matrix.identity(); m.matrixWorld.identity();
-}
 // the cell of a ground point (cells of EST_CELL metres)
 function estCellOf(x, y) { return Math.floor(x / EST_CELL) + ',' + Math.floor(y / EST_CELL); }
 // the ground box [x0, y0, x1, y1] of a cell's meshes: their vertices, and the tree feet with their crowns
@@ -198,10 +170,10 @@ function estCell(c, M) {
   return { box: estCellBox(meshes), meshes };
 }
 // everything of phase 3 into the walls scene, cell by cell: trees, stands, buildings and the Wing in world metres
-// (placed each frame by estate3DPlace with one matrix, cells out of view hidden), and the tree line
+// (placed each frame by estate3DPlace with one matrix, cells out of view hidden)
 function estate3DBuild(scene) {
   const M = walls3DMaterials(), cells = new Map(), PIT = T.PIT;
-  if (!M.tree) { M.tree = new THREE.MeshLambertMaterial({ vertexColors: true, clippingPlanes: WALLS3D.clip }); M.crowd = new THREE.MeshLambertMaterial({ map: estCrowd(), side: THREE.DoubleSide, clippingPlanes: WALLS3D.clip }); }
+  if (!M.tree) { M.tree = walls3DFog(new THREE.MeshLambertMaterial({ vertexColors: true, clippingPlanes: WALLS3D.clip })); M.crowd = walls3DFog(new THREE.MeshLambertMaterial({ map: estCrowd(), side: THREE.DoubleSide, clippingPlanes: WALLS3D.clip })); }
   const cell = (x, y) => {
     const k = estCellOf(x, y);
     if (!cells.has(k)) cells.set(k, { trees: [], solid: { pos: [], col: [] }, crowd: { pos: [], uv: [] } });
@@ -214,10 +186,9 @@ function estate3DBuild(scene) {
   EST.cells = [...cells.values()].map(c => estCell(c, M));
   EST.meshes = EST.cells.flatMap(c => c.meshes);
   for (const m of EST.meshes) { m.frustumCulled = false; m.matrixAutoUpdate = false; scene.add(m); }
-  EST.line = estLine(); scene.add(EST.line);
   return EST.meshes;
 }
-// this frame's place of the estate (frame F of walls3DFrame) and of the tree line
+// this frame's place of the estate (frame F of walls3DFrame)
 // (only the cells in view are shown); returns the cells drawn
 function estate3DPlace(F) {
   const M = walls3DMatrix(F, 0, 0);
@@ -226,7 +197,6 @@ function estate3DPlace(F) {
     const on = walls3DVisible(c); if (on) n++;
     for (const m of c.meshes) { m.visible = on; if (on) { m.matrix.set(...M); m.matrixWorld.copy(m.matrix); } }
   }
-  if (EST.line) estLinePlace(EST.line);
   EST.drawn = n;
   return n;
 }

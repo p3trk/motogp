@@ -1,5 +1,5 @@
 // Unit tests for src/estate3d.js (GDD 11o, phase 3): the trees, grandstands, the Wing and the paddock buildings of SCN
-// in 3D, and the tree line on the horizon.
+// in 3D.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { load, placeAt } = require('./load');
@@ -97,30 +97,13 @@ test('estWing: garage block, office block, 22 doors in team colours and the roof
   for (let i = 0; i < b.col.length; i += 18) { if (b.col[i] === door[0] && b.col[i + 1] === door[1] && b.col[i + 2] === door[2]) n++; }
   assert.ok(n >= 2, `doors of the first team: ${n}`);
 });
-test('estLineTexture: tree tops cut out of a strip, repeating sideways', () => {
-  const { G } = load(); const t = G.estLineTexture();
-  assert.equal(t.wrapS, G.THREE.RepeatWrapping); assert.ok(t.image.getContext('2d').calls.some(c => c[0] === 'fill'));
-});
-test('estLine: one quad with the tree line texture, not cut and not hazed', () => {
-  const { G } = load(); const m = G.estLine();
-  assert.equal(m.material.fog, false); assert.equal(m.material.clippingPlanes, null); assert.equal(m.geometry.attributes.position.count, 4);
-});
-test('estLinePlace: on the far edge of the ground, 4 m high, turning with the camera', () => {
-  const { G } = tilted(); const m = G.estLine();
-  G.estLinePlace(m);
-  const p = m.geometry.attributes.position.array, edge = G.groundPoint(0, 0.5);
-  near(p[1], edge[1], 1e-3, 'base row on the far edge'); near(p[0], -G.RW / 2, 1e-9);
-  const up = Math.hypot(p[7] - p[4], p[8] - p[5]); near(up, 4 * G.WALL_HS * G.CAM.ppm, 1e-3);
-  near(m.material.map.offset.x, -G.CAM.rot / G.TAU * 4, 1e-9);
-  assert.ok(m.geometry.attributes.position.version > 0, 'positions sent to the GPU again');
-});
-test('estate3DBuild: trees, stands, buildings and the Wing in cells in the walls scene; trees giving way; the tree line', () => {
+test('estate3DBuild: trees, stands, buildings and the Wing in cells in the walls scene; trees giving way; haze by ground distance', () => {
   const { G } = load(); G.walls3DInit();
   const ms = G.EST.meshes, scene = G.WALLS3D.scene;
   assert.ok(G.EST.cells.length > 10); assert.ok(ms.every(m => scene.children.includes(m) && !m.matrixAutoUpdate));
   const trees = ms.filter(m => m.isInstancedMesh).reduce((a, m) => a + m.count, 0);
   assert.equal(trees, G.SCN.trees.filter(t => !t.gone3d).length); assert.ok(trees > 1400);
-  assert.ok(ms.some(m => m.geometry.attributes.uv), 'the crowd'); assert.ok(scene.children.includes(G.EST.line));
+  assert.ok(ms.some(m => m.geometry.attributes.uv), 'the crowd'); assert.ok(ms.every(m => typeof m.material.onBeforeCompile === 'function'));
   for (const t of G.SCN.trees.filter(q => q.gone3d)) assert.ok(G.estTreeBlocked(t), 'only trees at a phase 4 object give way');
 });
 test('estCellOf: cells of 300 m', () => {
@@ -137,13 +120,12 @@ test('estCell: trees, solid and crowd meshes of a cell with their box', () => {
   const c = G.estCell({ trees: [], solid, crowd: { pos: [], uv: [] } }, G.walls3DMaterials());
   assert.equal(c.meshes.length, 1); assert.deepEqual(c.box, [0, 0, 10, 5]);
 });
-test('estate3DPlace: the cells in view get the frame matrix of the world origin, the others are hidden; the tree line is placed', () => {
+test('estate3DPlace: the cells in view get the frame matrix of the world origin, the others are hidden', () => {
   const { G } = tilted(); G.walls3DInit();
   const F = G.walls3DFrame(), n = G.estate3DPlace(F), C = G.EST.cells;
   assert.ok(n > 0 && n < C.length, `${n} of ${C.length} cells`); assert.equal(C.filter(c => c.meshes[0].visible).length, n);
   const M = G.walls3DMatrix(F, 0, 0), e = C.find(c => c.meshes[0].visible).meshes[0].matrixWorld.elements;
   near(e[12], M[3], 1e-3); near(e[0], M[0], 1e-6);
-  assert.ok(G.EST.line.geometry.attributes.position.array.some(v => v !== 0));
 });
 test('wallShadowSide: one side, starting again after each gap, nothing across the garage frontage', () => {
   const { G } = load(); const Path = G.wallShadowPath().constructor, T = G.T;

@@ -30,8 +30,9 @@ test('sideAt: d out along the normal and a along the track', () => {
   assert.deepEqual(G.sideAt(q, 0), [T.X[q], T.Y[q]], 'on the centre line');
 });
 test('sideBox: four sides and a top, lined up with the track, from z0 to z1', () => {
-  const { G } = load(); const p = newPiece();
+  const { G } = load(); const p = newPiece(); G.SIDE3D.casts = [];
   G.sideBox(p, 100, 20, 0, 2, 1, 0, 3, '#ffffff', '#000000');
+  assert.equal(G.SIDE3D.casts.length, 1); assert.deepEqual(G.SIDE3D.casts[0].map(q => q[2]), [0, 3, 0, 3, 0, 3, 0, 3], 'its corners for the shadow (phase 5)');
   assert.equal(p.buf.pos.length, 5 * 18); const z = zsOf(p.buf);
   assert.equal(Math.min(...z), 0); near(Math.max(...z), 3 * G.WALL_HS, 1e-9);
   assert.deepEqual(p.buf.col.slice(4 * 18, 4 * 18 + 3), [0, 0, 0], 'the top in its own colour');
@@ -111,4 +112,6 @@ test('sideBuild: boards, posts, marshals, towers and gantries all go into the pi
   const { G } = load(); const { p, piece } = onePiece();
   G.sideBuild(piece);
   assert.ok(p.posts.length > 400 && p.tex.pos.length > 44 * 18 && p.buf.pos.length > 100 * 18);
+  const n = G.SIDE3D.casts.length; assert.ok(n > 400, 'a shadow caster per box and post (phase 5)');
+  G.sideBuild(onePiece().piece); assert.equal(G.SIDE3D.casts.length, n, 'built again, not added twice');
 });

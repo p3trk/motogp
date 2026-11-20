@@ -2,7 +2,7 @@
 // on the wall line, in the 3D view over the 3D ground. Built once in world metres when the track is loaded, in pieces
 // of about 250 m; each frame a piece gets one matrix from world metres to the camera frame (gl3DPlanePoint is an
 // affine map), so the cost per frame does not grow with the number of posts. Heights are scaled like the bikes.
-const WALLS3D = { ready: false, src: null, scene: null, pieces: [], clip: [], mats: null, postGeo: null, drawn: 0, shake: [0, 0] };
+const WALLS3D = { ready: false, src: null, scene: null, pieces: [], clip: [], mats: null, postGeo: null, drawn: 0, shake: [0, 0], fogU: { fogCa: { value: 1 }, fogSa: { value: 0 } } };
 const WALL_HS = PHYS.VS; // the bikes are drawn 1.35x real size, so the heights are too (the footprint stays real)
 const WALL_PIECE = 125; // track points per piece (about 250 m)
 const WALL_KIND = { NONE: 0, CONCRETE: 1, ARMCO: 2, TYRE: 3 };
@@ -157,14 +157,26 @@ function wallPosts(list, mat) {
 }
 // the materials, shared by all pieces and cut by the clip planes: walls (vertex colours), posts (coloured per post),
 // fence mesh, and the boards and adverts (phase 4, one texture)
+// the haze of a walls-scene material by distance along the ground, not by depth from the eye: a tall tree near the far
+// edge fades as a whole, so nothing needs cutting at the horizon line (GDD 11o phase 5: open sky, no bar). The frame
+// is the camera's (gl3DPlanePoint): ground row v and height z sit at y = v cos a - z sin a, z = v sin a + z cos a, so
+// v = y cos a + z sin a, and the haze depth is -v sin a, as for the 2D haze over the ground canvas
+function walls3DFog(mat) {
+  mat.onBeforeCompile = sh => {
+    Object.assign(sh.uniforms, WALLS3D.fogU);
+    sh.vertexShader = 'uniform float fogCa; uniform float fogSa;\n' + sh.vertexShader.replace('#include <fog_vertex>',
+      '#ifdef USE_FOG\n  vFogDepth = -(mvPosition.y * fogCa + mvPosition.z * fogSa) * fogSa;\n#endif');
+  };
+  return mat;
+}
 function walls3DMaterials() {
   if (!WALLS3D.mats) {
     const clippingPlanes = WALLS3D.clip, side = THREE.DoubleSide;
     WALLS3D.mats = {
-      solid: new THREE.MeshLambertMaterial({ vertexColors: true, side, clippingPlanes }),
-      post: new THREE.MeshLambertMaterial({ color: new THREE.Color('#ffffff'), clippingPlanes }),
-      tex: new THREE.MeshLambertMaterial({ map: sideAtlas().tex, side, clippingPlanes }),
-      panel: new THREE.MeshBasicMaterial({ color: new THREE.Color(WALL_COL.mesh), transparent: true, opacity: 0.25, depthWrite: false, side, clippingPlanes })
+      solid: walls3DFog(new THREE.MeshLambertMaterial({ vertexColors: true, side, clippingPlanes })),
+      post: walls3DFog(new THREE.MeshLambertMaterial({ color: new THREE.Color('#ffffff'), clippingPlanes })),
+      tex: walls3DFog(new THREE.MeshLambertMaterial({ map: sideAtlas().tex, side, clippingPlanes })),
+      panel: walls3DFog(new THREE.MeshBasicMaterial({ color: new THREE.Color(WALL_COL.mesh), transparent: true, opacity: 0.25, depthWrite: false, side, clippingPlanes }))
     };
   }
   return WALLS3D.mats;
@@ -231,7 +243,7 @@ function wallShadowSide(path, s) {
 function walls3DInit() {
   if (WALLS3D.ready && WALLS3D.src === T.X) { return; }
   if (WALLS3D.scene) { for (const m of WALLS3D.pieces.flatMap(p => p.meshes).concat(EST.meshes)) { if (m.geometry !== WALLS3D.postGeo) m.geometry.dispose(); } }
-  WALLS3D.scene = new THREE.Scene(); gl3DAddLights(WALLS3D.scene);
+  WALLS3D.scene = new THREE.Scene(); WALLS3D.lights = gl3DAddLights(WALLS3D.scene);
   WALLS3D.scene.fog = new THREE.Fog(0xc9d8de, 1, 2);
   if (!WALLS3D.clip.length) WALLS3D.clip.push(new THREE.Plane(), new THREE.Plane(), new THREE.Plane());
   WALLS3D.pieces = walls3DBuild(); estate3DBuild(WALLS3D.scene); WALLS3D.src = T.X; WALLS3D.ready = true; // the estate: phase 3 (estate3d.js)
@@ -271,16 +283,19 @@ function walls3DPlace() {
     if (on) { n++; const M = walls3DMatrix(F, p.ox, p.oy); for (const m of p.meshes) { m.matrix.set(...M); m.matrixWorld.copy(m.matrix); } }
     for (const m of p.meshes) m.visible = on;
   }
-  // haze as the 2D far band (drawWorldLayer: haze over the top 22 % of the ground canvas); fog depth is -Z = -v sin a
+  // haze as the 2D far band (drawWorldLayer: haze over the top 22 % of the ground canvas), by ground distance
+  // (walls3DFog): the haze depth -v sin a runs from 0.78 RH sin a to RH sin a
   WALLS3D.scene.fog.near = 0.78 * RH * sa; WALLS3D.scene.fog.far = RH * sa;
-  // cut at the horizon line: the plane through the eye (0, 0, P) and the ground's far edge (row -RH), so nothing stands
-  // in the sky above the far edge (tall far trees showed there as pale ghosts, GDD 11o phase 3; the tree line covers
-  // the cut); and at the ground's sides (|u| <= RW/2)
-  const [far, left, right] = WALLS3D.clip, P = tiltP(), ny = RH * sa + P, nz = -RH * ca, nl = Math.hypot(ny, nz);
-  far.normal.set(0, ny / nl, nz / nl); far.constant = RH * ca * P / nl;
+  WALLS3D.fogU.fogCa.value = ca; WALLS3D.fogU.fogSa.value = sa;
+  // cut at the ground's far edge (row -RH: v >= -RH), where the haze is whole, so things just inside it stand up into
+  // the sky in the haze's colour and nothing beyond it shows (until phase 5 the cut was the plane through the eye and
+  // the far edge, hidden by a tree line, which made a flat bar at the top); and at the ground's sides (|u| <= RW/2)
+  const [far, left, right] = WALLS3D.clip;
+  far.normal.set(0, ca, sa); far.constant = RH;
   left.normal.set(1, 0, 0); left.constant = RW / 2;
   right.normal.set(-1, 0, 0); right.constant = RW / 2;
-  estate3DPlace(F); // trees, stands, buildings and the tree line (phase 3)
+  estate3DPlace(F); // trees, stands and buildings (phase 3)
+  sunLightPlace(F, WALLS3D.lights); // the sun fixed in the world (phase 5)
   WALLS3D.drawn = n;
   return n;
 }

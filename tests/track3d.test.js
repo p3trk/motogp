@@ -8,8 +8,9 @@
 // - Phase 4: a braking board before Stowe stands up (its face at 1 m is grey to white: far away the black numbers and
 //   the white blend) and the start lights show red over the grid.
 // - Phase 3: a tree stands up (its crown, 4 m up, differs from the grass with the scenery off), a grandstand shows its
-//   crowd, the Wing's first garage door is in its team colour, the tree line stands above the far edge of the ground;
-//   frame cost of all 3D scenery at Abbey and at Club under 15 %.
+//   crowd, the Wing's first garage door is in its team colour; frame cost of all 3D scenery at Abbey and at Club under 15 %.
+// - Phase 5: no sky (plain haze above the far edge), no hard line where the ground meets the haze, the start gantry's
+//   shadow lies on the road and the Abbey stand's shadow on the grass (all gone with test switch 7).
 // - Speed feel (phase 4 done-check): over 60 frames at speed along the Hangar Straight, the pixel change per frame in
 //   the outer 25 % of the screen is larger with the 3D scenery on than off (test switch 7).
 // - Frame cost: drawing the world with the 3D scenery at most 15 % more than without (median, blocks of frames, so
@@ -22,7 +23,7 @@ const { chromium } = require('playwright');
 const FILE = 'file://' + path.resolve(process.argv[2] || path.join(__dirname, '..', 'index.html'));
 const COST = 0.15;
 
-// phase 3: a tree, a grandstand, the Wing's doors and the tree line
+// phase 3: a tree, a grandstand and the Wing's doors
 async function phase3(page, check) {
     const r = await page.evaluate(async () => {
       const S = window.__sgp, T = S.T, HS = S.PHYS.VS, out = {}; await window.__place('Hangar Straight', 100, 300);
@@ -30,9 +31,6 @@ async function phase3(page, check) {
       const seen = t => { const dx = t.x - b.x, dy = t.y - b.y, a = dx * fw[0] + dy * fw[1], l = Math.abs(dx * lf[0] + dy * lf[1]); return a > 25 && a < 90 && l > 20 && l < 60 && !t.gone3d; };
       const t = S.SCN.trees.find(seen);
       out.tree = t ? window.__onOff(window.__scr(t.x, t.y, 0.62 * (1.6 * t.r + 2) * HS)) : null;
-      // the tree line: just above the far edge of the ground, in the middle of the screen
-      const k = document.getElementById('game').width / innerWidth;
-      out.line = window.__onOff([Math.round(innerWidth / 2 * k), Math.round((S.horizonYX() - 3) * k)]);
       await window.__place('Abbey', -110, 250);
       const st = S.SCN.stands.find(q => Math.hypot(q.x - S.W.player.x, q.y - S.W.player.y) < 200);
       if (st) { const ca = Math.cos(st.a), sa = Math.sin(st.a), ly = -st.flip * st.h / 2 + st.flip * (st.h - 4) * 0.5; out.stand = window.__onOff(window.__scr(st.x - sa * ly, st.y + ca * ly, 4.5 * HS)); }
@@ -46,8 +44,58 @@ async function phase3(page, check) {
     check(r.stand && r.stand.d > 40, 'Abbey: the grandstand shows its crowd above the ground', r.stand ? `rgb ${r.stand.on}, without ${r.stand.off}` : 'no stand near Abbey');
     const dd = r.door.px.reduce((a, v, k) => a + Math.abs(v - r.door.col[k]), 0);
     check(dd < 150, 'the Wing: the first garage door is in its team colour', `rgb ${r.door.px} vs team ${r.door.col} (difference ${dd})`);
-    check(r.line.d > 15, 'the tree line stands above the far edge of the ground', `rgb ${r.line.on}, without ${r.line.off}`);
   }
+
+// phase 5: no sky, no hard line at the horizon, the start gantry's shadow
+// lies on the road and the Abbey stand's shadow on the grass
+async function phase5(page, check) {
+  await page.evaluate(() => {
+    // the lower quartile of the colour step (sum over r, g, b) between the rows 3 css px above and below the horizon,
+    // every 8th column (near trees cross the horizon in some columns; a bar would run across them all)
+    window.__hzStep = (W, hz, k) => {
+      const g = window.__sgp.screenX().getContext('2d'), a = g.getImageData(0, Math.round((hz - 3) * k), W, 1).data, b = g.getImageData(0, Math.round((hz + 3) * k), W, 1).data, d = [];
+      for (let x = 0; x < W; x += 8) { const i = x * 4; d.push(Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2])); }
+      d.sort((p, q) => p - q);
+      return d[d.length >> 2];
+    };
+  });
+  const r = await page.evaluate(async () => {
+    const S = window.__sgp, T = S.T, out = {}, k = document.getElementById('game').width / innerWidth;
+    await window.__place('Hangar Straight', 100, 0);
+    const hz = S.horizonYX(), W = Math.round(innerWidth * k);
+    // no sky: above the far edge the 2D canvas is one haze colour across the screen (Petr 2026-11-20: no sky for now)
+    S.drawWorldX(); const top = document.getElementById('game').getContext('2d').getImageData(0, Math.round(0.25 * hz * k), W, 1).data;
+    out.sky = 0; for (let i = 0; i < top.length; i += 4) { out.sky = Math.max(out.sky, Math.abs(top[i] - 0xc9) + Math.abs(top[i + 1] - 0xd8) + Math.abs(top[i + 2] - 0xde)); }
+    // the horizon: sky and ground meet in haze, without a step (a pale tree line and hills once made a bar)
+    out.step = window.__hzStep(W, hz, k);
+    // the start gantry's shadow on the road, 40 m before the line
+    const q0 = T.idx(T.L - 40), bk = S.W.player;
+    Object.assign(bk, { x: T.X[q0], y: T.Y[q0], h: T.H[q0], i: q0, s: q0 * T.DS, v: 0 }); S.CAM.init = false; S.W.paused = false; S.frameX(performance.now()); S.W.paused = true;
+    const dl = S.PHYS.VS / Math.tan(S.SUN.el), dir = [-Math.cos(S.SUN.az) * dl, -Math.sin(S.SUN.az) * dl];
+    // the beam (7 to 8 m up) casts 7.5 m x dir away; the point of its shadow on the road's centre line
+    const v = [7.5 * dir[0], 7.5 * dir[1]], d = -(v[0] * T.NX[0] + v[1] * T.NY[0]);
+    out.gantry = window.__onOff(window.__scr(T.X[0] + T.NX[0] * d + v[0], T.Y[0] + T.NY[0] * d + v[1], 0));
+    // the Abbey stand's shadow on the ground: a point inside its shadow core, outside its ground plan, seen as grass
+    await window.__place('Abbey', -110, 0);
+    const k2 = document.getElementById('game').width / innerWidth;
+    const si = S.SCN.stands.findIndex(q => Math.hypot(q.x - S.W.player.x, q.y - S.W.player.y) < 200), sh = S.sunShadows()[S.SIDE3D.casts.length + si];
+    for (const [px, py] of sh.core) {
+      const x = px + (sh.x - px) * 0.15, yy = py + (sh.y - py) * 0.15, st = S.SCN.stands[si];
+      const lx = (x - st.x) * Math.cos(st.a) + (yy - st.y) * Math.sin(st.a), ly = -(x - st.x) * Math.sin(st.a) + (yy - st.y) * Math.cos(st.a);
+      if (Math.abs(lx) < st.w / 2 + 1 && Math.abs(ly) < st.h / 2 + 1) continue; // under the stand
+      const pt = window.__scr(x, yy, 0); if (pt[1] < (S.horizonYX() + 80) * k2) continue; // well below the horizon
+      const o = window.__onOff(pt);
+      if (o.off[1] > o.off[0] + 15 && o.on[1] > o.on[0] + 5) { out.stand = o; break; }
+    }
+    return out;
+  });
+  check(r.sky <= 6, 'no sky: plain haze above the far edge, no clouds', `largest difference from the haze colour ${r.sky}`);
+  check(r.step < 25, 'horizon: no hard line where the ground meets the sky', `colour step across the horizon ${r.step} (lower quartile)`);
+  const sum = a => a.reduce((s, v) => s + v, 0);
+  const grey = c => Math.max(...c) - Math.min(...c) < 15;
+  check(grey(r.gantry.off) && sum(r.gantry.on) < sum(r.gantry.off) - 30 && sum(r.gantry.on) > 0.5 * sum(r.gantry.off), 'start gantry: its shadow lies on the road', `rgb ${r.gantry.on}, without 3D scenery ${r.gantry.off}`);
+  check(r.stand && sum(r.stand.on) < sum(r.stand.off) - 30, 'Abbey: the grandstand casts its shadow on the grass', r.stand ? `rgb ${r.stand.on}, without 3D scenery ${r.stand.off}` : 'no shadow point in view');
+}
 
 (async () => {
   const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
@@ -155,6 +203,7 @@ async function phase3(page, check) {
     check(r.on.motion > r.off.motion * 1.05, 'speed feel: more motion at the screen edges with 3D scenery', `pixel change per frame ${r.off.motion.toFixed(2)} -> ${r.on.motion.toFixed(2)} (+${((r.on.motion / r.off.motion - 1) * 100).toFixed(0)} %) at ${r.on.kmh.toFixed(0)} km/h`);
   }
   await phase3(page, check);
+  await phase5(page, check);
   // Classic graphics keep the flat walls
   {
     const r = await page.evaluate(async () => {

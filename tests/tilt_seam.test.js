@@ -7,6 +7,7 @@
 // suddenly blurrier at some row (where the sharper near image hands over to the far one).
 // Runs with the Behind camera at three screen sizes and with the CLOSE camera at 1470x830 @2x, with Speed blur Off
 // (since 1.17.0), so the measurements stay as before.
+// Since GDD 11o each case also runs through the 3D ground (the GPU draws the bands as planes, no strips).
 // Usage: node tests/tilt_seam.test.js [path/to/index.html]   (needs Playwright + Chromium)
 const path = require('path');
 const { chromium } = require('playwright');
@@ -61,6 +62,14 @@ const SIZES = [[1280, 800, 1, 'behind'], [1470, 830, 2, 'behind'], [1024, 700, 1
       }
       return { lines: starts.length, worst, worstY: Math.round(worstY), step, stepY: Math.round(stepY) };
     });
+    // the same measurement through the 3D ground (GDD 11o): the projection hook is swapped for the 3D one meanwhile,
+    // and the 3D walls (phase 2) are off, so only the ground is measured
+    const measure3D = async () => {
+      await page.evaluate(() => { const S = window.__sgp; S.tiltProject2DX = S.tiltProjectX; S.tiltProjectX = S.tiltProject3DX; S.PERF.noWalls = true; });
+      const m = await measure();
+      m.gl = await page.evaluate(() => { const S = window.__sgp; S.tiltProjectX = S.tiltProject2DX; S.PERF.noWalls = false; return S.ground3DOn(); });
+      return m;
+    };
     // live riding (Behind or CLOSE camera), then replay of the recorded lap
     await page.evaluate(cam => {
       const S = window.__sgp; S.UI.opts.cam = 'behind'; S.UI.opts.train = 'off'; S.UI.opts.blur = 'off'; S.UI.launch('practice', {}); S.setCamModeX(cam);
@@ -68,11 +77,11 @@ const SIZES = [[1280, 800, 1, 'behind'], [1470, 830, 2, 'behind'], [1024, 700, 1
       while (b.laps.length < 1 && g < 120 * 900) { S.simStep(S.SUB); g++; }
       W.paused = false; S.drawWorldX();
     }, cam);
-    const live = await measure();
+    const live = await measure(), live3 = await measure3D();
     await page.evaluate(cam => { const S = window.__sgp; S.UI.toMenu(); S.RP.open([S.Lib.data[S.Lib.meta[0].id]], 'menu'); S.setCamModeX(cam); S.RP.seek(40); S.drawWorldX(); }, cam);
-    const rep = await measure();
-    for (const [name, m] of [['live', live], ['replay', rep]]) {
-      total++; const bad = m.lines < 5 || m.worst > LIMIT || m.step > SHARP_STEP; if (bad) failed++;
+    const rep = await measure(), rep3 = await measure3D();
+    for (const [name, m] of [['live', live], ['replay', rep], ['live 3D', live3], ['replay 3D', rep3]]) {
+      total++; const bad = m.lines < 5 || m.worst > LIMIT || m.step > SHARP_STEP || (name.endsWith('3D') && !m.gl); if (bad) failed++;
       console.log(`${bad ? 'FAIL' : 'PASS'}  ${(name + ' ' + w + 'x' + h + ' @' + sf + 'x ' + cam).padEnd(33)} lines ${m.lines}  sharpest bend ${m.worst.toFixed(2)} px at row ${m.worstY} (limit ${LIMIT})  sharpness step ${(m.step * 100).toFixed(0)}% at row ${m.stepY} (limit ${SHARP_STEP * 100}%)`);
     }
     await page.close();

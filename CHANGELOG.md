@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.27.0 (2026-11-20)
+- 3D track (GDD 11o): the ground is drawn by the GPU in 3D, with the road, kerbs, run-off and gravel, and the speed blur runs on the GPU too.
+- Walls and fences stand up in 3D (GDD 11o phase 2): concrete walls, Armco, tyre walls and see-through debris fences.
+- Trackside in 3D (GDD 11o phase 4): braking boards, marker posts, marshal posts, advert boards, camera towers, the start gantry with its lights and the bridges, in fictional brands.
+- Trees, grandstands with their crowds, the Wing with the team garage doors and the paddock buildings stand up in 3D (GDD 11o phase 3).
+- One sun fixed in the world (GDD 11o phase 5): the light on the scenery no longer turns with the camera, and stands, buildings, gantries, posts and trees cast shadows on the ground. The bikes keep their own light.
+- No sky for now: the top of the screen is plain haze that the ground and scenery fade into, without a line where the ground ends. The sky will be designed again later.
+- Test switch 7 (with the P overlay) turns all 3D scenery off.
+- Drive at lean (GDD 5b): the rear tyre's drive falls with lean, from full drive up to 25 degrees down to 0.2 g at the grip limit, so you can no longer accelerate fully at maximum lean.
+- Tests: new 3D track test (tests/track3d.test.js); the speed blur may cost up to 20 % of the frame (was 15 %) now that the 3D scenery is blurred with the ground.
+
 ## v1.26.1 (2026-11-19)
 - Frame rate (GDD 11n): Chrome and Brave run at 60 fps again (were about 30). On a slow machine the road is now drawn in 2-row strips first, half the draw calls, before the pixel and resolution steps. Safari keeps the sharper 1-row road.
 - The 3D bikes are on their own page layer instead of being copied into the game canvas every frame.

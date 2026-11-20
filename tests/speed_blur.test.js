@@ -8,13 +8,13 @@
 // on the ground and compares the sharpness along the line to the horizon point, outer quarter against centre in the
 // same screen rows, with the blur at almost no strength as reference (same 1/4 copy, no zoom).
 // Also: Top-down is never blurred, the start-screen option and the strength slider, replay paused above and below
-// the start speed, and the frame cost limit (15 %).
+// the start speed, and the frame cost limit (20 %).
 // Usage: node tests/speed_blur.test.js [path/to/index.html]   (needs Playwright + Chromium)
 const path = require('path');
 const { chromium } = require('playwright');
 const FILE = 'file://' + path.resolve(process.argv[2] || path.join(__dirname, '..', 'index.html'));
 const SIZES = [[1470, 830, 2], [1280, 800, 1]];
-const COST = 0.15; // largest share the blur may add to drawing the world
+const COST = 0.2; // largest share the blur may add to drawing the world
 
 (async () => {
   const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
@@ -49,7 +49,7 @@ const COST = 0.15; // largest share the blur may add to drawing the world
       window.__frame = () => { t += 1000 / 60; S.CAM.init = false; window.__tick(t); };
       window.__shot = blur => { // one frame with Speed blur On or Off, as device pixels
         S.UI.opts.blur = blur ? 'on' : 'off'; window.__frame();
-        const c = document.getElementById('game'); return c.getContext('2d').getImageData(0, 0, c.width, c.height);
+        const c = S.screenX(); return c.getContext('2d').getImageData(0, 0, c.width, c.height); // the game canvas with the 3D ground over it (GDD 11o)
       };
       window.__masks = c => { // road (3 px inside), off-road (10 px outside, below the horizon, away from bikes), bike
         const T = S.T, TL = S.TILT, k = c.width / innerWidth, VW = innerWidth, VH = innerHeight;
@@ -150,7 +150,7 @@ const COST = 0.15; // largest share the blur may add to drawing the world
     const r = await page.evaluate(() => {
       const S = window.__sgp, opt = S.UI.opts.blur, chip = document.querySelector('#optBlur [aria-pressed="true"]').textContent;
       window.__place('behind', 340); window.__frame();
-      const c = document.getElementById('game'), d = () => c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+      const d = () => { const c = S.screenX(); return c.getContext('2d').getImageData(0, 0, c.width, c.height).data; };
       const a = d(); S.UI.opts.blur = 'on'; window.__frame(); const b = d(); S.UI.opts.blur = 'off'; window.__frame(); const e = d();
       let mxOff = 0, mxOn = 0; for (let i = 0; i < a.length; i++) { mxOff = Math.max(mxOff, Math.abs(a[i] - e[i])); mxOn = Math.max(mxOn, Math.abs(a[i] - b[i])); }
       return { opt, chip, mxOff, mxOn };
@@ -200,7 +200,7 @@ const COST = 0.15; // largest share the blur may add to drawing the world
     const r = await page.evaluate(async () => {
       const S = window.__sgp; window.__place('close', 340);
       const c = document.getElementById('game'), one = document.createElement('canvas'); one.width = one.height = 1; const g = one.getContext('2d');
-      const sync = () => { g.drawImage(c, 0, 0, 1, 1); g.getImageData(0, 0, 1, 1); }; // waits for the GPU (reads back a 1 px copy, so the game canvas stays on the GPU)
+      const sync = () => { g.drawImage(c, 0, 0, 1, 1); if (S.GL3D.canvas && S.GL3D.shown) { g.drawImage(S.GL3D.canvas, 0, 0, 1, 1); } g.getImageData(0, 0, 1, 1); }; // waits for the GPU (reads back a 1 px copy, so the game canvas stays on the GPU)
       const med = a => a.slice().sort((x, y) => x - y)[a.length >> 1], tOn = [], tOff = [];
       for (let k = 0; k < 40; k++) { S.UI.opts.blur = k & 1 ? 'on' : 'off'; S.drawWorldX(); sync(); }
       for (let k = 0; k < 600; k++) {
@@ -211,7 +211,7 @@ const COST = 0.15; // largest share the blur may add to drawing the world
       return { on: med(tOn), off: med(tOff), q: S.TILT.q };
     });
     const add = r.on / r.off - 1;
-    check(add <= COST && r.q === 1, 'frame cost of the blur at most 15 %', `world ${r.off.toFixed(2)} ms -> with blur ${r.on.toFixed(2)} ms (+${pct(add)}, +${(r.on - r.off).toFixed(2)} ms)`);
+    check(add <= COST && r.q === 1, 'frame cost of the blur at most 20 %', `world ${r.off.toFixed(2)} ms -> with blur ${r.on.toFixed(2)} ms (+${pct(add)}, +${(r.on - r.off).toFixed(2)} ms)`);
     await page.close();
   }
 

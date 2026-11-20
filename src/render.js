@@ -218,7 +218,7 @@ function buildGeometry() {
     let straight = true; for (let o = -6; o <= 6; o++) { const q = (i + o + N) % N; if (Math.abs(T.KS[q]) > 0.0028 || T.KERB[0][q] > 0 || T.KERB[1][q] > 0) straight = false; }
     if (!straight || (s === 0 && PIT.inZone(T.rel(i * T.DS)))) continue;
     const d = T.WALL[s][i] - 1, sd = s ? -d : d; if (T.surface(i, i * T.DS, sd) !== SURF.GRASS) continue;
-    const [x, y] = P(i, sd); GEO.posts.push({ x, y, h: T.H[i] });
+    const [x, y] = P(i, sd); GEO.posts.push({ x, y, h: T.H[i], i });
   }
   // walls: skip the garage frontage
   GEO.walls = new Path2D(); GEO.fence = new Path2D();
@@ -827,6 +827,16 @@ function worldToScreen(x, y) {
 const TILE_PX = 512;
 const TLV = [{ m: 40, map: new Map(), cap: 160 }, { m: 80, map: new Map(), cap: 140 }, { m: 160, map: new Map(), cap: 140 }];
 let tileFrame = 0;
+// on3d: the tiles leave out the flat walls, fences, braking boards, distance posts, tree crowns, stands, buildings and
+// the Wing while the 3D scenery stands on them (GDD 11o phases 2 to 4)
+const TILE_WALLS = { on3d: false };
+// switches the tiles between flat and 3D walls; the cached tiles are dropped and baked again
+function tileWallsSync(on) {
+  if (on === TILE_WALLS.on3d) { return false; }
+  TILE_WALLS.on3d = on; for (const L of TLV) L.map.clear();
+  if (on) walls3DInit(); // before the tiles bake: it marks the trees that give way to the trackside objects (GDD 11o phase 3)
+  return true;
+}
 function drawStatic(vis, x0, y0, w, h) {
   ctx.fillStyle = TEX.pGrass; ctx.fillRect(x0, y0, w, h);
   ctx.fillStyle = 'rgba(255,255,235,.06)'; ctx.fill(GEO.mowL); ctx.fillStyle = 'rgba(0,25,0,.07)'; ctx.fill(GEO.mowD); // mowing stripes (GDD 11h)
@@ -845,14 +855,9 @@ function drawStatic(vis, x0, y0, w, h) {
   ctx.strokeStyle = 'rgba(245,245,245,.85)'; ctx.lineWidth = 0.2; ctx.stroke(GEO.grid);
   drawTrackPaint(vis);
   ctx.lineCap = 'butt';
-  ctx.strokeStyle = '#222'; ctx.lineWidth = 1.4; ctx.stroke(GEO.walls);
-  ctx.strokeStyle = '#0c0c0c'; ctx.lineWidth = 1.0; ctx.setLineDash([0.75, 0.12]); ctx.stroke(GEO.walls);
-  ctx.setLineDash([6, 6]); ctx.strokeStyle = '#1d4fd6'; ctx.lineWidth = 0.55; ctx.stroke(GEO.walls); ctx.lineDashOffset = 6; ctx.strokeStyle = '#f0f0f0'; ctx.stroke(GEO.walls); ctx.lineDashOffset = 0; ctx.setLineDash([]);
-  ctx.strokeStyle = 'rgba(40,46,50,.7)'; ctx.lineWidth = 0.15; ctx.stroke(GEO.fence);
-  ctx.strokeStyle = '#b9b9b4'; ctx.lineWidth = 0.7; ctx.stroke(GEO.pitWall);
-  ctx.strokeStyle = 'rgba(30,30,30,.6)'; ctx.lineWidth = 0.12; ctx.stroke(GEO.pitWall);
-  for (const q of GEO.posts) { // distance posts (GDD 11h)
-    if (!vis(q.x, q.y, 2)) continue;
+  if (TILE_WALLS.on3d) { drawWallShadows(); drawSunShadows(vis); } else drawFlatWalls(); // sun shadows of the 3D scenery (GDD 11o phase 5)
+  for (const q of GEO.posts) { // distance posts (GDD 11h); in 3D while the 3D scenery stands (GDD 11o phase 4)
+    if (TILE_WALLS.on3d || !vis(q.x, q.y, 2)) continue;
     ctx.save(); ctx.translate(q.x, q.y); ctx.rotate(q.h);
     ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.fillRect(-0.25 + 0.25, -0.25 + 0.3, 0.5, 0.5);
     ctx.fillStyle = '#f4f4f2'; ctx.fillRect(-0.25, -0.25, 0.5, 0.5); ctx.fillStyle = '#151515'; ctx.fillRect(-0.15, -0.15, 0.3, 0.3);
@@ -861,6 +866,21 @@ function drawStatic(vis, x0, y0, w, h) {
   drawPitBoxes(vis, true);
   drawBuildings(vis, true);
   drawTrees(vis);
+}
+// the walls, fences and pit wall as flat paint on the ground (Classic, Top-down, no WebGL)
+function drawFlatWalls() {
+  ctx.strokeStyle = '#222'; ctx.lineWidth = 1.4; ctx.stroke(GEO.walls);
+  ctx.strokeStyle = '#0c0c0c'; ctx.lineWidth = 1.0; ctx.setLineDash([0.75, 0.12]); ctx.stroke(GEO.walls);
+  ctx.setLineDash([6, 6]); ctx.strokeStyle = '#1d4fd6'; ctx.lineWidth = 0.55; ctx.stroke(GEO.walls); ctx.lineDashOffset = 6; ctx.strokeStyle = '#f0f0f0'; ctx.stroke(GEO.walls); ctx.lineDashOffset = 0; ctx.setLineDash([]);
+  ctx.strokeStyle = 'rgba(40,46,50,.7)'; ctx.lineWidth = 0.15; ctx.stroke(GEO.fence);
+  ctx.strokeStyle = '#b9b9b4'; ctx.lineWidth = 0.7; ctx.stroke(GEO.pitWall);
+  ctx.strokeStyle = 'rgba(30,30,30,.6)'; ctx.lineWidth = 0.12; ctx.stroke(GEO.pitWall);
+}
+// under the 3D walls: a soft contact shadow along their foot, so they sit on the ground (GDD 11o phase 2)
+function drawWallShadows() {
+  const walls = wallShadowPath(); // only where a 3D wall stands (not across its gaps)
+  ctx.strokeStyle = 'rgba(0,0,0,.14)'; ctx.lineWidth = 2.4; ctx.stroke(walls); ctx.stroke(GEO.pitWall);
+  ctx.strokeStyle = 'rgba(0,0,0,.16)'; ctx.lineWidth = 1.2; ctx.stroke(walls); ctx.stroke(GEO.pitWall);
 }
 function renderTile(L, tx, ty) {
   const M = L.m, c = mkCanvas(TILE_PX, TILE_PX), g = c.getContext('2d', { alpha: false });
@@ -879,16 +899,18 @@ function getTile(L, tx, ty, allowRender) {
   t.used = tileFrame; return t.c;
 }
 // --- frame-time overlay (GDD 11n): P toggles it; times each part of the frame, averaged over PERF_N frames
-const PERF = { on: false, cur: {}, sum: {}, n: 0, last: 0, show: null, gl3d: 0, no3d: false }; // no3d: test switch (GDD 11n)
+const PERF = { on: false, cur: {}, sum: {}, n: 0, last: 0, show: null, gl3d: 0, no3d: false, noWalls: false }; // no3d, noWalls: test switches (GDD 11n, 11o)
 const PERF_N = 30;
 const PERF_PARTS = [['sim', 'physics'], ['camera', 'camera'], ['world', '2D world'], ['project', 'projection + blur'],
-  ['gl3d', '3D bikes (CPU)'], ['hud', 'HUD']];
+  ['walls', '3D scenery (CPU)'], ['gl3d', '3D bikes (CPU)'], ['hud', 'HUD']];
 function perfToggle() { PERF.on = !PERF.on; PERF.cur = {}; PERF.sum = {}; PERF.n = 0; PERF.show = null; PERF.last = 0; }
 // adds the time since t0 to a part of this frame (nothing when the overlay is off)
 // test switch 8: the road projection draws one strip per 1, 2, 4 or 8 device rows (fewer draw calls, coarser picture)
 function perfRows() { TILT.rows = TILT.rows >= 8 ? 1 : TILT.rows * 2; }
 // test switch 9: the 3D bikes on or off
 function perfNo3D() { PERF.no3d = !PERF.no3d; }
+// test switch 7: the 3D scenery (walls and trackside, GDD 11o phases 2 and 4) on or off
+function perfNoWalls() { PERF.noWalls = !PERF.noWalls; }
 function perfAdd(name, t0) { if (PERF.on) { PERF.cur[name] = (PERF.cur[name] || 0) + performance.now() - t0; } }
 // at the start of a frame: books the last frame's parts and its length, and every PERF_N frames the averages to show
 function perfFrame(now) {
@@ -911,8 +933,9 @@ function drawPerf() {
     lines.push(`${(1000 / a.frame).toFixed(0)} fps   ${a.frame.toFixed(1)} ms per frame`);
     for (const [k, label] of PERF_PARTS) { lines.push(`${label.padEnd(20)} ${(a[k] || 0).toFixed(2)} ms`); }
   } else { lines.push('measuring...'); }
-  lines.push(`3D bikes ${PERF.no3d ? 'off' : PERF.gl3d}   canvas ${cv.width}x${cv.height}   DPR ${DPR}`);
-  lines.push(`8: road strips ${TILT.rows} px   9: 3D bikes`);
+  lines.push(`3D bikes ${PERF.no3d ? 'off' : PERF.gl3d}   scenery ${TILE_WALLS.on3d ? WALLS3D.drawn : 'off'}   DPR ${DPR}`);
+  lines.push(`canvas ${cv.width}x${cv.height}`);
+  lines.push(`7: 3D scenery  8: road strips ${TILT.rows} px  9: 3D bikes`);
   const hgt = 18 * lines.length + 12, x0 = VW - 316, y0 = 220; // right edge, under the track map and clear of the standings
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   ctx.fillStyle = 'rgba(0,0,0,.72)'; ctx.fillRect(x0, y0, 310, hgt);
@@ -923,10 +946,17 @@ function drawWorld() {
   tileFrame++;
   let sx = 0, sy = 0; if (HUD.shake > 0.01) { sx = (Math.random() - 0.5) * 8 * HUD.shake; sy = (Math.random() - 0.5) * 8 * HUD.shake; }
   const A = speedVib(); if (A > 0) { sx += (Math.random() - 0.5) * 2 * A; sy += (Math.random() - 0.5) * 2 * A; }
+  tileWallsSync(walls3DOn()); WALLS3D.shake = [sx, sy]; // the 3D walls move with the shaken ground layers
   let t = performance.now();
   try { for (const Ly of LAYERS) { ctx = Ly.g; drawWorldLayer(Ly, sx, sy); } } finally { ctx = mainCtx; }
   perfAdd('world', t);
-  if (camTilted()) { t = performance.now(); projectTilted(); speedBlur(); perfAdd('project', t); gl3DDraw(PERF.no3d ? [] : W.bikes.filter(gl3DOn)); } else { gl3DShow(false); }
+  if (!camTilted()) { gl3DShow(false); return; }
+  t = performance.now();
+  if (ground3DOn()) { // the GPU draws the ground (GDD 11o); only the haze behind it is left for the 2D canvas
+    drawSky(mainCtx);
+  } else { projectTilted(); speedBlur(); }
+  perfAdd('project', t);
+  gl3DDraw(PERF.no3d ? [] : W.bikes.filter(gl3DOn));
 }
 // --- speed blur (GDD 11f): at top speed the surroundings smear into zoom streaks from the horizon point straight
 // ahead, on a 1/4 resolution copy of the screen; the road with its kerbs (+0.3 m) and the bikes are cut out of it
@@ -1030,10 +1060,7 @@ function drawSpeedLines(dt) { // on the HUD layer, before the HUD
 function projectTilted() {
   const P = tiltP(), sa = Math.sin(tiltA()), ca = Math.cos(tiltA());
   const hOf = u => u * P / (ca * P - u * sa), uTop = RH * ca * P / (P + RH * sa);
-  const g = mainCtx; g.setTransform(ODPR, 0, 0, ODPR, 0, 0); g.imageSmoothingEnabled = true;
-  const sky = g.createLinearGradient(0, 0, 0, VH - uTop + 2); sky.addColorStop(0, '#6fa3d2'); sky.addColorStop(1, '#c9d8de');
-  g.fillStyle = sky; g.fillRect(0, 0, VW, VH - uTop + 2);
-  g.fillStyle = '#c9d8de'; g.fillRect(0, VH - uTop, VW, uTop); // haze where a narrow ground area does not reach the screen sides
+  const g = mainCtx; drawSky(g); g.imageSmoothingEnabled = true;
   const near = LAYERS[1], far = LAYERS[0], hN = near.h;
   // one strip per screen row: the horizontal scale changes from row to row, so taller strips drew straight lines
   // as small steps, worst where the near and far bands join (GDD 1.11.5)
@@ -1144,8 +1171,8 @@ function drawTrackPaint(vis) {
     ctx.strokeStyle = '#f4f4f4'; ctx.lineWidth = 0.5; ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
     groundText(label, ...P(T.idx(sr - (label === 'END' ? -4 : 4)), T.PIT.d), T.H[i], 2.2, 'rgba(245,245,245,.9)');
   }
-  // braking boards
-  for (const bd of T.boards) {
+  // braking boards (in 3D while the 3D scenery stands, GDD 11o phase 4)
+  for (const bd of TILE_WALLS.on3d ? [] : T.boards) {
     const i = bd.i; const e = bd.side > 0 ? T.WR[i] : T.WL[i]; const [x, y] = P(i, bd.side * (e + 3.2)); if (!vis(x, y, 5)) continue;
     ctx.save(); ctx.translate(x, y); ctx.rotate(T.H[i] + Math.PI / 2);
     ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.fillRect(-1.1 + 0.4, -0.55 + 0.5, 2.2, 1.1);
@@ -1197,7 +1224,7 @@ function drawPitBoxes(vis, still) {
 }
 function polyFill(pts) { ctx.beginPath(); pts.forEach((p, j) => j ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.closePath(); }
 function drawBuildings(vis, still) {
-  if (!still) return;
+  if (!still || TILE_WALLS.on3d) return; // in 3D while the 3D scenery stands (GDD 11o phase 3)
   // garages + Wing roof
   const w = SCN.wing; const mid = w.garage[Math.floor(w.garage.length / 4)];
   if (vis(mid[0], mid[1], 500)) {
@@ -1234,7 +1261,8 @@ function drawBuildings(vis, still) {
 }
 function drawTrees(vis) {
   for (const t of SCN.trees) {
-    if (!vis(t.x, t.y, 10)) continue;
+    if (!vis(t.x, t.y, 10) || (TILE_WALLS.on3d && t.gone3d)) continue;
+    if (TILE_WALLS.on3d) { drawTreeShadow(t); continue; } // the 3D tree, its shadow along the sun (GDD 11o phases 3, 5)
     ctx.globalAlpha = 0.45; ctx.drawImage(TEX.shadow, t.x - t.r + t.r * 0.5, t.y - t.r + t.r * 0.65, t.r * 2.3, t.r * 2.3); ctx.globalAlpha = 1;
     ctx.save(); ctx.translate(t.x, t.y); ctx.rotate(t.rot); ctx.drawImage(TEX.trees[t.v], -t.r * 1.2, -t.r * 1.2, t.r * 2.4, t.r * 2.4); ctx.restore();
   }

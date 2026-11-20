@@ -346,3 +346,39 @@ test('stepBike: at low speed the lean is free to go past the 300 km/h cap, up to
   for (let t = 0; t < 4; t += G.SUB) { holdSpeed(v)(b); G.stepBike(b, G.SUB, G.W); peak = Math.max(peak, b.lean); }
   assert.ok(peak > 50 * Math.PI / 180, `peak ${(peak * 180 / Math.PI).toFixed(1)} deg, expected past 50`);
 });
+
+// --- drive at lean (GDD 5b) --------------------------------------------------
+test('driveCapAt: the wheelie limit up to 25 degrees, falling to 0.2 g at the grip-limit lean; earlier with less grip', () => {
+  const D = G.DEG, g = PHYS.mu * G.G, cap = d => G.driveCapAt(d * D, g) / G.G;
+  near(cap(0), PHYS.wheelie / G.G, 1e-12); near(cap(25), PHYS.wheelie / G.G, 1e-12); near(cap(-25), cap(25), 1e-12, 'both sides');
+  for (const [d, want] of [[35, 0.85], [45, 0.51], [50, 0.35]]) near(cap(d), want, 0.005, 'GDD 5b table at ' + d);
+  near(cap(Math.atan(PHYS.mu) / D), 0.2, 1e-9, 'grip limit'); near(cap(70), 0.2, 1e-9, 'beyond it');
+  for (let d = 26; d < 59; d++) assert.ok(cap(d) < cap(d - 1), 'falls with lean at ' + d);
+  assert.ok(G.driveCapAt(45 * D, 0.8 * g) < G.driveCapAt(45 * D, g), 'cold tyres, kerbs or damage: falls earlier');
+  assert.ok(Number.isFinite(G.driveCapAt(30 * D, 0.3 * G.G)), 'grip below the 25 degree lean: no division by zero');
+});
+test('stepBike: with aids at 50 degrees of lean the drive is held at the cap, upright it is as before (GDD 5b)', () => {
+  const accel = (leanDeg, assist) => {
+    const { G: g, b } = soloBike({ v: 100 / 3.6, gear: 3, assist });
+    run(g, b, 0.1, x => { x.ctl.thr = 1; x.ctl.brk = 0; x.ctl.leanT = leanDeg * g.DEG; x.lean = leanDeg * g.DEG; });
+    const v0 = b.v; b.ctl.thr = 1; b.lean = leanDeg * g.DEG; g.stepBike(b, g.SUB, g.W);
+    return { a: (b.v - v0) / g.SUB / g.G, b, g };
+  };
+  const up = accel(0, true), l50 = accel(50, true), l35 = accel(35, true);
+  near(up.a, 0.94, 0.02, 'upright from 100 km/h'); assert.ok(l50.a < 0.36 && l50.a > 0.2, '50 degrees: the cap less drag ' + l50.a);
+  assert.ok(l35.a < 0.86 && l35.a > l50.a, '35 degrees ' + l35.a); assert.equal(l50.b.slip, 0, 'traction control: no wheelspin');
+});
+test('stepBike: without aids, full throttle at big lean spins the rear and a held throttle ends in a highside; easing off recovers (GDD 5b)', () => {
+  const { G: g, b } = soloBike({ v: 100 / 3.6, gear: 3, assist: false });
+  run(g, b, 0.05, x => { x.ctl.thr = 1; x.ctl.brk = 0; x.lean = 50 * g.DEG; x.ctl.leanT = x.lean; });
+  assert.ok(b.slip > 0 && !b.crashed, 'wheelspin ' + b.slip); const slip = b.slip;
+  run(g, b, 0.3, x => { x.ctl.thr = 0; x.lean = 50 * g.DEG; x.ctl.leanT = x.lean; });
+  assert.ok(b.slip < slip, 'easing off: the slip falls ' + b.slip);
+  run(g, b, 3, x => { if (!x.crashed) { x.ctl.thr = 1; x.lean = 50 * g.DEG; x.ctl.leanT = x.lean; } });
+  assert.equal(b.crashed, true); assert.equal(b.crash.why, 'highside');
+  const { G: h, b: c } = soloBike({ v: 100 / 3.6, gear: 3, assist: false }); run(h, c, 0.5, x => { x.ctl.thr = 1; x.lean = 0; x.ctl.leanT = 0; });
+  assert.equal(c.slip, 0, 'upright: no wheelspin');
+});
+test('T.speedProfile: the traction pass uses the drive cap at the racing line lean, so the ideal lap is slower (GDD 5b)', () => {
+  const p = T.speedProfile(PHYS.mu * 0.97); assert.ok(p.lapTime > 130 && p.lapTime < 134, 'ideal lap ' + p.lapTime);
+});

@@ -525,9 +525,9 @@ test('drawSpeedLines: lines at top speed in the outer screen, none below 280 km/
   assert.ok(G.SPL.lines.every(q => q.x < 0.3 * G.VW || q.x > 0.7 * G.VW));
   G.CAM.v = 250 / 3.6; G.drawSpeedLines(1 / 60); assert.equal(G.SPL.lines.length, 0);
 });
-test('projectTilted: sky, haze and one strip per screen row', () => {
+test('projectTilted: haze behind (no sky) and one strip per screen row', () => {
   const { G } = riding(150); const m = G.mainCtx; m.calls.length = 0; G.projectTilted();
-  assert.ok(ops(m, 'createLinearGradient').length === 1); assert.equal(ops(m, 'fillRect').length, 2);
+  assert.equal(ops(m, 'createLinearGradient').length, 0); assert.equal(ops(m, 'fillRect').length, 1);
   const rows = ops(m, 'drawImage'); assert.ok(rows.length > G.VH / 2, 'rows ' + rows.length);
   assert.ok(rows.every(o => o[1] === G.LAYERS[0].c || o[1] === G.LAYERS[1].c));
 });

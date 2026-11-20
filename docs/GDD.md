@@ -1,6 +1,6 @@
 # Silverstone GP — Game Design Document
 
-**Version:** 1.26.1 · **Last updated:** 2026-11-19 · **Owner:** Petr
+**Version:** 1.27.0 · **Last updated:** 2026-11-20 · **Owner:** Petr
 
 This document is the source of truth for how the game should work. Every
 change starts here: update the GDD on a feature branch first, then change the
@@ -154,6 +154,59 @@ Model: point-mass bike on a 2D plane, integrated per frame with fixed sub-steps.
 - **A stopped bike stays still.** It no longer creeps forward at about 1 km/h (the bug before 1.23.0).
 - **Hint:** the first time per session that the player's wheel spins in the gravel for over 1 s, the HUD shows *FEATHER THE THROTTLE*.
 - Unchanged: the crash chance when leaning in gravel above 22 m/s (§6), braking 0.40, cornering grip 0.34, grass.
+
+## 5b. Drive at lean (approved and built 2026-11-20, version set at Release)
+
+Asked by Petr (2026-11-20), riding the Onboard camera (§11p): "When accelerating I can go between maximum leans on each side and bike still goes in the same direction pretty much." The check (§11p, lean and turning check) found the lean and turning correct, but **at 50° of lean the bike accelerates exactly as hard as upright** (0.93 g at 117 km/h): the friction circle (μ 1.68 g) covers 1.19 g of cornering plus the 1.02 g wheelie limit. Real riders cannot open full throttle at big lean; they pick the bike up first. Petr: question 9, "yes".
+
+**Why the friction circle is not enough:** only the rear tyre drives, it carries the cornering load too, and a tyre on its edge gives less grip along its length than across it. The game's single circle for the whole bike leaves too much for drive at big lean.
+
+**Design**
+- **Drive cap by lean:** the drive the rear tyre can give falls with lean:
+  `aDriveMax = 0.2 g + (wheelie − 0.2 g) × (1 − smoothstep((|lean| − 25°) / (leanGrip − 25°)))`,
+  where `leanGrip = atan(gripMax / g)` is the lean at which the corner alone uses the whole grip (59° on warm, dry tyres; lower on cold tyres, kerbs or damage, so the cap falls earlier there).
+
+  | Lean | ≤ 25° | 35° | 45° | 50° | 59° (grip limit) |
+  |---|---|---|---|---|---|
+  | Drive allowed | 1.02 g (wheelie limit, as now) | 0.85 g | 0.51 g | 0.35 g | 0.20 g |
+  | Today | 1.02 g | 1.02 g | 1.02 g | 1.02 g | 0.23 g |
+
+  The numbers are a design choice to be tuned by riding (no sourced telemetry for drive against lean). Full drive up to 25° keeps straights, kinks and fast exits as they are.
+- **Rider aids on:** traction control holds the drive at the cap: no wheelspin, the bike simply accelerates less until it is picked up. The lean limiter is unchanged.
+- **Rider aids off:** drive above the cap spins the rear: the slip grows with the excess, at the rate aids-off slip grows today (`(excess / cap) × 3.4` per second), and as today a slip over 0.5 with the throttle open is a highside. Easing the throttle or picking the bike up lets the slip fall back as now.
+- **Braking is unchanged** (the front tyre and the friction circle, §5).
+- **Speed profile and AI:** the ideal speed profile's traction pass (`T.speedProfile`) uses the same cap, with the lean from the racing line's curvature (`atan(v² κ / g)`), so the speed guide (§9), the corner countdown targets (§11b) and the AI's target speeds stay achievable. The AI rides with aids on through the same `stepBike`, so it follows the cap by itself.
+
+**Lap times (check on this branch, before merging)**
+- Before: ideal profile 2:08.11; AI Pro about 2:12 (§8). About 32 s of the ideal lap is spent accelerating at more than 25° of lean and 22 s at more than 40°, so the lap gets slower; my estimate is 1–3 s.
+- Measured after the change and written here: the ideal profile lap; a headless AI Pro lap and its ratio to the profile (`AI_REAL`, now 0.99); a headless autopilot lap of the player's bike; acceleration from 100 km/h at 0°, 35° and 50° of lean (target: the table above).
+- Saved laps and ghosts set before this change were set with more drive. They stay as they are.
+
+**Built (2026-11-20)**
+- `driveCapAt(lean, gripMax)` in `src/core.js`. In `stepBike` the cap is checked against the drive the wheelie limit leaves (not the engine's raw drive, which in a low gear is several g and made the first version highside in 0.04 s): with aids the drive is held at the cap; without aids the excess grows the slip and the drive is held at the cap (the spinning wheel gives no more). `T.speedProfile`'s traction pass takes the cap at the racing line's lean.
+- **Measured (headless, `tests/unit` loader):**
+
+  | | Before | After |
+  |---|---|---|
+  | Ideal profile lap | 2:08.110 | 2:12.006 (+3.9 s) |
+  | Autopilot flying lap (player's bike, AI control) | 2:12.133 | 2:16.267 (+4.1 s) |
+  | Acceleration from 100 km/h, upright | 0.94 g | 0.94 g |
+  | at 35° of lean | 0.94 g | 0.77 g |
+  | at 50° of lean | 0.94 g | 0.27 g |
+
+  The accelerations are net of air drag (about 0.08 g at 100 km/h), so they sit that much under the cap table. The lap cost is more than the 1–3 s estimated: about 32 s of the lap is spent accelerating at more than 25° of lean. The autopilot's ratio to the profile stays the same (1.031 before, 1.032 after), so the AI follows the new profile; no crashes in the autopilot laps.
+- **Aids off, throttle opened at the keyboard's normal rate (7 per second) and held:** at 35° no wheelspin builds up; at 45° a highside after 0.23 s; at 50° after 0.14 s. Feathering the throttle or picking the bike up first avoids it.
+- Open question 4 (new): tune the shape after Petr rides it, if the lap is too slow.
+
+**Tests (GDD 13b)**
+- Unit tests: the new cap function (the table above, the cap falling earlier with less grip); `stepBike` at 50° of lean with aids on accelerates at no more than the cap (plus drag), and upright as before (0.93 g at 117 km/h); with aids off and full throttle at 50° the slip grows and a held throttle ends in a highside, while easing off lets it fall; `T.speedProfile` uses the cap (slower than before, and an AI bike can follow it: the headless AI lap within 2 % of the profile).
+- `npm run test:unit` before merging into `dev`.
+
+**Open questions (recommended answer in bold; the design above uses it)**
+1. The shape: full drive to 25°, falling to 0.2 g at the grip limit? **Yes**, then tune by riding. Alternative: start the fall at 15° for a stronger effect.
+2. Aids off: wheelspin and highside above the cap? **Yes**, it gives the throttle control real meaning. Alternative: only the cap, no highside.
+3. Old saved laps and ghosts: keep them as they are? **Yes**; a note in the CHANGELOG at release.
+4. The lap is 3.9 s slower (ideal 2:12.0). Keep the shape, or soften it (for example the fall starting at 30° instead of 25°, or the floor at 0.3 g instead of 0.2 g)? **Keep it** (Petr rode it, 2026-11-20: "5b is okay").
 
 ## 6. Collisions, crashes and damage
 
@@ -544,7 +597,7 @@ Asked by Petr (2026-10-28): "Create blur effect in high speeds. High speed - blu
   3. Cut the sharp area out of it with `destination-out`: the **road polygon** (both track edges plus kerb width plus 0.3 m, projected to the screen with `worldToScreen` for every track point inside the ground area, in contiguous runs so a second part of the track in view is cut out too, e.g. parallel straights) and an **ellipse around each bike and ghost** on screen (1.3 × its drawn length, so it covers the boosted sprite). The pit lane is not part of the road polygon. The mask is drawn at the same ¼ resolution, so its edge is soft over about 4 px, all of it on the outside of the 0.3 m margin.
   4. Draw the masked blur back over the screen, upscaled with smoothing, with `globalAlpha = s`. The road and the bikes stay as `projectTilted()` drew them; the surroundings cross-fade from sharp to blurred as `s` rises.
 - No `ctx.filter` (slow or missing in some browsers) and no extra pass over the ground layers or the tile cache: the cost is two small canvases (about 370 × 210 px on a 1470 × 830 screen), four small `drawImage` calls, one path of a few hundred points and one full-screen `drawImage`.
-- **Performance limit:** at full strength the blur may add at most **15 % to the frame time** of the same view without it (target: about 1 ms on the 1470 × 830 Retina reference screen). When the slow-machine quality drop lowers the tilted image quality (`TILT.q` below 1, §11a), speed blur is switched off for the rest of the session, before that it counts in the frame time like everything else.
+- **Performance limit:** at full strength the blur may add at most **20 % to the frame time** of the same view without it (target: about 1 ms on the 1470 × 830 Retina reference screen). It was 15 % until the 3D scenery (§11o): the blur draws the 3D walls, trackside and estate a second time so they smear too, and Petr raised the limit for that (2026-11-20). When the slow-machine quality drop lowers the tilted image quality (`TILT.q` below 1, §11a), speed blur is switched off for the rest of the session, before that it counts in the frame time like everything else.
 - Name tags and the HUD are drawn after it on the HUD layer, as now.
 
 **Settings**
@@ -989,6 +1042,167 @@ Asked by Petr (2026-11-18): the game is not smooth since the 3D bikes (1.26.0); 
 4. Cheaper rendering: no MSAA, single-sided materials, the 3D canvas at 1× on high-DPI screens.
 5. A low-detail bike (about 1,500–2,000 triangles) for bikes that are small on screen.
 
+## 11o. 3D track and scenery (approved 2026-11-19, phases 1 to 5 built, not released)
+
+Asked by Petr (2026-11-19): the track should be 3D, with trees and other objects around it, to make the bike feel really fast.
+
+**Where we are:** everything except the bikes is flat paint. The ground (road, kerbs, grass, gravel, walls, trees, grandstands, buildings) is drawn top-down into 2D canvases and warped onto the screen with the tilted-camera projection (§11a). Trees and grandstands are pictures lying on the grass, so nothing passes the camera at height. The strongest cue for speed is parallax: tall things close to the track rushing past faster than the ground under them. That is what is missing.
+
+**Approach:** move the world into the three.js scene the bikes already use (§11l), with the same camera (`gl3DProjection`), one phase at a time. Each phase is a separate feature branch, ends playable, and is released on its own. Physics, the track data, the AI and the Top-down camera do not change: the 3D is drawing only. Classic graphics and Top-down keep today's 2D world.
+
+**Rules for every phase**
+- 60 fps in Safari and Brave on Petr's MacBook at 1470×830 @2× in CLOSE, with 22 bikes; the P overlay (§11n) gets a line per new part.
+- Objects are built in code from simple shapes (low-poly boxes, cylinders, cones, flat cards) with no external files, so the game stays one HTML file. Many copies of one object are one draw call (three.js `InstancedMesh`).
+- Things far away or behind the camera are not drawn. Small far things switch to a cheaper version (level of detail).
+- Every new function gets its unit test (§13b); each phase adds browser checks to `tests/track3d.test.js`.
+
+**Phase 1: the ground in 3D (foundation, looks the same).**
+- The ground is one large plane in the 3D scene, textured with today's baked ground canvases (the near and far bands, §11a). The GPU does the perspective, so the 1,000 strips per frame of `projectTilted` go away. That is the cost behind Brave's 30 fps (§11n), and it removes the 0.6 px bends of the 2-row fallback in every browser.
+- The 3D bikes and the ground are in one canvas and one depth buffer, so a bike can later pass behind a tree or a grandstand.
+- Speed blur (§11f) moves with it: the same three zoomed copies, done in a final shader pass, with the road and bikes cut out as now.
+- Done when: the tilt seam, camera and speed blur checks still pass; the picture matches today's within 2 px; Brave runs at 60 fps with the sharp road.
+- **Built (`src/track3d.js`):**
+  - The ground bands are drawn as three textured quads in their own three.js scene, before the bikes, on the 3D canvas (`#gl3d`, §11n): the near band, the far band where it fades in over the top `hB` of the near band (alpha 0 to 1, as `projectTilted`), and the rest of the far band. A ground-canvas point `(cx, cy)` sits at `(cx − RW/2, (cy − RH)·cos a, (cy − RH)·sin a)` in the frame of `gl3DProjection`, so it lands exactly where `worldToScreen` puts it. The band canvases are uploaded as textures each frame (they are redrawn each frame anyway).
+  - The sky (gradient and haze) stays on the 2D game canvas, under the 3D canvas; `projectTilted` is not called.
+  - Speed blur: the ground is drawn into a 1/2-resolution image; a shader zooms it about the horizon point from 1 to 1 + k times in 8 equal steps into a 1/4-resolution image, with the road and bikes cut out (a 1/4-resolution mask canvas); a last pass lays that over the screen at the blur strength, one sample per pixel. Same strength curve, horizon point and cut-out as §11f. 8 steps instead of 3 copies: the GPU samples without averaging, so 3 copies showed as 3 separate images. The sky is not in the blur image, so it is not hazed over. Cost in headless Chromium (software WebGL, GPU included): +12 % of the world drawing, limit 15 %.
+  - Browser tests that read the screen now read the game canvas with the 3D canvas over it, in the same frame (`screenX()` test hook; the sky check of `camera_tuning`, `speed_blur`), and the frame-cost checks wait for the 3D canvas too.
+  - Used when the 3D bikes are (3D graphics, tilted camera, WebGL). Classic graphics, Top-down and machines without WebGL keep the 2D projection, with the 2-row strip step for slow machines (§11n).
+  - Tests: `tilt_seam.test.js` runs every case also through the 3D ground (bends 0.29–0.35 px, limit 0.5; sharpness step at most 10 %, limit 15 %); unit tests in `tests/unit/track3d.test.js`.
+
+**Phase 2: walls, barriers and fences with height.**
+- Concrete walls and Armco barriers on today's wall line, about 1 m high; tyre walls on the outside of the fastest corners (Copse, Maggotts, Stowe, Club, Abbey).
+- Debris fence on top of the walls: posts every 3 m, about 3 m tall, with a see-through mesh. Posts every few metres are the main speed cue: at 300 km/h about 28 of them pass each second.
+- Kerbs get a few centimetres of height and a sloped edge, so they catch the light.
+- Done when: walls follow the track edge checks of `track_edges.test.js` (no square ends, no jumps), and no wall or fence crosses the road or the pit lane.
+- **Design (approved 2026-11-20, built, `src/scenery3d.js`):**
+  - **Where:** on today's wall line `T.WALL` (both sides, the garage frontage left open as now), plus the pit wall (`PIT.wallD`, beside the flat pit lane). The line already keeps clear of the road, the run-off and the pit lane, and has no square steps (§1.11.4), so the 3D walls inherit that.
+  - **Heights are scaled like the bikes:** the bikes are drawn 1.35× real size (`PHYS.VS`), so heights are 1.35× too, or a 1 m wall would look knee-high next to a rider. Real values below; footprint on the ground stays real.
+  - **Concrete wall** (default): 1.0 m high, 0.5 m thick, grey with a light top edge, painted in 6 m blue and white blocks on the track face (as the flat wall today).
+  - **Armco** where the wall stands far back (more than 20 m from the track edge): two steel rails at 0.45 and 0.75 m on posts every 4 m. Lower and see-through, so the land behind still shows.
+  - **Tyre walls** on the outside of Copse, Maggotts, Stowe, Club and Abbey (from 60 m before to 60 m after each corner): 1.0 m of stacked black tyres with a coloured belt (red and white blocks) in front of the concrete.
+  - **Debris fence** on top of concrete and tyre walls and the pit wall: posts every **4 m** (not 3 m) up to 3.0 m above the ground, a top rail, and a see-through dark mesh between wall and rail (about 25 % cover). 4 m because at 330 km/h a bike moves 1.5 m per frame at 60 fps: with posts 3 m apart that is half the spacing, where the eye can read posts as standing still or going backwards (the wagon-wheel effect); at 4 m it stays well under half. That still gives 21 posts a second at 300 km/h.
+  - **Built once, moved by one matrix:** all walls, rails, tyres and fence panels are built once in world metres when the track is loaded; posts are one `InstancedMesh`. Each frame they get one matrix from world metres to the camera frame (the same affine map as `gl3DPlanePoint`), so the CPU cost per frame does not grow with the number of posts. Split into pieces of about 250 m; a piece is drawn only if it reaches into the ground area on screen.
+  - **One depth buffer with the bikes:** they are in the bikes' scene, lit by the same sun, so a bike can pass behind a wall and the walls hide each other correctly.
+  - **Far edge:** the ground ends at the far band's edge (§11a), so walls fade into the haze colour over the last 40 % of the ground depth (fog) and are cut at the ground's far edge and sides; nothing stands in the sky.
+  - **Speed blur:** the walls and fences go into the blur image with the ground (§11o phase 1), so they smear at top speed like the land, and the road and bikes stay sharp.
+  - **The flat walls go:** while the 3D walls are on, the ground tiles leave out the flat wall and fence lines and draw a soft contact shadow at the wall foot instead, so the walls sit on the ground. Switching (Classic, Top-down, no WebGL) rebuilds the tiles with the flat walls.
+  - **Kerbs: no height (changed from the plan).** A few centimetres are 1 px or less from the CLOSE camera, so it would cost work and frame time for nothing visible.
+  - P overlay: a "3D walls" line (pieces drawn, ms). Test switch **7**: 3D walls on/off.
+  - Tests: unit tests for each function; `tests/track3d.test.js` (new browser test): over the whole lap no wall, rail, tyre or post point is on the road, the kerbs, the run-off or the pit lane (`T.surface`); walls change by at most 1.5 m between neighbouring points (as `track_edges`); with walls on, the screen at the start/finish and Hangar Straight has pixels above the ground line that the walls drew (they stand up); frame cost of the walls under 15 % of the world drawing.
+  - **Built, results:** 24 pieces, about 58,000 triangles and 2,900 posts over the lap; 2–3 pieces are drawn at a time. Where the wall line would stand in another part of the circuit's run-off or gravel (where two parts come close, about 80 m in all), the barrier leaves a gap; the flat walls were drawn through there. The pit wall stands on the strip between the track and the pit lane, as the flat one did. Frame cost in headless Chromium: +3 % of the world drawing (limit 15 %). The 3D seam checks of `tilt_seam` measure the ground with the walls off (they stand over its test pattern).
+
+**Phase 3: trees, grandstands, buildings.**
+- Trees as real 3D objects (trunk plus 2–3 leaf cones or a rounded crown), 3–5 types, up to about 3,000, in groups behind the run-off as now. Far trees become flat cards that always face the camera.
+- A tree line on the horizon, as a strip of cards, so the land does not end in haze.
+- Grandstands as stepped blocks with a crowd texture and a roof; the Wing pit building and garages as boxes with the team doors (today's layout in `SCN`).
+- Done when: no object stands on the road, the run-off, the gravel or the pit lane (checked over the whole lap); 60 fps with all of it in view at Abbey and Club.
+- **Design (approved 2026-11-20, built, `src/estate3d.js`):** the scenery that is already laid out in `SCN` (§12) stands up; nothing moves.
+  - **Trees:** the 1,493 trees of `SCN.trees` (crown radius 2.5–7.5 m) become low-poly 3D trees in 4 types, picked from each tree's variant: round broadleaf (faceted ball crown), wide broadleaf (two overlapping balls), conifer (three stacked cones), poplar (tall narrow crown). Trunk 0.3–0.6 m. Height from the crown size: 1.6 × radius + 2 m, so 6–14 m (scaled 1.35× like the bikes). Leaf colour varies a little per tree (instance colours). One `InstancedMesh` per type for the whole estate: 4 draws in all.
+  - **No flat-card level of detail (changed from the plan):** with 1,500 trees at 40–80 triangles each the GPU draws about 90,000 triangles of trees, cheap enough that cards would add work and popping for nothing. If Safari or Brave says otherwise, cards come back.
+  - **Tree line on the horizon:** a strip of tree silhouettes standing on the far edge of the ground, tinted towards the haze, which turns with the camera (it is far away, so it does not slide sideways). The land then ends in a tree line, not in fog. (Taken out in phase 5, open sky: it read as a bar.)
+  - **Grandstands** (10, at the classic viewing spots): stepped blocks rising from 1 m at the front (the track side) to 8 m at the back in 8 tiers, a crowd texture on the tiers (coloured dots, drawn once), a white back wall, and a roof on pillars at 12 m.
+  - **The Wing:** the garage block along the pit lane, 6 m high, dark grey with the 22 team-coloured garage doors (4 m high, by box), and behind it the office block to 11 m under a white roof slab with a blue edge that rises towards the back. The pit boxes painted on the ground stay as they are.
+  - **Paddock buildings** (56 team units): white boxes 3.5 m high with the team colour band.
+  - **The flat drawings leave the ground tiles** while 3D scenery is on (tree crowns, stands, buildings, the Wing roof); the soft tree shadows stay on the ground so the trees sit on it. Test switch 7 still covers all 3D scenery.
+  - **Placement:** the layout already keeps clear of the track (`trackClear`), the pit compound and the stands. New rule: a tree that would touch a marshal post, a camera tower or a gantry pillar (phase 4) is left out.
+  - **Could hide the bike:** a tall tree on the inside of a tight corner can stand between the camera (28 m up, about 45 m behind) and the bike for a moment. I will watch for it at the tight corners (the Loop, Vale, Club) and lower or drop trees there if it happens.
+  - Tests: unit tests for each function; the whole-lap placement check covers trunks, stands and buildings; `tests/track3d.test.js`: a tree stands up (its crown above its shadow), a grandstand shows its crowd, the Wing's doors show in the team colours, the tree line is on the horizon; frame cost of all 3D scenery at Abbey and at Club under 15 % (headless), and the fps check in Safari and Brave by Petr.
+  - **Built, results:** all 1,493 trees (none had to give way to a phase 4 object), 10 grandstands, 56 paddock units and the Wing, about 55,000 triangles. The estate is cut into 39 cells of 300 m and only the cells reaching into the ground area are drawn: drawing all of it every frame cost +16 % at Abbey and +22 % at Club in headless Chromium; with the cells +8 % at both (walls, trackside and estate together; limit 15 %). Speed feel at the screen edges with all 3D scenery: +71 %.
+  - **Horizon cut:** the scenery is cut by the plane through the eye and the ground's far edge (it was cut at the far edge itself), so tall far trees no longer stand in the sky as pale shapes; the tree line (4 m, tinted most of the way to the haze) covers the cut. Phase 5 (open sky) replaced both: the haze goes by ground distance, the cut is upright at the far edge, and the tree line is gone.
+  - **Wall shadows follow the 3D walls:** the contact shadow in the ground tiles is drawn only where a 3D wall stands, not across the gaps of phase 2 (it showed as a dark line across the gravel at the Loop).
+  - **Bike hidden by trees:** not seen at the Loop, Vale or Club in the test views; no trees were lowered.
+  - **Speed blur frame cost:** `speed_blur.test.js` measures +15.4–15.6 % in three runs. The blur draws the 3D scenery a second time into its own image, so the walls, trackside and estate smear (phase 2); without the estate it is +14.6 %, the estate adds about 1 ms. Unlit materials for the estate make no difference. Petr's decision (2026-11-20): keep the scenery in the blur and raise the blur limit from 15 % to 20 % (§11f).
+
+**Phase 4: trackside rhythm (the most speed per triangle).**
+- Small, repeated objects close to the track: marshal posts with flags every 250–300 m, distance boards in 3D (300/200/100 before braking zones), advertising boards along the walls (fictional brands only), light posts, TV camera towers, a few gantries over the track (start/finish gantry with lights, sponsor bridge on Hamilton Straight).
+- A gantry over the road is the biggest single "whoosh": something tall that the camera passes under.
+- Done when: the speed-feel checks show more on-screen motion at the same speed than Phase 3 (measured as pixel change at screen edges per frame at 300 km/h).
+- **Design (approved 2026-11-20, built in `src/trackside3d.js`, into the same 250 m pieces as the walls):**
+  - **Camera height, a correction to the plan:** the CLOSE camera looks down from about 28 m above the road (Behind about 53 m), so the rider passes *over* a gantry, not under it. A gantry still sweeps down the screen as the tallest thing near the road, but the "under the bridge" moment needs the lower camera of Phase 6.
+  - **Distance boards in 3D:** the 44 braking boards (300/200/100/50 before each braking zone, `T.boards`) stand up where the flat ones lie today (3.2 m beyond the track edge): white 2.2 × 1.1 m boards with black numbers on two legs, bottom edge 0.4 m up, facing the oncoming rider. No collision, as now (physics unchanged).
+  - **Distance posts in 3D:** the white posts every 25 m on the straights (§11h, 219 of them) become 1 m white posts with a black band.
+  - **Marshal posts** every 275 m, alternating sides, 2 m behind the wall: a small white hut 1.6 × 1.6 × 2.4 m with an orange roof and a flag pole with a yellow and a green flag (still).
+  - **Advertising boards** on the track face of the fences, from 1.0 to 1.9 m, 6 m panels in a repeating row of 8 fictional brands: on the outside of every corner (100 m either side) and along the start/finish straight. Brands (made up for the game, not checked against trademark registers; they avoid known brand words): **KESTRAN**, **VOLTANO**, **NOVAPEAK**, **ZEFIRA**, **RIVALTO**, **OKTARA**, **BRAKEMOR**, **HELIXON**, each in its own colours, drawn once into a texture.
+  - **TV camera towers** on the outside of 10 corners: scaffold tower 5 m high with a platform and a camera box. **Light posts: left out** (Silverstone has no floodlights), the fence posts already give that rhythm.
+  - **Gantries** (7 m clear over the road, pillars outside the walls): the start/finish gantry with five red start lights over the grid, from the left wall to the pit wall; and two sponsor bridges, on the Wellington Straight and the Hangar Straight (no bridge on Hamilton Straight: that is the start/finish straight, with the start gantry).
+  - **Placement rule as Phase 2:** nothing on the road, kerbs, run-off, gravel or pit lane, except the distance boards, which stand where the flat ones are today; gantry pillars stand behind the walls.
+  - The flat braking boards and distance posts leave the ground tiles while the 3D scenery is on, as the walls did. Test switch **7** becomes "3D scenery" (walls and trackside together).
+  - All of it in the same pieces: the boards and ads share one texture (one draw per piece), posts, huts, towers and gantries go into the existing vertex-colour and instanced meshes.
+  - Tests: unit tests for each function; whole-lap placement check extended to the new objects; `tests/track3d.test.js`: a 3D braking board stands up at the end of the Hangar Straight, the start gantry shows over the grid, and **speed feel** (the done-check above): over 60 frames at 300 km/h along the Hangar Straight to Stowe, the pixel change per frame in the outer 25 % of the screen is larger with the scenery on than off; frame cost of all 3D scenery under 15 %.
+  - **Built, results:** 44 braking boards, 219 distance posts, 21 marshal posts, 8 camera towers (2 of the 10 corners have no clear spot behind the wall), the start gantry and two bridges; with the walls about 63,000 triangles, 3,300 posts and 880 textured cards over the lap. Placement over the whole lap: only the braking boards' legs stand off the grass (on run-off, where the flat boards lie). Speed feel at 273 km/h on the Hangar Straight: pixel change per frame at the screen edges +69 % with the 3D scenery. Frame cost in headless Chromium: +5 % for walls and trackside together (limit 15 %).
+  - Seen in testing: for a moment just after the rider passes under the start gantry, its beam hides the bike (the camera is behind and above, and the beam stands between them).
+
+**Phase 5: depth of the world.**
+- Sky dome with a sun and clouds that move slowly, light fog with distance, soft shadows of walls and stands on the ground (baked once, not per frame).
+- Gentle hills around the circuit (Silverstone is nearly flat; the track itself stays flat, the land beyond the walls rises and falls by a few metres) so the view is not one flat sheet.
+- **Design (approved 2026-11-20, built, `src/sky3d.js`):**
+  - **What the camera sees, measured:** the sky is a thin strip at the top of the screen, 7.7 % in CLOSE (64 of 830 px, camera tilt 55°) and 8.7 % in Behind, and the ground ends at a haze line about RH ahead. A sun high in the sky is never in view, and a few metres of hills 300 m away cover only a few pixels. So this phase works where it shows: the sky strip, the horizon line, and shadows on the ground, which fill most of the screen.
+  - **One sun, fixed in the world:** the sun stands to the north-west on the map (−x, −y), 40° high. This matches the shadows the 2D game already draws (bikes and trees cast towards +x, +y). Today the 3D light of the walls and estate turns with the camera, so a stand's lit side changes as the rider turns. From now on that scene's sun light is turned by the camera rotation every frame, so the lit and dark faces stay put in the world and agree with the shadows on the ground. The bikes keep their own light (open question 1).
+  - **Shadows on the ground (baked into the ground tiles, drawn once per tile, no per-frame cost):** each 3D object casts its shape along the sun, 1.2 × its height long (sun at 40°), soft-edged, in the same dark as the 2D shadows (about 28 % black):
+    - stands (roof 12 m: about 14 m of shadow), the Wing and the office block, the paddock units, buildings;
+    - the start gantry and the two bridges: their beams lay a dark band across the road, which the rider crosses at speed (a strong speed cue, and the road is on screen all the time);
+    - camera towers, marshal posts, braking boards (a thin strip each);
+    - trees keep their round shadows, moved to lie along the sun at 1.2 × the tree's height (today about half a radius off);
+    - the walls keep their contact shadow.
+    These come back to what 2D mode had: since phase 3, stands and buildings stand in 3D with no shadow at all (`drawBuildings` returns early while the 3D scenery is on). Key 7 (3D scenery off) also takes the shadows off with it.
+  - **Sky strip with clouds (built, then taken out: no sky for now, see the end of this phase):** the sky stays on the 2D game canvas under the 3D layer, the same blue-to-haze gradient. Over it goes one cloud texture (made in code once, soft white puffs on a 2048 px wide strip that wraps around), drawn in the strip above the horizon:
+    - it slides sideways when the camera turns (a full turn = one strip width, like the tree line), so corners show in the sky too;
+    - it drifts slowly on its own (about one strip width in 10 minutes) on the game clock: it stops while the game or the replay is paused, so a paused picture stays still;
+    - towards the sun's side the sky is a little brighter and warmer (a broad glow, no sun disc, since the sun is above the screen).
+  - **Hills on the horizon, not in the land (built, then taken out by the "open sky" fix below):** a strip of low distant hills (2.5–4.5 m high as at the ground's far edge, so they show above the 4 m tree line's lower tops without filling the sky strip, in a blue-grey between the tree line and the sky) stands just behind the tree line and slides with the camera in the same way. It breaks the straight line where the ground meets the sky, which is the only place hills would show from 28 m up. The land itself stays flat (open question 2).
+  - **Fog with distance:** already in place since phases 1–3 (the 2D haze over the far 22 % of the ground and the matching 3D fog). This phase only makes the clouds and hills fade into the same haze colour at the horizon; the haze itself does not change.
+  - Classic graphics and Top-down stay as they are. The speed blur does not take in the sky strip (as today).
+  - **Cost:** clouds and hills are two `drawImage` calls per frame on the 2D canvas; the shadows cost only when a tile is drawn (tiles are cached); the sun turn is one vector per frame. Target: phase 5 adds at most 3 % frame time in CLOSE (headless) and does not move the speed blur check.
+  - **P overlay:** no new line (the clouds and hills are part of the sky drawing, the shadows part of the tiles).
+  - **Tests:** unit tests for each function; `tests/track3d.test.js`:
+    - the clouds move: standing on the grid, the sky strip changes over 10 s; turning through a corner, the sky strip slides the way the camera turns;
+    - the horizon is not a straight line: the hills strip makes the row where the ground meets the sky vary across the screen;
+    - shadows: a road patch under the start gantry's shadow is darker than the road beside it, and the ground on the shadow side of the Abbey stand is darker than on its sun side; with key 7 off, both differences go away;
+    - one sun (unit test `sunLightPlace`): a face towards the sun is lit the same before and after the camera turns by 90°;
+    - frame cost of phase 5 under 3 %; `camera_tuning`'s sky check (at most 12 %) still passes.
+  - **Built, results:** about 450 trackside boxes and posts, the 10 stands, the 56 paddock units and the Wing (in 4 m slices) cast baked shadows; the trees' round shadows lie along the sun. The start gantry's shadow crosses the road just past the line. Hills 2.5–4.5 m (the first try at 4–10 m filled the whole sky strip). The clouds are 16 wide soft clusters (a first try with 70 small puffs read as speckle) and drift on the game clock, so a paused game or replay stands still (the speed blur test compares frames that must be identical). Frame cost against `dev` in headless Chromium, CLOSE at 250 km/h: −0.3 % (Hangar Straight), +0.2 % (Abbey), +0.8 % (Club), within the noise (target 3 %). All 3D scenery together at Abbey and Club: +8 to +14 % over three runs (limit 15 %; phase 3 measured +8 %; the spread is the headless timing). Speed blur +14.4 to +15.6 % (limit 20 %); CLOSE sky 3.2 % (limit 12 %).
+  - **Questions, answered by Petr (2026-11-20):** 1 no, 2 not now (planned as Phase 7), 3 as recommended.
+    1. Should the bikes' light also be fixed in the world? Then a bike riding towards the sun shows its dark side, which matches the shadows but changes the look you approved in §11l. **No: keep the bike light as it is; only the scenery gets the world sun.**
+    2. Should the land rise and fall as real 3D hills? It needs the ground plane cut into a grid that follows a height map, every tree, stand and building raised to the height under it, and the seam tests run with the hills off. From 28 m up, a few metres of rise 200 m away shows as a few pixels. **No: hills on the horizon strip only. Real 3D land can come with the lower camera of Phase 6, where it would show.**
+    3. A low sun (warm, long shadows) or a midday sun (short shadows)? **40°, mid-afternoon: shadows long enough to read (1.2 × height) without covering the road at the stands.**
+  - **Fix: open sky, no bar (Petr 2026-11-20: "there is a bar on top with clouds and it doesn't look really nice; can it be removed or replaced with real clouds and sun without a bar showing"). Approved (a), built:**
+    - **Why it reads as a bar:** from the top, the strip shows clouds, then a flat pale band (the haze over the clouds, the blue-grey hills and the pale tree line, all about the same colour), then a hard straight line where the ground starts. Just below that line the ground is still clearly green and grey, so the band looks like a strip glued over the top of the picture, not like sky.
+    - **The change:**
+      - The tree line (phase 3) and the hills strip (phase 5) go.
+      - The scenery's haze is measured along the ground (how far ahead its foot stands), not as depth from the eye, so a tall tree near the far edge fades as a whole instead of its top showing clearer than its foot. The cut moves from the plane through the eye and the far edge (which cut tall trees flat at the horizon line, hidden until now by the tree line) to an upright plane at the far edge: trees, stands and the Wing stand up into the sky, the far ones in the haze's colour, and nothing beyond the ground shows.
+      - The ground fades all the way into the sky's colour at the far edge: the last stretch of the 2D haze and the 3D fog both end fully opaque in one shared horizon colour, and the sky gradient starts from exactly that colour. The hard line goes away; land and sky meet in soft haze, as on a real summer day.
+      - The clouds fill the whole strip and thin out towards the horizon (smaller and fainter low down, as distant clouds look), with no separate haze rectangle over them.
+      - The sun: at 40° it is far above the top of the screen (CLOSE shows only a few degrees above the horizon), so a sun disc can't show without lying about the shadows. The warm glow towards the sun stays and gets a little stronger, with the clouds on that side lit warmer.
+    - **Stays:** the shadows, the world sun light, the cloud drift on the game clock, the sky in Classic and Top-down.
+    - **Tests:** the phase 5 "hills vary the horizon" check is replaced by "no hard line at the horizon": the colour step between the rows just above and just below the far edge stays under a small limit across the screen; the phase 3 "tree line on horizon" check goes; the cloud checks stay. Unit tests follow the changed functions.
+    - **Petr chose (a)** (2026-11-20): a soft horizon with clouds and the sun glow (the other choice was no clouds at all).
+    - **Built, results:** the colour step across the horizon went from about 100 (pale tree line 159,179,166 over the hazy ground 191,208,209) to about 6 (sky 202,217,222, ground 200,215,220). The clouds come as a near row up high and a far row at half the size, fainter, lower down; the haze at the sky's foot is whole at the horizon; the glow (65 %, a little wider) lies over the clouds. Near trees and the stands now reach into the sky uncut.
+  - **No sky for now (Petr 2026-11-20: "remove sky completely, let's work on that later"), built:**
+    - The sky is gone in every 3D view mode (Classic too): behind the ground the 2D canvas is one haze colour (#c9d8de), the colour the far ground and the 3D scenery fade into, so the strip above the far edge reads as haze, not as sky. No blue gradient, no clouds, no glow, no cloud clock.
+    - Kept from the open-sky fix: no tree line or hills, the scenery's haze by ground distance and the upright cut at the far edge (near trees and the stands reach up into the haze uncut), the world sun and the baked shadows.
+    - Tests: the cloud checks are replaced by "no sky: plain haze above the far edge" (largest difference from the haze colour at most 6 on a row in the strip); the "no hard line at the horizon" check stays; the speed blur test no longer holds the clouds.
+    - **Later:** the sky is to be designed again in its own step (Petr: "let's work on that later").
+
+**Phase 6 (optional, Petr to decide later): a lower chase camera.**
+- A true 3D world allows a camera just behind and above the rider, at about 1.5 m, looking along the road, like TV on-board shots. It is the most intense sense of speed, but it is a new camera with its own tuning (§11a), so it is listed separately.
+
+**Phase 7 (planned, Petr 2026-11-20: "not now, prepare for another phase"): land in 3D.**
+- The land beyond the walls rises and falls by a few metres as real 3D ground; the track, its kerbs, run-off and gravel and the pit lane stay flat.
+- What it takes (from the phase 5 question 2):
+  - **Height map:** one height per point of the land from a smooth noise, 0 within about 40 m of the track, run-off, gravel and the pit compound, rising to its full ±4 m over the next 100 m, so no wall, board or post stands on a slope.
+  - **Ground mesh:** the far and near ground quads (phase 1) become grids (for example 48 × 32 cells) whose points sit at the height under them; the texture (the baked ground canvases) stays as it is, mapped by canvas position, so nothing in the tiles changes.
+  - **Objects on the land:** every tree, stand, building and the Wing raised to the height under its foot when the estate is built (one number each, no per-frame cost); the tree line and the horizon hills strip (phase 5) stay.
+  - **Shadows:** the baked shadows (phase 5) stay flat on the tiles; on a slope they are a little off, which reads as normal at this height.
+  - **Tests:** the seam tests (`tilt_seam`) and the speed blur run with the land flat (test switch 7 already turns all 3D scenery off); a whole-lap check that the height is 0 under every wall, board, post and the road.
+- Best done together with, or after, the lower camera of Phase 6: from the CLOSE camera 28 m up, a few metres of rise 200 m away shows as a few pixels; from 1.5 m up it fills the view.
+
+**Order and size (rough):** Phase 1 is the largest and riskiest (the ground, blur and all camera tests move); Phases 2–4 are each about one session of work plus tuning by eye; Phase 5 is small; Phase 6 is its own design, Phase 7 goes with it. Recommended order: 1, 2, 4, 3, 5 (fences and trackside rhythm give more speed per frame-time than trees), then decide on 6 and 7.
+
+**Open questions (recommended answer in bold)**
+1. Objects built in code, or modelled in Blender like the bike? **Code for walls, fences, posts, boards and gantries (simple shapes, many copies); Blender only if a hero object (the Wing, a bridge) needs it later.**
+2. Keep Classic and Top-down as 2D? **Yes, as fallback and for phones that cannot run it.**
+3. Real brand names on boards? **No, fictional only, as for the teams.**
+
 ## 12. Track and graphics
 
 - Centreline from the TUMFTM racetrack-database (LGPL-3.0), resampled every ~2 m (5 888 m, 2 944 points); start line at the real finish line.
@@ -1010,7 +1224,7 @@ Asked by Petr (2026-11-18): the game is not smooth since the 3D bikes (1.26.0); 
   - static world baked into 512 px tiles of 40 m (LRU cache of 160);
   - device pixel ratio capped at 1.5, dropping to 1 when frames are slow;
   - only dynamic things are drawn each frame;
-  - speed blur (§11f) works on a ¼-resolution copy of the screen, costs at most 15 % of the frame time and is switched off by the slow-machine quality drop;
+  - speed blur (§11f) works on a ¼-resolution copy of the screen, costs at most 20 % of the frame time and is switched off by the slow-machine quality drop;
   - target 60 fps.
 - Smooth motion (since 1.11.2): physics runs at 120 Hz, the screen at its own rate. Riders are drawn between the last two physics steps, so the camera does not stutter when the frame clock and the physics drift apart.
 - Tests: `node tests/camera_shake.test.js [index.html]` (needs Playwright with Chromium) drives the real game loop with a fake frame clock (about 60 fps with ±1.5 ms jitter) and records the camera every frame.
@@ -1037,7 +1251,7 @@ Asked by Petr (2026-11-18): the game is not smooth since the 3D bikes (1.26.0); 
   - **Top-down unaffected:** with the Top-down camera, frames at 340 km/h are identical with blur On and Off.
   - **Option Off:** with Speed blur Off on the start screen there is no blur at 340 km/h, and the choice is kept after a reload; the strength slider at 0 does the same for that camera only.
   - **Replay:** a recording passing 340 km/h, replayed and paused there, shows the blur; paused at a point below 260 km/h, it does not.
-  - **Frame cost:** over 300 frames at 340 km/h (1470×830, 2× pixels, CLOSE) the median time of drawing the world plus the blur is at most 15 % above the same with blur Off.
+  - **Frame cost:** over 300 frames at 340 km/h (1470×830, 2× pixels, CLOSE) the median time of drawing the world plus the blur is at most 20 % above the same with blur Off (15 % before §11o phase 3).
   - v1.16.0 fails it (no blur at top speed).
 - Since 1.17.0 `tilt_seam.test.js` and `camera_shake.test.js` run with Speed blur Off, so their measurements stay as before; `camera_tuning.test.js` expects 15 sliders (the three blur sliders added) and checks that they are saved per camera and reset by Reset to defaults.
 - `npm test` runs the full suite, unit tests and browser tests (§13b; needs `npm install` and `npx playwright install chromium` once).

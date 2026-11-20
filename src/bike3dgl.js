@@ -13,14 +13,21 @@ function gl3DInit() {
     canvas.id = 'gl3d'; canvas.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;display:none;pointer-events:none';
     cv.after(canvas);
     const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
-    renderer.setClearColor(0x000000, 0);
+    renderer.setClearColor(0x000000, 0); renderer.autoClear = false; // gl3DDraw clears once, then draws the ground and the bikes
     GL3D.canvas = canvas; GL3D.renderer = renderer; GL3D.scene = new THREE.Scene(); GL3D.cam = new THREE.Camera();
-    GL3D.scene.add(new THREE.AmbientLight(0xffffff, 0.55));
-    const sun = new THREE.DirectionalLight(0xffffff, 1.5); sun.position.set(0.35, -0.5, 0.8); GL3D.scene.add(sun);
-    const fill = new THREE.DirectionalLight(0xdfe8ff, 0.5); fill.position.set(-0.6, 0.4, 0.3); GL3D.scene.add(fill); // soft fill from the other side, so the shadow side is not black // in the view frame: from the viewer's side, above
+    gl3DAddLights(GL3D.scene);
     GL3D.ok = true;
   } catch { /* no WebGL here: the 2D bikes are drawn */ }
   return GL3D.ok;
+}
+// the lights of the 3D scenes (bikes, walls): ambient, the sun from the viewer's side above, and a soft fill from the
+// other side so the shadow side is not black; directions in the view frame (the walls scene turns them to the sun
+// fixed in the world each frame, sunLightPlace); returns the sun and the fill
+function gl3DAddLights(scene) {
+  scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+  const sun = new THREE.DirectionalLight(0xffffff, 1.5); sun.position.set(0.35, -0.5, 0.8); scene.add(sun);
+  const fill = new THREE.DirectionalLight(0xdfe8ff, 0.5); fill.position.set(-0.6, 0.4, 0.3); scene.add(fill);
+  return { sun, fill };
 }
 // clip = M * [u, Y, Z, 1]; ndc = clip / w. Screen x = VW/2 + u*P/w, screen y = VH + Y*P/w, w = P - Z: the worldToScreen
 // projection, with the road plane at height Y (down the screen) and Z (towards the viewer). Depth: nearer is smaller.
@@ -211,15 +218,18 @@ function gl3DShow(on) {
 function gl3DDraw(list) {
   if (!gl3DInit()) return false;
   gl3DPrune(list);
-  gl3DShow(list.length > 0);
-  if (!list.length) return false;
+  const ground = ground3DOn(); // the ground is drawn on this canvas too (GDD 11o)
+  gl3DShow(list.length > 0 || ground);
+  if (!list.length && !ground) return false;
   const w = cv.width, h = cv.height, P = tiltP();
   // resize only when the page size changes: setSize rewrites the canvas size every call, which reallocates the canvas
   if (GL3D.w !== w || GL3D.h !== h) { GL3D.renderer.setPixelRatio(1); GL3D.renderer.setSize(w, h, false); GL3D.w = w; GL3D.h = h; }
   GL3D.cam.projectionMatrix.set(...gl3DProjection(P)); GL3D.cam.matrixWorldInverse.identity();
   let t = performance.now();
   for (const b of list) { gl3DPlaceBike(b); }
-  GL3D.renderer.clear(); GL3D.renderer.render(GL3D.scene, GL3D.cam);
+  GL3D.renderer.clear();
+  if (ground) { ground3DRender(); }
+  if (list.length) { GL3D.renderer.render(GL3D.scene, GL3D.cam); }
   perfAdd('gl3d', t); PERF.gl3d = list.length;
   return true;
 }

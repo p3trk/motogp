@@ -289,7 +289,7 @@ const T = {};
     }
     for (let rep = 0; rep < 2; rep++) for (let k = 0; k < 2 * N; k++) { // traction (forward)
       const i = k % N, nx = (i + 1) % N, v = Math.max(V[i], 3); const alat = v * v * Math.abs(RK[i]);
-      const aEng = Math.min(PHYS.wheelie, PHYS.pMax * 0.97 / (m * v)), aGrip = Math.sqrt(Math.max(0, gmax * gmax - alat * alat));
+      const aEng = Math.min(PHYS.wheelie, PHYS.pMax * 0.97 / (m * v), driveCapAt(Math.atan(alat / G), gmax)), aGrip = Math.sqrt(Math.max(0, gmax * gmax - alat * alat));
       const aa = Math.max(0, Math.min(aEng, aGrip) - drag(v));
       V[nx] = Math.min(V[nx], Math.sqrt(v * v + 2 * aa * RDS[i]));
     }
@@ -391,6 +391,13 @@ function leanRiderRate() {
   const mr = PHYS.massRider, mb = PHYS.massBike;
   return LEAN_RIDER_SHIFT * mr * LEAN_H_RIDER / (mb * LEAN_H_BIKE ** 2 + mr * LEAN_H_RIDER ** 2);
 }
+// the drive (m/s2) the rear tyre can give at this lean (GDD 5b): the wheelie limit up to 25 degrees, then falling
+// smoothly to 0.2 g at leanGrip, the lean at which the corner alone uses the whole grip gripMax (m/s2). Only the rear
+// tyre drives, it carries cornering load too, and on its edge it grips less along its length than across it.
+function driveCapAt(lean, gripMax) {
+  const L0 = 25 * DEG, leanGrip = Math.atan(gripMax / G), floor = 0.2 * G;
+  return floor + (PHYS.wheelie - floor) * (1 - sstep((Math.abs(lean) - L0) / Math.max(leanGrip - L0, DEG)));
+}
 function leanRate(v) { return Math.min(leanRiderRate(), LEAN_DAMP / Math.max(v, 1)); }
 // the most a bike leans at speed v (m/s), to either side (GDD 11m). Zero when stopped: a bike cannot hold a lean at
 // standstill. It rises to the grip maximum PHYS.maxLean by about 50 km/h, stays there to 150 km/h, and falls to
@@ -444,6 +451,13 @@ function stepBike(b, dt, W) {
   if (b.fuel <= 0) Fd = 0;
   if (b.shiftCut > 0) { Fd *= 0.3; b.shiftCut -= dt; }
   let aDrive = Fd / m;
+  // drive at lean (GDD 5b): traction control holds it at the cap; without aids the excess over it (of the drive the
+  // wheelie limit leaves) spins the rear wheel
+  const cap = driveCapAt(b.lean, gripMax), want = Math.min(aDrive, b.assist ? PHYS.wheelie : PHYS.wheelie * 1.1);
+  if (want > cap && v > 4) {
+    if (!b.assist) { b.slip += (want - cap) / cap * 3.4 * dt; }
+    aDrive = cap;
+  }
   b.wheelie = aDrive > PHYS.wheelie * 0.95 ? Math.min(1, b.wheelie + dt * 3) : Math.max(0, b.wheelie - dt * 4);
   aDrive = Math.min(aDrive, b.assist ? PHYS.wheelie : PHYS.wheelie * 1.1);
   b.dig = false;

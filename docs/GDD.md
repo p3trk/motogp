@@ -155,6 +155,59 @@ Model: point-mass bike on a 2D plane, integrated per frame with fixed sub-steps.
 - **Hint:** the first time per session that the player's wheel spins in the gravel for over 1 s, the HUD shows *FEATHER THE THROTTLE*.
 - Unchanged: the crash chance when leaning in gravel above 22 m/s (§6), braking 0.40, cornering grip 0.34, grass.
 
+## 5b. Drive at lean (approved and built 2026-11-20, version set at Release)
+
+Asked by Petr (2026-11-20), riding the Onboard camera (§11p): "When accelerating I can go between maximum leans on each side and bike still goes in the same direction pretty much." The check (§11p, lean and turning check) found the lean and turning correct, but **at 50° of lean the bike accelerates exactly as hard as upright** (0.93 g at 117 km/h): the friction circle (μ 1.68 g) covers 1.19 g of cornering plus the 1.02 g wheelie limit. Real riders cannot open full throttle at big lean; they pick the bike up first. Petr: question 9, "yes".
+
+**Why the friction circle is not enough:** only the rear tyre drives, it carries the cornering load too, and a tyre on its edge gives less grip along its length than across it. The game's single circle for the whole bike leaves too much for drive at big lean.
+
+**Design**
+- **Drive cap by lean:** the drive the rear tyre can give falls with lean:
+  `aDriveMax = 0.2 g + (wheelie − 0.2 g) × (1 − smoothstep((|lean| − 25°) / (leanGrip − 25°)))`,
+  where `leanGrip = atan(gripMax / g)` is the lean at which the corner alone uses the whole grip (59° on warm, dry tyres; lower on cold tyres, kerbs or damage, so the cap falls earlier there).
+
+  | Lean | ≤ 25° | 35° | 45° | 50° | 59° (grip limit) |
+  |---|---|---|---|---|---|
+  | Drive allowed | 1.02 g (wheelie limit, as now) | 0.85 g | 0.51 g | 0.35 g | 0.20 g |
+  | Today | 1.02 g | 1.02 g | 1.02 g | 1.02 g | 0.23 g |
+
+  The numbers are a design choice to be tuned by riding (no sourced telemetry for drive against lean). Full drive up to 25° keeps straights, kinks and fast exits as they are.
+- **Rider aids on:** traction control holds the drive at the cap: no wheelspin, the bike simply accelerates less until it is picked up. The lean limiter is unchanged.
+- **Rider aids off:** drive above the cap spins the rear: the slip grows with the excess, at the rate aids-off slip grows today (`(excess / cap) × 3.4` per second), and as today a slip over 0.5 with the throttle open is a highside. Easing the throttle or picking the bike up lets the slip fall back as now.
+- **Braking is unchanged** (the front tyre and the friction circle, §5).
+- **Speed profile and AI:** the ideal speed profile's traction pass (`T.speedProfile`) uses the same cap, with the lean from the racing line's curvature (`atan(v² κ / g)`), so the speed guide (§9), the corner countdown targets (§11b) and the AI's target speeds stay achievable. The AI rides with aids on through the same `stepBike`, so it follows the cap by itself.
+
+**Lap times (check on this branch, before merging)**
+- Before: ideal profile 2:08.11; AI Pro about 2:12 (§8). About 32 s of the ideal lap is spent accelerating at more than 25° of lean and 22 s at more than 40°, so the lap gets slower; my estimate is 1–3 s.
+- Measured after the change and written here: the ideal profile lap; a headless AI Pro lap and its ratio to the profile (`AI_REAL`, now 0.99); a headless autopilot lap of the player's bike; acceleration from 100 km/h at 0°, 35° and 50° of lean (target: the table above).
+- Saved laps and ghosts set before this change were set with more drive. They stay as they are.
+
+**Built (2026-11-20)**
+- `driveCapAt(lean, gripMax)` in `src/core.js`. In `stepBike` the cap is checked against the drive the wheelie limit leaves (not the engine's raw drive, which in a low gear is several g and made the first version highside in 0.04 s): with aids the drive is held at the cap; without aids the excess grows the slip and the drive is held at the cap (the spinning wheel gives no more). `T.speedProfile`'s traction pass takes the cap at the racing line's lean.
+- **Measured (headless, `tests/unit` loader):**
+
+  | | Before | After |
+  |---|---|---|
+  | Ideal profile lap | 2:08.110 | 2:12.006 (+3.9 s) |
+  | Autopilot flying lap (player's bike, AI control) | 2:12.133 | 2:16.267 (+4.1 s) |
+  | Acceleration from 100 km/h, upright | 0.94 g | 0.94 g |
+  | at 35° of lean | 0.94 g | 0.77 g |
+  | at 50° of lean | 0.94 g | 0.27 g |
+
+  The accelerations are net of air drag (about 0.08 g at 100 km/h), so they sit that much under the cap table. The lap cost is more than the 1–3 s estimated: about 32 s of the lap is spent accelerating at more than 25° of lean. The autopilot's ratio to the profile stays the same (1.031 before, 1.032 after), so the AI follows the new profile; no crashes in the autopilot laps.
+- **Aids off, throttle opened at the keyboard's normal rate (7 per second) and held:** at 35° no wheelspin builds up; at 45° a highside after 0.23 s; at 50° after 0.14 s. Feathering the throttle or picking the bike up first avoids it.
+- Open question 4 (new): tune the shape after Petr rides it, if the lap is too slow.
+
+**Tests (GDD 13b)**
+- Unit tests: the new cap function (the table above, the cap falling earlier with less grip); `stepBike` at 50° of lean with aids on accelerates at no more than the cap (plus drag), and upright as before (0.93 g at 117 km/h); with aids off and full throttle at 50° the slip grows and a held throttle ends in a highside, while easing off lets it fall; `T.speedProfile` uses the cap (slower than before, and an AI bike can follow it: the headless AI lap within 2 % of the profile).
+- `npm run test:unit` before merging into `dev`.
+
+**Open questions (recommended answer in bold; the design above uses it)**
+1. The shape: full drive to 25°, falling to 0.2 g at the grip limit? **Yes**, then tune by riding. Alternative: start the fall at 15° for a stronger effect.
+2. Aids off: wheelspin and highside above the cap? **Yes**, it gives the throttle control real meaning. Alternative: only the cap, no highside.
+3. Old saved laps and ghosts: keep them as they are? **Yes**; a note in the CHANGELOG at release.
+4. The lap is 3.9 s slower (ideal 2:12.0). Keep the shape, or soften it (for example the fall starting at 30° instead of 25°, or the floor at 0.3 g instead of 0.2 g)? **Keep it** (Petr rode it, 2026-11-20: "5b is okay").
+
 ## 6. Collisions, crashes and damage
 
 - Bikes are oriented boxes; contacts push both bikes apart and transfer speed.

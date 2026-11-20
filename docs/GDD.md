@@ -544,7 +544,7 @@ Asked by Petr (2026-10-28): "Create blur effect in high speeds. High speed - blu
   3. Cut the sharp area out of it with `destination-out`: the **road polygon** (both track edges plus kerb width plus 0.3 m, projected to the screen with `worldToScreen` for every track point inside the ground area, in contiguous runs so a second part of the track in view is cut out too, e.g. parallel straights) and an **ellipse around each bike and ghost** on screen (1.3 × its drawn length, so it covers the boosted sprite). The pit lane is not part of the road polygon. The mask is drawn at the same ¼ resolution, so its edge is soft over about 4 px, all of it on the outside of the 0.3 m margin.
   4. Draw the masked blur back over the screen, upscaled with smoothing, with `globalAlpha = s`. The road and the bikes stay as `projectTilted()` drew them; the surroundings cross-fade from sharp to blurred as `s` rises.
 - No `ctx.filter` (slow or missing in some browsers) and no extra pass over the ground layers or the tile cache: the cost is two small canvases (about 370 × 210 px on a 1470 × 830 screen), four small `drawImage` calls, one path of a few hundred points and one full-screen `drawImage`.
-- **Performance limit:** at full strength the blur may add at most **15 % to the frame time** of the same view without it (target: about 1 ms on the 1470 × 830 Retina reference screen). When the slow-machine quality drop lowers the tilted image quality (`TILT.q` below 1, §11a), speed blur is switched off for the rest of the session, before that it counts in the frame time like everything else.
+- **Performance limit:** at full strength the blur may add at most **20 % to the frame time** of the same view without it (target: about 1 ms on the 1470 × 830 Retina reference screen). It was 15 % until the 3D scenery (§11o): the blur draws the 3D walls, trackside and estate a second time so they smear too, and Petr raised the limit for that (2026-11-20). When the slow-machine quality drop lowers the tilted image quality (`TILT.q` below 1, §11a), speed blur is switched off for the rest of the session, before that it counts in the frame time like everything else.
 - Name tags and the HUD are drawn after it on the HUD layer, as now.
 
 **Settings**
@@ -1058,7 +1058,7 @@ Asked by Petr (2026-11-19): the track should be 3D, with trees and other objects
   - **Horizon cut:** the scenery is cut by the plane through the eye and the ground's far edge (it was cut at the far edge itself), so tall far trees no longer stand in the sky as pale shapes; the tree line (4 m, tinted most of the way to the haze) covers the cut.
   - **Wall shadows follow the 3D walls:** the contact shadow in the ground tiles is drawn only where a 3D wall stands, not across the gaps of phase 2 (it showed as a dark line across the gravel at the Loop).
   - **Bike hidden by trees:** not seen at the Loop, Vale or Club in the test views; no trees were lowered.
-  - **Open: speed blur frame cost.** `speed_blur.test.js` measures +15.4–15.6 % (limit 15 %) in three runs. The blur draws the 3D scenery a second time into its own image, so the walls and trackside smear (phase 2); without the estate it is +14.6 %, so phases 2 and 4 brought it close to the limit and the estate (about 1 ms) took it over. Unlit materials for the estate make no difference. Petr to decide: raise the limit, or blur the ground only and draw the 3D scenery sharp over it.
+  - **Speed blur frame cost:** `speed_blur.test.js` measures +15.4–15.6 % in three runs. The blur draws the 3D scenery a second time into its own image, so the walls, trackside and estate smear (phase 2); without the estate it is +14.6 %, the estate adds about 1 ms. Unlit materials for the estate make no difference. Petr's decision (2026-11-20): keep the scenery in the blur and raise the blur limit from 15 % to 20 % (§11f).
 
 **Phase 4: trackside rhythm (the most speed per triangle).**
 - Small, repeated objects close to the track: marshal posts with flags every 250–300 m, distance boards in 3D (300/200/100 before braking zones), advertising boards along the walls (fictional brands only), light posts, TV camera towers, a few gantries over the track (start/finish gantry with lights, sponsor bridge on Hamilton Straight).
@@ -1114,7 +1114,7 @@ Asked by Petr (2026-11-19): the track should be 3D, with trees and other objects
   - static world baked into 512 px tiles of 40 m (LRU cache of 160);
   - device pixel ratio capped at 1.5, dropping to 1 when frames are slow;
   - only dynamic things are drawn each frame;
-  - speed blur (§11f) works on a ¼-resolution copy of the screen, costs at most 15 % of the frame time and is switched off by the slow-machine quality drop;
+  - speed blur (§11f) works on a ¼-resolution copy of the screen, costs at most 20 % of the frame time and is switched off by the slow-machine quality drop;
   - target 60 fps.
 - Smooth motion (since 1.11.2): physics runs at 120 Hz, the screen at its own rate. Riders are drawn between the last two physics steps, so the camera does not stutter when the frame clock and the physics drift apart.
 - Tests: `node tests/camera_shake.test.js [index.html]` (needs Playwright with Chromium) drives the real game loop with a fake frame clock (about 60 fps with ±1.5 ms jitter) and records the camera every frame.
@@ -1141,7 +1141,7 @@ Asked by Petr (2026-11-19): the track should be 3D, with trees and other objects
   - **Top-down unaffected:** with the Top-down camera, frames at 340 km/h are identical with blur On and Off.
   - **Option Off:** with Speed blur Off on the start screen there is no blur at 340 km/h, and the choice is kept after a reload; the strength slider at 0 does the same for that camera only.
   - **Replay:** a recording passing 340 km/h, replayed and paused there, shows the blur; paused at a point below 260 km/h, it does not.
-  - **Frame cost:** over 300 frames at 340 km/h (1470×830, 2× pixels, CLOSE) the median time of drawing the world plus the blur is at most 15 % above the same with blur Off.
+  - **Frame cost:** over 300 frames at 340 km/h (1470×830, 2× pixels, CLOSE) the median time of drawing the world plus the blur is at most 20 % above the same with blur Off (15 % before §11o phase 3).
   - v1.16.0 fails it (no blur at top speed).
 - Since 1.17.0 `tilt_seam.test.js` and `camera_shake.test.js` run with Speed blur Off, so their measurements stay as before; `camera_tuning.test.js` expects 15 sliders (the three blur sliders added) and checks that they are saved per camera and reset by Reset to defaults.
 - `npm test` runs the full suite, unit tests and browser tests (§13b; needs `npm install` and `npx playwright install chromium` once).
